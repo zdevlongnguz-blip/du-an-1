@@ -3,6 +3,7 @@ import { RouterView, useRoute } from 'vue-router'
 import { ref, watch } from 'vue'
 import { isAuthenticated } from '@/services/auth'
 import { useToast } from '@/services/toast'
+import BannerSlider from '@/components/BannerSlider.vue'
 
 const checkAuth = ref(isAuthenticated())
 const route = useRoute()
@@ -31,6 +32,7 @@ watch(() => route.fullPath, () => {
     </nav>
 
     <main class="container py-4">
+      <BannerSlider />
       <RouterView />
     </main>
 

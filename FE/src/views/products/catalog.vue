@@ -59,6 +59,28 @@ const fetchCategories = async () => {
     }
 }
 
+// Bắt đầu tải danh mục ngay, giữ lại promise để chờ khi cần đổi slug sang id
+const categoriesReady = fetchCategories()
+
+// Đổi category_slug trên URL (ví dụ link từ banner) sang category_id mà Backend hỗ trợ
+const resolveCategoryId = async () => {
+    // Ưu tiên category_id nếu URL đã có sẵn
+    if (route.query.category_id) {
+        return route.query.category_id
+    }
+
+    // Không có slug thì không lọc theo danh mục
+    if (!route.query.category_slug) {
+        return ''
+    }
+
+    // Chờ danh mục tải xong rồi tìm danh mục có slug trùng khớp
+    await categoriesReady
+    const category = categories.value.find((item) => item.slug === route.query.category_slug)
+
+    return category ? String(category.id) : ''
+}
+
 // Hàm lấy danh sách sản phẩm từ Backend
 const fetchProducts = async () => {
     // Bật trạng thái loading
@@ -68,11 +90,17 @@ const fetchProducts = async () => {
     error.value = ''
 
     try {
+        // Xác định danh mục cần lọc (từ category_id hoặc category_slug)
+        const resolvedCategoryId = await resolveCategoryId()
+
+        // Đồng bộ ô chọn danh mục với danh mục đang lọc
+        categoryId.value = resolvedCategoryId
+
         // Đọc các tham số lọc từ URL
         const response = await api.get('?action=api-products', {
             params: {
                 search: route.query.search || '',
-                category_id: route.query.category_id || '',
+                category_id: resolvedCategoryId,
                 page: route.query.page || 1,
                 per_page: route.query.per_page || 8
             }
@@ -138,9 +166,6 @@ watch(
         categoryId.value = newValue || ''
     }
 )
-
-// Lấy danh sách danh mục khi component được khởi tạo
-fetchCategories()
 
 </script>
 
