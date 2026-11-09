@@ -7,6 +7,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import api from '@/services/api'
 import { isAuthenticated } from '@/services/auth'
 import { formatPrice } from '@/helpers/formatPrice'
+import { resolveImageUrl } from '@/helpers/imageUrl'
 
 // Số bình luận mỗi trang, khớp với query per_page đã thống nhất với BE.
 const COMMENTS_PER_PAGE = 10
@@ -71,12 +72,6 @@ const isOutOfStock = computed(() => hasStock.value && Number(product.value.stock
 
 // Tổng số bình luận chỉ biết sau khi đã tải; trước đó không hiện số để tránh hiện sai.
 const commentCount = computed(() => commentsPagination.value?.total_items ?? null)
-
-// Tạo URL ảnh từ base URL API hiện có, giống ProductCardCatalog, không hardcode host.
-function imageUrl(image) {
-  if (/^https?:\/\//i.test(image)) return image
-  return new URL(`assets/uploads/${image}`, `${api.defaults.baseURL}/`).toString()
-}
 
 // Gọi khi thẻ <img> báo lỗi tải ảnh, để chuyển sang khung thay thế.
 function markImageFailed(index) {
@@ -210,7 +205,7 @@ watch(
           <div class="pd-gallery-main">
             <img
               v-if="activeImage && !failedImages.has(activeImageIndex)"
-              :src="imageUrl(activeImage)"
+              :src="resolveImageUrl(activeImage)"
               :alt="product.name"
               @error="markImageFailed(activeImageIndex)"
             >
@@ -228,7 +223,7 @@ watch(
               :aria-pressed="index === activeImageIndex"
               @click="activeImageIndex = index"
             >
-              <img v-if="!failedImages.has(index)" :src="imageUrl(image)" alt="" @error="markImageFailed(index)">
+              <img v-if="!failedImages.has(index)" :src="resolveImageUrl(image)" alt="" @error="markImageFailed(index)">
               <span v-else class="pd-image-fallback pd-image-fallback--small" aria-hidden="true">{{ index + 1 }}</span>
             </button>
           </div>

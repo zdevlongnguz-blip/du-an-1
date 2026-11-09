@@ -48,7 +48,7 @@ class CommentController
     }
 
     /**
-     * Tạo bình luận cho sản phẩm; yêu cầu POST và user đăng nhập.
+    * Tạo bình luận theo product_id; yêu cầu POST và user đăng nhập.
      * Trả HTTP 400/401/404/405/422 nếu request, token, sản phẩm hoặc nội dung không hợp lệ.
      *
      * @param array $authPayload Payload JWT đã được middleware xác minh.
@@ -62,17 +62,17 @@ class CommentController
 
         $userId = $this->getAuthenticatedUserId($authPayload);
         $input = json_decode(file_get_contents('php://input'), true);
-        if (!is_array($input) || !is_string($input['slug'] ?? null)) {
+        if (!is_array($input)) {
             response_json(['status' => 'error', 'message' => 'Dữ liệu bình luận không hợp lệ'], 400);
         }
 
-        $slug = trim($input['slug']);
-        if ($slug === '' || strlen($slug) > 255) {
-            response_json(['status' => 'error', 'message' => 'Slug sản phẩm không hợp lệ'], 422);
+        $productId = filter_var($input['product_id'] ?? null, FILTER_VALIDATE_INT);
+        if ($productId === false || $productId < 1) {
+            response_json(['status' => 'error', 'message' => 'ID sản phẩm không hợp lệ'], 422);
         }
 
         $content = $this->validateContent($input['content'] ?? null);
-        $commentId = $this->comment->createForProductSlug($slug, $userId, $content);
+        $commentId = $this->comment->createForProductId($productId, $userId, $content);
         if ($commentId === null) {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }
@@ -82,7 +82,7 @@ class CommentController
             'message' => 'Thêm bình luận thành công',
             'comment' => [
                 'id' => $commentId,
-                'slug' => $slug,
+                'product_id' => $productId,
                 'content' => $content,
             ],
         ], 201);
@@ -146,6 +146,74 @@ class CommentController
             'status' => 'success',
             'message' => 'Xóa bình luận thành công',
         ]);
+    }
+
+    /**
+     * Lấy danh sách bình luận quản trị theo status=0/1 và phân trang.
+     * Sai method hoặc query không hợp lệ trả HTTP 405/400.
+     *
+     * @return void
+     */
+    public function adminIndex(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $status = null;
+        if (array_key_exists('status', $_GET)) {
+            $statusInput = $_GET['status'];
+            if (!is_string($statusInput) || !in_array($statusInput, ['0', '1'], true)) {
+                response_json(['status' => 'error', 'message' => 'status phải là 0 hoặc 1'], 400);
+            }
+            $status = (int) $statusInput;
+        }
+        $pageInput = $_GET['page'] ?? '1';
+        $perPageInput = $_GET['per_page'] ?? '10';
+        $page = is_string($pageInput) && ctype_digit($pageInput) ? (int) $pageInput : 0;
+        $perPage = is_string($perPageInput) && ctype_digit($perPageInput) ? (int) $perPageInput : 0;
+        if ($page < 1 || $perPage < 1 || $perPage > 100 || ($page - 1) > intdiv(PHP_INT_MAX, $perPage)) {
+            response_json(['status' => 'error', 'message' => 'Thông tin phân trang không hợp lệ'], 400);
+        }
+
+        response_json([
+            'status' => 'success',
+            'comments' => $this->comment->getAdminList($status, $page, $perPage),
+        ]);
+    }
+
+    /**
+     * Duyệt bình luận theo ID; sai method trả 405, ID sai 400, không có bình luận 404.
+     *
+     * @return void
+     */
+    public function adminApprove(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'PUT') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+        if (!$this->comment->approveAdmin($this->getCommentId())) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy bình luận'], 404);
+        }
+
+        response_json(['status' => 'success', 'message' => 'Đã duyệt bình luận']);
+    }
+
+    /**
+     * Xóa bình luận khỏi trang quản trị; sai method trả 405, ID sai 400, không có 404.
+     *
+     * @return void
+     */
+    public function adminDelete(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'DELETE') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+        if (!$this->comment->deleteAdmin($this->getCommentId())) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy bình luận'], 404);
+        }
+
+        response_json(['status' => 'success', 'message' => 'Đã xóa bình luận']);
     }
 
     /**

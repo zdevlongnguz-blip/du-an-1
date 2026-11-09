@@ -3,6 +3,7 @@
 <script setup>
 // Import hàm định dạng tiền từ helper
 import { formatPrice } from '@/helpers/formatPrice';
+import { resolveImageUrl } from '@/helpers/imageUrl';
 
 // Khai báo dữ liệu sản phẩm được truyền từ component cha
 const props = defineProps({
@@ -18,8 +19,8 @@ const props = defineProps({
     <div class="product-card">
 
         <!-- Hiển thị hình ảnh sản phẩm -->
-        <img
-            :src="product.image"
+        <img v-if="product.image"
+            :src="resolveImageUrl(product.image)"
             :alt="product.name"
         >
 

@@ -2,6 +2,7 @@
 import Carousel from 'bootstrap/js/dist/carousel'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { resolveImageUrl } from '@/helpers/imageUrl'
 
 // Carousel trang chủ: Bootstrap xử lý tự chuyển, swipe và nút điều khiển.
 const props = defineProps({
@@ -64,7 +65,7 @@ onUnmounted(() => {
         aria-roledescription="slide"
         :aria-label="`Banner ${index + 1} trên ${banners.length}`"
       >
-        <img v-if="banner.image" class="banner-image" :src="banner.image" alt="" />
+        <img v-if="banner.image" class="banner-image" :src="resolveImageUrl(banner.image)" alt="" />
         <div class="banner-overlay" aria-hidden="true"></div>
 
         <div class="banner-content">

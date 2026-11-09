@@ -302,6 +302,7 @@ class AuthController
             'sub' => $user['id'],
             'email' => $user['email'],
             'role' => $user['role'],
+            'token_version' => (int) ($user['token_version'] ?? 0),
         ]);
 
         response_json([
@@ -317,17 +318,20 @@ class AuthController
     }
 
     /**
-     * API đăng xuất.
-     *
-     * Với JWT stateless, server không lưu token nên logout thực chất là client bỏ
-     * token đi. Hàm này vẫn cố gắng verify token nếu có để đảm bảo request hợp lệ,
-     * sau đó trả về message “logout thành công”.
+     * Thu hồi các JWT hiện tại của user bằng cách tăng token_version trong DB.
+     * Thiếu/sai token hoặc token đã bị thu hồi trả HTTP 401.
      *
      * @return void
      */
     public function logout()
     {
         $payload = requireBearerToken();
+        $userId = filter_var($payload['sub'] ?? null, FILTER_VALIDATE_INT);
+        $tokenVersion = filter_var($payload['token_version'] ?? 0, FILTER_VALIDATE_INT);
+        if ($userId === false || $userId < 1 || $tokenVersion === false || $tokenVersion < 0
+            || !$this->userModel->revokeTokenVersion($userId, $tokenVersion)) {
+            response_json(['status' => 'error', 'message' => 'Token không hợp lệ hoặc đã bị thu hồi'], 401);
+        }
 
         response_json([
             'status' => 'success',

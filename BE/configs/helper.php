@@ -117,8 +117,8 @@ function renderMemeError($message) {
  */
 function validate_upload(
     array $file, 
-    array $allowedExtensions = ['png', 'jpg', 'jpeg', 'gif'], 
-    array $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'],
+    array $allowedExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+    array $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     int $maxSize = 2097152 // Mặc định 2MB
 ): bool {
     // Kiểm tra lỗi hệ thống từ PHP
@@ -336,8 +336,8 @@ if (!function_exists('jwt_verify')) {
 /**
  * 8. Kiểm tra request có chứa Authorization: Bearer <token> hay không.
  *
- * Đây là middleware auth kiểu tối giản cho API. Nếu header không tồn tại hoặc
- * token sai, hàm sẽ trả về HTTP 401 JSON và dừng request.
+ * Sau khi verify JWT, hàm đối chiếu user, trạng thái và token_version trong DB
+ * để token cũ không tiếp tục dùng được sau logout hoặc khi tài khoản inactive.
  *
  * @return array Payload user từ token nếu hợp lệ
  */
@@ -366,7 +366,7 @@ if (!function_exists('requireBearerToken')) {
         }
 
         try {
-            return jwt_verify(trim($matches[1]));
+            $payload = jwt_verify(trim($matches[1]));
         } catch (Exception $e) {
             http_response_code(401);
             response_json([
@@ -375,6 +375,36 @@ if (!function_exists('requireBearerToken')) {
             ], 401);
             exit;
         }
+
+        $userId = filter_var($payload['sub'] ?? null, FILTER_VALIDATE_INT);
+        $tokenVersion = filter_var($payload['token_version'] ?? 0, FILTER_VALIDATE_INT);
+        if ($userId === false || $userId < 1 || $tokenVersion === false || $tokenVersion < 0) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Unauthorized: payload token không hợp lệ'
+            ], 401);
+        }
+
+        $dsn = 'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        $pdo = new PDO($dsn, DB_USERNAME, DB_PASSWORD, DB_OPTIONS);
+        $userStatement = $pdo->prepare(
+            'SELECT `is_active`, `token_version`, `role` FROM `users` WHERE `id` = :user_id LIMIT 1'
+        );
+        $userStatement->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $userStatement->execute();
+        $user = $userStatement->fetch(PDO::FETCH_ASSOC);
+
+        if ($user === false
+            || (int) $user['is_active'] !== 1
+            || (int) $user['token_version'] !== $tokenVersion
+            || ($payload['role'] ?? '') !== $user['role']) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Unauthorized: token đã bị thu hồi hoặc tài khoản không hoạt động'
+            ], 401);
+        }
+
+        return $payload;
     }
 }
 

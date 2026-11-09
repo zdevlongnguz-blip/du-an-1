@@ -36,6 +36,7 @@ flowchart LR
     Controller --> Helper
     Controller --> Model
     Model --> DB
+    Helper --> DB
     Controller -->|Gửi email xác minh/reset| Mail
     Mail --> User
     Controller -->|JSON hoặc HTML cầu nối reset| Router
@@ -50,7 +51,7 @@ flowchart LR
 | Axios service | Tự gắn Bearer JWT khi có; khi nhận HTTP 401 thì xóa session cục bộ và chuyển về trang đăng nhập. |
 | PHP router | Chọn controller theo `?action=...`; gọi middleware cho endpoint được bảo vệ. |
 | AuthController | Validate request, điều phối nghiệp vụ auth và trả kết quả cho FE. |
-| AuthMiddleware / helper | Đọc Bearer header, xác minh chữ ký và thời hạn JWT, trả payload đã xác thực. |
+| AuthMiddleware / helper | Đọc Bearer header, xác minh JWT, rồi đối chiếu `is_active`, `role` và `token_version` với MySQL. |
 | User model | Dùng PDO/prepared statements để đọc/cập nhật user, hash mật khẩu và kiểm tra token trong DB. |
 | PHPMailer | Gửi email có link xác minh hoặc đặt lại mật khẩu qua SMTP. |
 
@@ -60,7 +61,7 @@ Trong hệ thống có hai loại token với mục đích khác nhau:
 
 | Token | Dùng cho | Vòng đời / nơi kiểm tra |
 |---|---|---|
-| **JWT access token** | Chứng minh người dùng đã đăng nhập khi gọi API được bảo vệ. | BE ký bằng HS256, có `iat`, `exp`; FE lưu cục bộ và gửi qua Bearer header. BE kiểm tra chữ ký và hạn dùng ở mỗi request cần auth. |
+| **JWT access token** | Chứng minh người dùng đã đăng nhập khi gọi API được bảo vệ. | BE ký bằng HS256, có `sub`, `email`, `role`, `token_version`, `iat`, `exp`; FE gửi qua Bearer header. BE kiểm tra chữ ký, hạn, trạng thái, role và version ở mỗi request cần auth. |
 | **Email verification token** | Kích hoạt tài khoản mới. | Token ngẫu nhiên 32 byte, biểu diễn 64 ký tự hex. Email chứa token thô, DB lưu SHA-256; xác minh thành công sẽ kích hoạt tài khoản và xóa token/hạn dùng. |
 | **Password reset token** | Cho phép đặt mật khẩu mới khi không đăng nhập được. | Tạo và lưu tương tự verification token. Các lần GET chỉ kiểm tra, không tiêu thụ; POST đổi mật khẩu thành công sẽ xóa token/hạn dùng. |
 
@@ -77,6 +78,7 @@ Bảng `users` trong [BE/database/create_database.sql](BE/database/create_databa
 | `password` | Kết quả `password_hash()`, không lưu mật khẩu rõ. |
 | `role` | Vai trò tài khoản (`admin` hoặc `user`); được đưa vào JWT và response đăng nhập. |
 | `is_active` | `0` khi chưa xác minh email; `1` khi được phép đăng nhập. |
+| `token_version` | Số phiên bản token hiện tại của user. Logout tăng số này để thu hồi các JWT cũ; mặc định là `0`, được thêm bởi [BE/database/migrations/20261109_add_user_token_version.sql](BE/database/migrations/20261109_add_user_token_version.sql). |
 | `verification_token`, `verification_expires_at` | Hash token và hạn dùng xác minh email; được xóa sau khi xác minh. |
 | `password_reset_token`, `password_reset_expires_at` | Hash token và hạn dùng reset; được xóa khi reset thành công hoặc khi cần vô hiệu hóa. |
 
@@ -127,15 +129,17 @@ sequenceDiagram
 1. Người dùng gửi email và mật khẩu từ `Login.vue`.
 2. FE gọi `POST ?action=api-login`.
 3. `User::authenticate()` tìm user, yêu cầu tài khoản đã active và dùng `password_verify()` so sánh mật khẩu.
-4. Nếu hợp lệ, BE ký JWT HS256 với các claim `sub`, `email`, `role`, `iat`, `exp`.
+4. Nếu hợp lệ, BE ký JWT HS256 với các claim `sub`, `email`, `role`, `token_version`, `iat`, `exp`.
 5. BE trả `token` và thông tin user. FE lưu chúng bằng `setAuthSession()` vào `localStorage` dưới các key `auth_token` và `auth_user`.
 
 ### Request cần xác thực
 
 1. FE gọi API qua Axios service. Nếu có JWT, request interceptor thêm `Authorization: Bearer <JWT>`.
 2. Route BE cần bảo vệ gọi `AuthMiddleware::requireAuth()` hoặc controller gọi `requireBearerToken()`.
-3. Helper xác minh chữ ký HMAC-SHA256 và thời hạn `exp`. Nếu hợp lệ, payload được dùng làm danh tính request.
-4. Nếu thiếu/sai/hết hạn JWT, BE trả HTTP 401. Axios response interceptor xóa token/user cục bộ và điều hướng đến `/login`.
+3. Helper xác minh chữ ký HMAC-SHA256 và `exp`, sau đó đọc user trong DB để kiểm tra `is_active = 1`, `role` và `token_version` còn khớp.
+4. Nếu thiếu/sai/hết hạn/đã thu hồi JWT, user inactive hoặc role đã đổi, BE trả HTTP 401. Axios response interceptor xóa token/user cục bộ và điều hướng đến `/login`.
+
+JWT cũ chưa có claim `token_version` được xem là version `0` để tương thích sau migration. Khi user logout lần đầu, version trong DB tăng lên và các JWT version `0` lập tức không còn hợp lệ.
 
 `router.beforeEach()` ở FE chỉ kiểm tra xem localStorage có token hay không. Đây là tiện ích điều hướng, không phải ranh giới bảo mật; request vẫn phải được BE xác minh. Tương tự, dữ liệu user/role lưu ở FE chỉ phục vụ hiển thị, không được tin dùng để cấp quyền ở BE.
 
@@ -153,11 +157,11 @@ sequenceDiagram
     API->>DB: Tìm user, kiểm tra active và password_verify
     DB-->>API: User hợp lệ / không hợp lệ
     alt Đăng nhập hợp lệ
-        API->>API: Ký JWT HS256 (sub, email, role, iat, exp)
+        API->>API: Ký JWT HS256 (sub, email, role, token_version, iat, exp)
         API-->>FE: {status, token, user}
         FE->>FE: Lưu JWT/user trong localStorage
         FE->>Guard: Gọi API, Axios gắn Bearer JWT
-        Guard->>Guard: Xác minh chữ ký và exp
+        Guard->>Guard: Xác minh chữ ký, exp, is_active, role và token_version
         Guard->>Protected: Cho request đi tiếp
         Protected-->>FE: Response API
     else Sai mật khẩu, user không tồn tại hoặc chưa active
@@ -168,11 +172,13 @@ sequenceDiagram
 ## 6. Luồng đăng xuất
 
 1. Người dùng chọn đăng xuất ở trang Profile và xác nhận hộp thoại.
-2. FE gọi `POST ?action=api-logout`; Axios tự gửi Bearer JWT nếu đang có.
-3. BE gọi `requireBearerToken()` để xác minh JWT rồi trả thông báo thành công.
-4. Dù request thành công hay thất bại, `finally` phía FE vẫn xóa `auth_token` và `auth_user`, sau đó chuyển về trang chủ.
+2. FE gọi `POST ?action=api-logout`; Axios gửi Bearer JWT.
+3. BE xác minh JWT và đối chiếu trạng thái/version hiện tại trong DB.
+4. `User::revokeTokenVersion()` tăng `token_version` nếu JWT gửi lên vẫn là phiên bản mới nhất.
+5. Mọi JWT cũ cùng user (kể cả phiên đăng nhập trên thiết bị khác) không còn khớp version và bị trả HTTP 401. Login tiếp theo phát JWT với version mới.
+6. Dù request thành công hay thất bại, `finally` phía FE vẫn xóa `auth_token` và `auth_user`, sau đó chuyển về trang chủ.
 
-JWT hiện là stateless: BE không lưu danh sách JWT đang hoạt động và API logout không thu hồi token trong DB. Vì vậy đăng xuất làm mất phiên trên trình duyệt hiện tại; một bản sao JWT còn hiệu lực vẫn có thể được sử dụng đến khi hết hạn.
+BE không lưu từng JWT riêng lẻ; thay vào đó dùng một version counter trong bảng `users`. Cách này đơn giản nhưng logout một thiết bị sẽ thu hồi tất cả phiên của user đó.
 
 ## 7. Luồng quên và đặt lại mật khẩu
 
@@ -309,6 +315,7 @@ flowchart LR
     UCForgot --> DB
     UCReset --> DB
     UCChange --> DB
+    UCLogout --> DB
     UCProtect --> DB
 ```
 
@@ -322,7 +329,7 @@ flowchart LR
 | Quên mật khẩu | Khách | Nhập email đúng định dạng | Nếu email thuộc user active, hệ thống gửi link; response không tiết lộ sự tồn tại của email. |
 | Đặt lại mật khẩu | Khách có link | Reset token còn hạn và chưa dùng | Mật khẩu mới được hash/lưu; reset token bị xóa. |
 | Đổi mật khẩu | Người dùng đã đăng nhập | Bearer JWT hợp lệ, mật khẩu hiện tại đúng | Lưu mật khẩu mới; reset token cũ bị xóa. |
-| Đăng xuất | Người dùng đã đăng nhập | Bearer JWT hợp lệ để API xác nhận | FE xóa JWT/user khỏi localStorage. JWT không bị thu hồi phía server. |
+| Đăng xuất | Người dùng đã đăng nhập | Bearer JWT còn đúng version và user đang active | BE tăng `token_version`, thu hồi mọi JWT cũ của user; FE xóa JWT/user khỏi localStorage. |
 | Truy cập API bảo vệ | Người dùng đã đăng nhập | Có JWT hợp lệ | Router/middleware cho request tới controller. |
 
 ## 12. Sơ đồ hoạt động tổng quát
@@ -384,7 +391,8 @@ flowchart TD
     ChangeSave --> AuthActions
 
     AuthActions -->|Đăng xuất| LogoutRequest[FE gọi API logout]
-    LogoutRequest --> ClearLocal[FE xóa JWT/user cục bộ]
+    LogoutRequest --> RevokeVersion[BE tăng token_version trong DB]
+    RevokeVersion --> ClearLocal[FE xóa JWT/user cục bộ]
     ClearLocal --> End([Kết thúc])
     AuthActions -->|Tiếp tục| ProtectedRequest[Gọi API cần xác thực]
     ProtectedRequest --> BearerCheck
@@ -412,7 +420,8 @@ flowchart TD
 
 - FE route guard chỉ dựa vào việc có token trong localStorage; BE mới là nơi xác thực chữ ký và hạn JWT.
 - JWT đang được lưu trong localStorage. Cần bảo vệ FE khỏi XSS; với triển khai thực tế nên cân nhắc chiến lược lưu token phù hợp và kiểm soát bảo mật trình duyệt.
-- Logout chưa có denylist/revocation phía BE. JWT đã bị sao chép vẫn có hiệu lực đến `exp`.
+- Logout tăng `token_version` và thu hồi mọi phiên JWT của user. Không hỗ trợ thu hồi riêng từng thiết bị; mỗi protected request cần đọc trạng thái/version/role trong DB.
+- User inactive hoặc role bị đổi sẽ không dùng được JWT đã cấp ở request tiếp theo. JWT hợp lệ về chữ ký nhưng sai version cũng trả HTTP 401.
 - Luồng auth chưa thấy cơ chế rate limit cho đăng nhập, đăng ký hoặc yêu cầu reset; nên bổ sung trước khi triển khai Internet công khai.
 - `role` có trong JWT/response, nhưng việc đưa claim vào token không tự tạo ra phân quyền. Mỗi API nhạy cảm cần kiểm tra quyền ở BE.
 - Email verify hiện trả JSON từ BE, còn reset có trang HTML cầu nối. Đây là hai trải nghiệm khác nhau.

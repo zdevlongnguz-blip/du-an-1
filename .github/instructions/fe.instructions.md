@@ -22,7 +22,7 @@ Dự án môn học: Vue 3 + Vite + Vue Router + Axios + Bootstrap 5. Ưu tiên 
 - Dùng Composition API với `<script setup>`, `ref`/`computed`. Không dùng `this`, không dùng Options API. Ngoại lệ: trang tĩnh không có logic (như `NotFound.vue`).
 - Bootstrap 5 đã import trong `main.js`: dùng class có sẵn, không import lại, không thêm UI library. CSS riêng dùng `<style scoped>`; `style.css` chỉ cho style toàn cục thật sự.
 - Thông báo cho người dùng dùng `services/toast.js`, theo cách các view auth đang dùng.
-- Định dạng giá dùng `helpers/formatPrice.js`, không tự viết lại.
+- Bất kỳ giá tiền nào hiển thị trong UI/UX đều phải đi qua `helpers/formatPrice.js`; không tự định dạng hoặc nối đơn vị tiền ở template.
 - Tái sử dụng component/service sẵn có. Không nhồi logic màn hình vào `App.vue`.
 
 ## 4. Tích hợp API

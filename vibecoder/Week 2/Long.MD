@@ -105,3 +105,19 @@ Branch cập nhật ngày 2026-11-07: `feature/design-master-layout+auth-ui`
 - PHP lint pass cho `ProductController.php` và `Product.php`; `git diff --check` pass.
 - Chạy lại `BE/database/seed/banners.sql` trên database local `du-an-1`; xác nhận hai CTA catalog dùng `category=`, mỗi link có đúng một bản ghi và không còn CTA dùng `category_slug`.
 - Chưa gọi API với database thật để kiểm thử tích hợp.
+
+## Cập nhật công việc BE - phiên/branch hiện tại - 2026-11-09
+
+### Database và migrations
+- Hoàn thiện schema cho web bán hàng cơ bản bằng migrations: hạn token xác minh, bảng banner, timestamp, bộ đếm sản phẩm, album ảnh, bình luận/trạng thái duyệt.
+- Bổ sung bảng commerce còn thiếu: `carts`, `cart_items`, `orders`, `order_details`; thêm `token_version` cho user để thu hồi JWT.
+
+### Toàn bộ API BE
+- Auth: đăng ký, xác minh email, đăng nhập/đăng xuất, quên/đặt lại mật khẩu, đổi mật khẩu; middleware kiểm tra Bearer JWT, trạng thái tài khoản và token version.
+- Catalog: danh sách/lọc/phân trang sản phẩm, chi tiết theo slug, top sản phẩm theo lượt xem/lượt bán, danh sách danh mục và banner.
+- Bình luận: xem theo sản phẩm có phân trang; user tạo/sửa/xóa bình luận của mình; admin lọc, duyệt và xóa bình luận.
+- Giỏ hàng và đơn hàng: xem/thêm/sửa/xóa giỏ; checkout, danh sách đơn cá nhân, invoice, hủy đơn; admin xem tất cả đơn và cập nhật trạng thái.
+- Quản trị catalog: CRUD sản phẩm/danh mục/banner và thêm/xóa ảnh album; API admin được bảo vệ bằng `AdminMiddleware`, không nhận role từ client.
+- Posts vẫn yêu cầu đăng nhập; giữ các endpoint demo hiện có.
+- Upload dùng `validate_upload`, `save_uploaded_file`, `delete_uploaded_file`; DB lưu filename, file ảnh đặt trong `BE/assets/uploads/`.
+- Contract endpoint được ghi trong `BE/test-api.md`; log chạy test được ghi riêng trong `tonduclong.md`.

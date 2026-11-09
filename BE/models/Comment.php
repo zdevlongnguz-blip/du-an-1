@@ -60,23 +60,23 @@ class Comment extends BaseModel
     }
 
     /**
-     * Tạo bình luận hiển thị ngay cho user đã đăng nhập.
+     * Tạo bình luận chờ admin duyệt cho user đã đăng nhập.
      *
-     * @param string $productSlug Slug sản phẩm được bình luận.
+     * @param int $productId ID sản phẩm được bình luận.
      * @param int $userId ID lấy từ payload JWT đã xác minh.
      * @param string $content Nội dung bình luận đã được kiểm tra.
      * @return int|null ID bình luận mới, hoặc null nếu không tìm thấy sản phẩm.
      */
-    public function createForProductSlug(string $productSlug, int $userId, string $content): ?int
+    public function createForProductId(int $productId, int $userId, string $content): ?int
     {
         $productStatement = $this->pdo->prepare(
-            'SELECT `id` FROM `products` WHERE `slug` = :slug LIMIT 1'
+            'SELECT `id` FROM `products` WHERE `id` = :product_id LIMIT 1'
         );
-        $productStatement->bindValue(':slug', $productSlug, PDO::PARAM_STR);
+        $productStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
         $productStatement->execute();
-        $productId = $productStatement->fetchColumn();
+        $foundProductId = $productStatement->fetchColumn();
 
-        if ($productId === false) {
+        if ($foundProductId === false) {
             return null;
         }
 
@@ -84,7 +84,7 @@ class Comment extends BaseModel
             'INSERT INTO `comments` (`product_id`, `user_id`, `content`, `status`) '
             . 'VALUES (:product_id, :user_id, :content, 0)'
         );
-        $insertStatement->bindValue(':product_id', (int) $productId, PDO::PARAM_INT);
+        $insertStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
         $insertStatement->bindValue(':user_id', $userId, PDO::PARAM_INT);
         $insertStatement->bindValue(':content', $content, PDO::PARAM_STR);
         $insertStatement->execute();
@@ -146,6 +146,88 @@ class Comment extends BaseModel
         );
         $statement->bindValue(':id', $commentId, PDO::PARAM_INT);
         $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return $statement->rowCount() === 1;
+    }
+
+    /**
+     * Lấy danh sách bình luận cho trang quản trị, lọc trạng thái và phân trang.
+     *
+     * @param int|null $status 0 chờ duyệt, 1 đã duyệt, null lấy tất cả.
+     * @param int $page Trang bắt đầu từ 1.
+     * @param int $perPage Số bình luận mỗi trang.
+     * @return array Danh sách bình luận và thông tin phân trang.
+     */
+    public function getAdminList(?int $status = null, int $page = 1, int $perPage = 10): array
+    {
+        $whereSql = $status === null ? '' : ' WHERE `comments`.`status` = :status';
+        $countStatement = $this->pdo->prepare('SELECT COUNT(*) FROM `comments`' . $whereSql);
+        if ($status !== null) {
+            $countStatement->bindValue(':status', $status, PDO::PARAM_INT);
+        }
+        $countStatement->execute();
+        $totalItems = (int) $countStatement->fetchColumn();
+
+        $offset = ($page - 1) * $perPage;
+        $listStatement = $this->pdo->prepare(
+            'SELECT `comments`.`id`, `comments`.`product_id`, `products`.`name` AS `product_name`, '
+            . '`comments`.`user_id`, `users`.`email`, `comments`.`content`, `comments`.`status`, '
+            . '`comments`.`created_at`, `comments`.`updated_at` '
+            . 'FROM `comments` INNER JOIN `products` ON `products`.`id` = `comments`.`product_id` '
+            . 'INNER JOIN `users` ON `users`.`id` = `comments`.`user_id`' . $whereSql
+            . ' ORDER BY `comments`.`created_at` DESC, `comments`.`id` DESC LIMIT :limit OFFSET :offset'
+        );
+        if ($status !== null) {
+            $listStatement->bindValue(':status', $status, PDO::PARAM_INT);
+        }
+        $listStatement->bindValue(':limit', $perPage, PDO::PARAM_INT);
+        $listStatement->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $listStatement->execute();
+
+        return [
+            'data' => $listStatement->fetchAll(PDO::FETCH_ASSOC),
+            'pagination' => [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total_items' => $totalItems,
+                'total_pages' => $totalItems > 0 ? (int) ceil($totalItems / $perPage) : 1,
+            ],
+        ];
+    }
+
+    /**
+     * Duyệt bình luận; bình luận đã duyệt vẫn được xem là xử lý thành công.
+     *
+     * @param int $commentId ID bình luận.
+     * @return bool True nếu bình luận tồn tại.
+     */
+    public function approveAdmin(int $commentId = 0): bool
+    {
+        $statement = $this->pdo->prepare('UPDATE `comments` SET `status` = 1 WHERE `id` = :id');
+        $statement->bindValue(':id', $commentId, PDO::PARAM_INT);
+        $statement->execute();
+
+        if ($statement->rowCount() > 0) {
+            return true;
+        }
+        $existsStatement = $this->pdo->prepare('SELECT 1 FROM `comments` WHERE `id` = :id LIMIT 1');
+        $existsStatement->bindValue(':id', $commentId, PDO::PARAM_INT);
+        $existsStatement->execute();
+
+        return $existsStatement->fetchColumn() !== false;
+    }
+
+    /**
+     * Xóa bình luận khỏi hệ thống quản trị.
+     *
+     * @param int $commentId ID bình luận.
+     * @return bool True nếu có bình luận được xóa.
+     */
+    public function deleteAdmin(int $commentId = 0): bool
+    {
+        $statement = $this->pdo->prepare('DELETE FROM `comments` WHERE `id` = :id');
+        $statement->bindValue(':id', $commentId, PDO::PARAM_INT);
         $statement->execute();
 
         return $statement->rowCount() === 1;

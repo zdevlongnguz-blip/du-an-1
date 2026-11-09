@@ -18,6 +18,7 @@ Dự án môn học: PHP MVC thuần + MySQL (PDO). Ưu tiên đơn giản, đú
 - Controller xử lý request/response; Model truy cập DB. Model mới kế thừa `BaseModel` và khai báo `protected $table`.
 - Tên action dạng `api-<tên>` (kebab-case). Tên class `PascalCase`, file trùng tên class (autoload dựa vào tên file).
 - Không đổi tên/di chuyển class hoặc action đang được dùng.
+- Mọi method mới hoặc được sửa trong Model/Controller phải khai báo giá trị mặc định cho tất cả tham số; chọn giá trị mặc định an toàn và validate trước khi dùng.
 
 ## 3. Cấu hình (`configs/env.php`)
 - `BE/configs/env.php` là nơi cấu hình duy nhất của BE (DB, JWT, SMTP, URL, TTL...) bằng hằng `define(...)`. Dự án môn học nên cho phép giữ giá trị trực tiếp trong file này.
@@ -34,7 +35,9 @@ Dự án môn học: PHP MVC thuần + MySQL (PDO). Ưu tiên đơn giản, đú
   - Lỗi: `{ "status": "error", "message": "..." }` kèm mã HTTP đúng (400 sai dữ liệu, 401 chưa đăng nhập, 403 không đủ quyền, 404 không có, 405 sai method, 409 trùng, 422 không hợp lệ).
 - Endpoint cũ giữ nguyên shape hiện tại, không "chuẩn hóa" lại.
 - Route cần đăng nhập: gọi `(new AuthMiddleware())->requireAuth()` trong router, truyền payload xuống controller. Lấy user ID/role từ `sub`/`role` trong payload, không tin ID hoặc role do client gửi.
+- Mọi API đọc/ghi dữ liệu riêng của user (ví dụ giỏ hàng, đơn hàng, hóa đơn) bắt buộc gọi `requireAuth()` ở router; API quản trị phải xác minh thêm `role` phù hợp. Chỉ để public khi endpoint được thiết kế công khai.
 - Kiểm tra method (`$_SERVER['REQUEST_METHOD']`) trong controller với endpoint POST/PUT/DELETE.
+- Với endpoint có lọc hoặc phân trang, đọc mặc định, validate query và truyền tham số ngay trong action controller theo mẫu `ProductController::index`; không tách sang helper phân trang chung hoặc dùng cờ khó hiểu. Model nhận tham số có tên rõ ràng và đặt câu truy vấn lọc/phân trang tại method tương ứng.
 
 ## 5. Validate và bảo mật dữ liệu
 - Validate tại ranh giới request: kiểu, định dạng, trường bắt buộc, miền giá trị, độ dài. Chuẩn validate: viết thủ công theo mẫu `AuthController` (`is_array`, `is_string`, `filter_var`, `strlen`). `extensions/Validator.php` hiện chưa được dùng, chỉ dùng khi task yêu cầu.
@@ -48,6 +51,7 @@ Dự án môn học: PHP MVC thuần + MySQL (PDO). Ưu tiên đơn giản, đú
 
 ## 6. Database
 - Đổi schema: tạo migration mới trong `BE/database/migrations/`, tên `YYYYMMDD_<mô_tả>.sql`, viết để chạy lặp được (`IF NOT EXISTS`...). Không sửa migration đã áp dụng.
+- Mỗi bảng mới bắt buộc có cả `created_at` và `updated_at`, với giá trị mặc định/cập nhật tự động phù hợp.
 - `create_database.sql` chỉ dùng để khởi tạo database. Khi cập nhật schema đã tồn tại hoặc file này đã được chạy, không sửa file này; luôn thêm migration mới trong `BE/database/migrations/`. Dữ liệu mẫu để trong `database/seed/`.
 - Không chạy lệnh xóa/phá dữ liệu và không chạy trên DB thật nếu chưa được yêu cầu và xác nhận.
 

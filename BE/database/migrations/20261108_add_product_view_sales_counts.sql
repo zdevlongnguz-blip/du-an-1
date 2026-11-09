@@ -11,7 +11,7 @@ SET @products_view_count_exists = (
 SET @products_view_count_migration = IF(
     @products_view_count_exists = 0,
     'ALTER TABLE `products` ADD COLUMN `view_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `stock`',
-    'SELECT 1'
+    'SET @products_view_count_exists = @products_view_count_exists'
 );
 
 PREPARE products_view_count_statement FROM @products_view_count_migration;
@@ -29,7 +29,7 @@ SET @products_sales_count_exists = (
 SET @products_sales_count_migration = IF(
     @products_sales_count_exists = 0,
     'ALTER TABLE `products` ADD COLUMN `sales_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `view_count`',
-    'SELECT 1'
+    'SET @products_sales_count_exists = @products_sales_count_exists'
 );
 
 PREPARE products_sales_count_statement FROM @products_sales_count_migration;
