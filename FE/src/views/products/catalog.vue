@@ -139,7 +139,7 @@ onMounted(() => fetchCategories())
             <h1 id="catalog-title">Danh sách sản phẩm</h1>
         </header>
 
-        <!-- Toolbar tìm kiếm và chọn danh mục theo tỷ lệ responsive của Stitch. -->
+        <!-- Toolbar tìm kiếm, chọn danh mục và xóa bộ lọc đang dùng. -->
         <form class="catalog-toolbar" @submit.prevent="applyFilters">
             <div class="catalog-toolbar-search">
                 <label class="visually-hidden" for="catalog-search">Tìm kiếm sản phẩm</label>
@@ -162,7 +162,17 @@ onMounted(() => fetchCategories())
                 </select>
             </div>
 
-            <button class="catalog-submit" type="submit">Tìm kiếm</button>
+            <div class="catalog-toolbar-actions">
+                <button class="catalog-submit" type="submit">Tìm kiếm</button>
+                <button
+                    v-if="searchInput || categorySlug"
+                    class="catalog-outline-button catalog-clear-button"
+                    type="button"
+                    @click="clearFilters"
+                >
+                    Xóa bộ lọc
+                </button>
+            </div>
         </form>
 
         <p v-if="categoryError" class="catalog-category-error" role="status">{{ categoryError }}</p>
@@ -275,6 +285,15 @@ onMounted(() => fetchCategories())
 .catalog-control:disabled {
     background: #f8f9fa;
     color: #6c757d;
+}
+
+.catalog-toolbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.catalog-toolbar-actions > button {
+    flex: 1;
 }
 
 .catalog-submit,
@@ -404,7 +423,7 @@ onMounted(() => fetchCategories())
         grid-column: span 8;
     }
 
-    .catalog-submit {
+    .catalog-toolbar-actions {
         grid-column: span 4;
     }
 
@@ -431,7 +450,7 @@ onMounted(() => fetchCategories())
         grid-column: span 3;
     }
 
-    .catalog-submit {
+    .catalog-toolbar-actions {
         grid-column: span 2;
     }
 
