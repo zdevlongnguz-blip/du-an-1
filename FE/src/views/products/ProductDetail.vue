@@ -1,6 +1,6 @@
 <script setup>
-// Trang chi tiết sản phẩm: khi mở trang chỉ gọi api-product-detail theo slug trên URL.
-// Bình luận chỉ được tải bằng api-product-comments khi người dùng bấm "Xem bình luận".
+// Trang chi tiết sản phẩm: khi mở trang gọi api-product-detail và api-product-comments theo slug.
+// Nút bình luận chỉ ẩn hoặc hiện khu vực, không quyết định thời điểm tải dữ liệu.
 // Khu vực mua hàng và form bình luận hiện là giao diện demo, chưa nối xử lý.
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
@@ -127,8 +127,7 @@ async function fetchProduct(slug) {
   }
 }
 
-// Gọi api-product-comments cho slug hiện tại. Chỉ chạy khi người dùng mở bình luận,
-// bấm "Thử lại" hoặc đổi trang bình luận; không bao giờ chạy lúc mở trang.
+// Gọi api-product-comments cho slug hiện tại khi mở trang, thử lại hoặc đổi trang bình luận.
 // Thành công: res.data.comments.data (danh sách) và res.data.comments.pagination.
 async function fetchComments(page = 1) {
   const slug = route.params.slug
@@ -151,14 +150,9 @@ async function fetchComments(page = 1) {
   }
 }
 
-// Bấm "Xem bình luận" / "Ẩn bình luận". Chỉ gọi API khi mở lần đầu (hoặc lần trước bị lỗi);
-// các lần sau chỉ ẩn/hiện dữ liệu đã tải.
+// Nút này chỉ mở hoặc thu gọn khu vực; tải dữ liệu được thực hiện khi slug trang thay đổi.
 function toggleComments() {
   commentsVisible.value = !commentsVisible.value
-
-  if (commentsVisible.value && comments.value === null && !commentsLoading.value) {
-    fetchComments(1)
-  }
 }
 
 // watch + immediate: chạy ngay khi mở trang và chạy lại khi slug trên URL đổi.
@@ -177,6 +171,7 @@ watch(
 
     if (typeof slug === 'string' && slug !== '') {
       fetchProduct(slug)
+      fetchComments(1)
     }
   },
   { immediate: true },
@@ -285,7 +280,7 @@ watch(
         </section>
       </div>
 
-      <!-- Bình luận: thu gọn mặc định, chỉ tải khi người dùng bấm "Xem bình luận". -->
+      <!-- Bình luận được tải khi mở trang; nút chỉ thu gọn hoặc mở khu vực này. -->
       <section class="pd-comments" aria-labelledby="pd-comments-title">
         <div class="pd-comments-header">
           <h2 id="pd-comments-title" class="pd-comments-title">

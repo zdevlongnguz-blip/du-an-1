@@ -48,7 +48,7 @@ Dự án môn học: PHP MVC thuần + MySQL (PDO). Ưu tiên đơn giản, đú
 
 ## 6. Database
 - Đổi schema: tạo migration mới trong `BE/database/migrations/`, tên `YYYYMMDD_<mô_tả>.sql`, viết để chạy lặp được (`IF NOT EXISTS`...). Không sửa migration đã áp dụng.
-- Đồng bộ `create_database.sql` khi schema ban đầu thay đổi (README coi đây là file khởi tạo chính). Dữ liệu mẫu để trong `database/seed/`.
+- `create_database.sql` chỉ dùng để khởi tạo database. Khi cập nhật schema đã tồn tại hoặc file này đã được chạy, không sửa file này; luôn thêm migration mới trong `BE/database/migrations/`. Dữ liệu mẫu để trong `database/seed/`.
 - Không chạy lệnh xóa/phá dữ liệu và không chạy trên DB thật nếu chưa được yêu cầu và xác nhận.
 
 ## 7. Hiện trạng đã biết (KHÔNG bắt chước, KHÔNG tự sửa khi không có task riêng)
