@@ -2,8 +2,8 @@
 // Card Catalog hiển thị thông tin sản phẩm và hai CTA dùng chung giao diện Sharp Barber.
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import api from '@/services/api'
 import { formatPrice } from '@/helpers/formatPrice'
+import { resolveImageUrl } from '@/helpers/imageUrl'
 
 const props = defineProps({
   product: {
@@ -12,14 +12,8 @@ const props = defineProps({
   },
 })
 
-// Tạo URL ảnh từ base URL API hiện có, không hardcode host môi trường.
-const imageSrc = computed(() => {
-  const image = props.product.image
-  if (!image) return ''
-  if (/^https?:\/\//i.test(image)) return image
-
-  return new URL(`assets/uploads/${image}`, `${api.defaults.baseURL}/`).toString()
-})
+// Tạo URL ảnh từ filename trong DB; helper xử lý URL API ở cả dev và build.
+const imageSrc = computed(() => resolveImageUrl(props.product.image))
 
 // Khi ảnh lỗi, card dùng vùng thay thế thay vì hiện ảnh hỏng.
 const imageFailed = ref(false)
@@ -32,7 +26,7 @@ const isOutOfStock = computed(() => {
 </script>
 
 <template>
-  <!-- Card tách link chi tiết và cụm CTA để các hành động không lồng nhau. -->
+  <!-- Card giữ tên/giá ở đáy; phần thông tin và CTA mở khi hover hoặc focus. -->
   <article class="catalog-product-card">
     <RouterLink
       class="catalog-product-media"
@@ -43,47 +37,47 @@ const isOutOfStock = computed(() => {
       <span v-else class="catalog-product-image-fallback" aria-hidden="true">SB</span>
     </RouterLink>
 
-    <span v-if="isOutOfStock" class="catalog-product-stock-badge" role="status">Hết hàng</span>
-
-    <!-- Link nội dung mở chi tiết; hai CTA độc lập nằm cùng hàng phía dưới. -->
+    <!-- Link nội dung mở chi tiết sản phẩm. -->
     <RouterLink
       class="catalog-product-content"
       :to="{ name: 'product-detail', params: { slug: product.slug } }"
       :aria-label="`Xem chi tiết ${product.name}`"
     >
-      <div class="catalog-product-heading">
-        <p class="catalog-product-category">{{ product.category_name || 'Sharp Barber' }}</p>
-        <p v-if="product.code" class="catalog-product-code">{{ product.code }}</p>
+      <div class="catalog-product-details">
+        <div class="catalog-product-heading">
+          <p class="catalog-product-category">{{ product.category_name || 'Sharp Barber' }}</p>
+          <p v-if="product.code" class="catalog-product-code">{{ product.code }}</p>
+        </div>
+        <p v-if="product.description" class="catalog-product-description">{{ product.description }}</p>
+        <span v-if="isOutOfStock" class="catalog-product-availability">Hết hàng</span>
+        <span v-else-if="product.stock !== null && product.stock !== undefined" class="catalog-product-availability">
+          Còn {{ product.stock }} sản phẩm
+        </span>
       </div>
 
-      <h2 class="catalog-product-name">{{ product.name }}</h2>
-      <p v-if="product.description" class="catalog-product-description">{{ product.description }}</p>
-
-      <div class="catalog-product-stats" aria-label="Thống kê sản phẩm">
-        <p class="catalog-product-stat">
-          <strong>{{ Number(product.view_count ?? 0).toLocaleString('vi-VN') }}</strong>
-          <span>Lượt xem</span>
-        </p>
-        <p class="catalog-product-stat">
-          <strong>{{ Number(product.sales_count ?? 0).toLocaleString('vi-VN') }}</strong>
-          <span>Lượt bán</span>
-        </p>
-      </div>
-
-      <div class="catalog-product-footer">
+      <!-- Tên và giá luôn hiện, giữ cùng điểm neo giữa các thẻ. -->
+      <div class="catalog-product-summary">
+        <h2 class="catalog-product-name">{{ product.name }}</h2>
         <div class="catalog-product-price">
           <strong>{{ formatPrice(product.sale_price || product.price) }}</strong>
           <span v-if="product.sale_price && Number(product.sale_price) < Number(product.price)">
             {{ formatPrice(product.price) }}
           </span>
         </div>
-        <span v-if="!isOutOfStock && product.stock !== null && product.stock !== undefined" class="catalog-product-availability">
-          Còn {{ product.stock }}
-        </span>
+        <div class="catalog-product-stats" aria-label="Thống kê sản phẩm">
+          <p class="catalog-product-stat">
+            <strong>{{ Number(product.view_count ?? 0).toLocaleString('vi-VN') }}</strong>
+            <span>Lượt xem</span>
+          </p>
+          <p class="catalog-product-stat">
+            <strong>{{ Number(product.sales_count ?? 0).toLocaleString('vi-VN') }}</strong>
+            <span>Lượt bán</span>
+          </p>
+        </div>
       </div>
     </RouterLink>
 
-    <!-- Hai CTA dùng chung kích thước; nút thêm giỏ chưa nối hành vi. -->
+    <!-- Hai CTA hiện khi hover/focus; nút thêm giỏ chưa nối hành vi. -->
     <div class="catalog-product-actions">
       <RouterLink
         class="catalog-product-action catalog-product-action--view"
@@ -145,7 +139,7 @@ const isOutOfStock = computed(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 320ms cubic-bezier(0.2, 0.65, 0.3, 1);
+  transition: filter 320ms ease, opacity 320ms ease, transform 420ms cubic-bezier(0.2, 0.65, 0.3, 1);
 }
 
 .catalog-product-image-fallback {
@@ -160,9 +154,9 @@ const isOutOfStock = computed(() => {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: linear-gradient(180deg, rgb(0 0 0 / 3%) 10%, rgb(0 0 0 / 82%) 100%);
+  background: linear-gradient(180deg, rgb(0 0 0 / 2%) 20%, rgb(0 0 0 / 70%) 100%);
   content: '';
-  opacity: 0.94;
+  opacity: 0.72;
   pointer-events: none;
   transition: opacity 220ms ease;
 }
@@ -174,20 +168,9 @@ const isOutOfStock = computed(() => {
 
 .catalog-product-card:hover .catalog-product-media img,
 .catalog-product-card:focus-within .catalog-product-media img {
-  transform: scale(1.025);
-}
-
-.catalog-product-stock-badge {
-  position: absolute;
-  z-index: 2;
-  top: 12px;
-  right: 12px;
-  padding: 8px 10px;
-  background: #ba1a1a;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
+  filter: grayscale(1) brightness(0.56);
+  opacity: 0.82;
+  transform: scale(1.035);
 }
 
 .catalog-product-content {
@@ -198,9 +181,30 @@ const isOutOfStock = computed(() => {
   min-width: 0;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 12px 14px 68px;
+  padding: 14px;
+  transition: padding-bottom 280ms ease;
   color: #ffffff;
   text-decoration: none;
+}
+
+.catalog-product-details {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: max-height 320ms ease, opacity 220ms ease, transform 320ms ease;
+}
+
+.catalog-product-card:hover .catalog-product-details,
+.catalog-product-card:focus-within .catalog-product-details {
+  max-height: 172px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.catalog-product-card:hover .catalog-product-content,
+.catalog-product-card:focus-within .catalog-product-content {
+  padding-bottom: 62px;
 }
 
 .catalog-product-heading {
@@ -229,24 +233,26 @@ const isOutOfStock = computed(() => {
 
 .catalog-product-name {
   display: -webkit-box;
-  min-height: 44px;
+  min-height: 42px;
   margin: 0;
   overflow: hidden;
   color: #ffffff;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.45;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .catalog-product-description {
   display: -webkit-box;
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   overflow: hidden;
   color: rgb(255 255 255 / 78%);
   font-size: 11px;
   line-height: 1.4;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -255,15 +261,15 @@ const isOutOfStock = computed(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .catalog-product-stat {
   display: flex;
+  flex-direction: column;
   min-width: 0;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 2px;
   margin: 0;
   color: rgb(255 255 255 / 78%);
   font-size: 10px;
@@ -274,14 +280,17 @@ const isOutOfStock = computed(() => {
   font-size: 12px;
 }
 
-.catalog-product-footer {
+.catalog-product-availability {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgb(255 255 255 / 45%);
+  margin-top: 7px;
+  color: rgb(255 255 255 / 82%);
+  font-size: 10px;
+}
+
+.catalog-product-summary {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .catalog-product-price {
@@ -298,12 +307,6 @@ const isOutOfStock = computed(() => {
   color: rgb(255 255 255 / 72%);
   font-size: 11px;
   text-decoration: line-through;
-}
-
-.catalog-product-availability {
-  flex: 0 0 auto;
-  color: rgb(255 255 255 / 78%);
-  font-size: 10px;
 }
 
 .catalog-product-actions {
@@ -380,6 +383,20 @@ const isOutOfStock = computed(() => {
 }
 
 @media (hover: none) {
+  .catalog-product-card .catalog-product-media img {
+    filter: grayscale(0.7) brightness(0.7);
+  }
+
+  .catalog-product-card .catalog-product-content {
+    padding-bottom: 62px;
+  }
+
+  .catalog-product-card .catalog-product-details {
+    max-height: 172px;
+    opacity: 1;
+    transform: none;
+  }
+
   .catalog-product-actions {
     opacity: 1;
     pointer-events: auto;
@@ -393,7 +410,8 @@ const isOutOfStock = computed(() => {
   }
 
   .catalog-product-description {
-    display: none;
+    line-clamp: 1;
+    -webkit-line-clamp: 1;
   }
 
   .catalog-product-actions {
@@ -405,6 +423,8 @@ const isOutOfStock = computed(() => {
 @media (prefers-reduced-motion: reduce) {
   .catalog-product-card::after,
   .catalog-product-media img,
+  .catalog-product-content,
+  .catalog-product-details,
   .catalog-product-actions {
     transition: none;
   }

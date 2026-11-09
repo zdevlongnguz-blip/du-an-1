@@ -206,4 +206,28 @@ class User extends BaseModel
 
         return $user;
     }
+
+    /**
+     * Tăng token_version nếu JWT hiện tại vẫn là phiên bản mới nhất.
+     *
+     * @param int $userId ID user trong JWT.
+     * @param int $tokenVersion Phiên bản token đang dùng.
+     * @return bool True nếu thu hồi được token phiên bản hiện tại.
+     */
+    public function revokeTokenVersion(int $userId = 0, int $tokenVersion = 0): bool
+    {
+        if ($userId < 1 || $tokenVersion < 0) {
+            return false;
+        }
+
+        $statement = $this->pdo->prepare(
+            'UPDATE `users` SET `token_version` = `token_version` + 1 '
+            . 'WHERE `id` = :id AND `token_version` = :token_version AND `is_active` = 1'
+        );
+        $statement->bindValue(':id', $userId, PDO::PARAM_INT);
+        $statement->bindValue(':token_version', $tokenVersion, PDO::PARAM_INT);
+        $statement->execute();
+
+        return $statement->rowCount() === 1;
+    }
 }

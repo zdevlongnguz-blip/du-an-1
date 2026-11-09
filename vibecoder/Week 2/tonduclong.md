@@ -34,3 +34,12 @@ Branch: `tonduclong-feature-banner-slideshow`
 
 ## Mục chưa thực hiện
 - Việc đổi tên `ProductCard.vue` được trao đổi nhưng tạm dừng theo yêu cầu; không đổi tên hoặc sửa component này trong phiên.
+
+## Test API admin - 2026-11-09
+- Chạy smoke test local Laragon lúc `22:24 +07:00`: **46/46 PASS**.
+- Kiểm tra quyền: thiếu token trả 401; user thường gọi API admin trả 403; admin xem đơn trả 200; sai method trả 405.
+- Kiểm tra CRUD danh mục, sản phẩm, banner; slug trùng trả 409; không xóa danh mục đang có sản phẩm.
+- Kiểm tra upload ảnh sản phẩm, album và banner: DB trả filename, file truy cập được; thay/xóa ảnh dọn file cũ.
+- Kiểm tra comment pending: tạo, lọc danh sách, duyệt và xóa.
+- File sai MIME bị từ chối 422; JPEG hợp lệ upload thành công.
+- Cleanup hoàn tất: xóa fixture category/product/banner/comment và ảnh tạm; `BE/assets/uploads/` chỉ còn `default.jpg`.

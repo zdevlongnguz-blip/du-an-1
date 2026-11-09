@@ -11,7 +11,7 @@ SET @categories_created_at_exists = (
 SET @categories_created_at_migration = IF(
     @categories_created_at_exists = 0,
     'ALTER TABLE `categories` ADD COLUMN `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    'SELECT 1'
+    'SET @categories_created_at_exists = @categories_created_at_exists'
 );
 
 PREPARE categories_created_at_statement FROM @categories_created_at_migration;
@@ -29,7 +29,7 @@ SET @categories_updated_at_exists = (
 SET @categories_updated_at_migration = IF(
     @categories_updated_at_exists = 0,
     'ALTER TABLE `categories` ADD COLUMN `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
-    'SELECT 1'
+    'SET @categories_updated_at_exists = @categories_updated_at_exists'
 );
 
 PREPARE categories_updated_at_statement FROM @categories_updated_at_migration;
@@ -47,7 +47,7 @@ SET @products_updated_at_exists = (
 SET @products_updated_at_migration = IF(
     @products_updated_at_exists = 0,
     'ALTER TABLE `products` ADD COLUMN `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
-    'SELECT 1'
+    'SET @products_updated_at_exists = @products_updated_at_exists'
 );
 
 PREPARE products_updated_at_statement FROM @products_updated_at_migration;
@@ -65,7 +65,7 @@ SET @banners_created_at_exists = (
 SET @banners_created_at_migration = IF(
     @banners_created_at_exists = 0,
     'ALTER TABLE `banners` ADD COLUMN `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    'SELECT 1'
+    'SET @banners_created_at_exists = @banners_created_at_exists'
 );
 
 PREPARE banners_created_at_statement FROM @banners_created_at_migration;
@@ -83,7 +83,7 @@ SET @banners_updated_at_exists = (
 SET @banners_updated_at_migration = IF(
     @banners_updated_at_exists = 0,
     'ALTER TABLE `banners` ADD COLUMN `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
-    'SELECT 1'
+    'SET @banners_updated_at_exists = @banners_updated_at_exists'
 );
 
 PREPARE banners_updated_at_statement FROM @banners_updated_at_migration;

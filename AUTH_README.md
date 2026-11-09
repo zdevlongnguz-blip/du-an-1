@@ -8,7 +8,7 @@ Tài liệu này mô tả cơ chế xác thực hiện tại của project: JWT 
 - Không cần Composer package
 - Dễ debug, dễ hiểu
 - Hỗ trợ API protected và frontend Vue
-- Không lưu token trực tiếp trong bảng users
+- Không lưu JWT thô trong DB; chỉ lưu `token_version` để thu hồi các phiên cũ
 
 ## Luồng auth
 
@@ -19,6 +19,7 @@ sequenceDiagram
     participant Middleware as AuthMiddleware
     participant Helper as jwt_verify / requireBearerToken
     participant Controller as PostController / ProductController
+    participant DB as MySQL users
 
     Client->>Route: POST /?action=api-login
     Route->>Controller: AuthController::login()
@@ -32,10 +33,20 @@ sequenceDiagram
     Helper->>Helper: đọc header Authorization
     Helper->>Helper: kiểm tra "Bearer <token>"
     Helper->>Helper: jwt_verify(token)
+    Helper->>Helper: đọc user, is_active, role, token_version từ DB
+    Helper->>DB: kiểm tra user active, role và token_version
+    DB-->>Helper: trạng thái hiện tại
     Helper-->>Middleware: payload user
     Middleware-->>Route: allowed
     Route->>Controller: PostController::index()
     Controller-->>Client: JSON data
+
+    Client->>Route: POST /?action=api-logout
+    Route->>Controller: AuthController::logout()
+    Controller->>Helper: xác minh JWT và version hiện tại
+    Controller->>DB: tăng users.token_version nếu version còn khớp
+    DB-->>Controller: cập nhật thành công
+    Controller-->>Client: Đăng xuất thành công
 ```
 
 ## Cơ chế thực thi
@@ -64,7 +75,8 @@ Backend kiểm tra email/password. Nếu đúng, server tạo JWT với payload 
 [
   'sub' => 1,
   'email' => 'admin@example.com',
-  'role' => 'admin'
+  'role' => 'admin',
+  'token_version' => 0
 ]
 ```
 
@@ -75,6 +87,7 @@ $token = jwt_sign([
     'sub' => $user['id'],
     'email' => $user['email'],
     'role' => $user['role'],
+    'token_version' => (int) $user['token_version'],
 ]);
 ```
 
@@ -131,8 +144,9 @@ và thực hiện các bước sau:
 1. đọc `$_SERVER['HTTP_AUTHORIZATION']`
 2. fallback nếu header không nằm ở biến chuẩn
 3. kiểm tra regex dạng `Bearer ...`
-4. nếu sai → trả 401 JSON
-5. nếu đúng → gọi `jwt_verify()`
+4. xác minh chữ ký và thời hạn bằng `jwt_verify()`
+5. đọc user trong DB; yêu cầu `is_active=1`, role và `token_version` vẫn khớp JWT
+6. nếu token thiếu/sai/hết hạn/đã thu hồi hoặc user không hoạt động → trả 401 JSON
 
 Ví dụ:
 
@@ -162,37 +176,33 @@ Nếu token sai hoặc hết hạn thì trả lỗi:
 }
 ```
 
-## 6. Vì sao không lưu token trong users?
+## 6. Vì sao không lưu JWT thô trong users?
 
-Với mô hình JWT stateless:
+Backend không lưu cả chuỗi JWT. Bảng `users` chỉ có số nguyên `token_version`:
 
-- server không cần lưu token vào DB
-- mỗi request đều mang token kèm theo
-- server chỉ cần verify chữ ký và exp
-- app nhẹ, dễ triển khai, dễ scale
+- Login đưa `token_version` hiện tại vào JWT.
+- Mỗi protected request kiểm tra chữ ký, `exp`, `is_active`, role và version hiện tại trong DB.
+- Logout tăng version; mọi JWT cũ của user lập tức không còn khớp.
 
-Điều này phù hợp với mini project hoặc API backend riêng biệt.
+Đây là cách thu hồi đơn giản cho mini project. Đổi lại, mỗi protected request cần đọc user từ DB và logout sẽ kết thúc tất cả phiên của user, không chỉ một thiết bị.
 
 ## 7. Logout
 
-Với JWT stateless, logout thực chất là:
+Logout yêu cầu Bearer JWT hợp lệ. Backend đọc `sub` và `token_version`, sau đó tăng version có điều kiện trong DB bằng `User::revokeTokenVersion()`:
 
-- client bỏ token khỏi bộ nhớ / localStorage
-- server không cần xoá token ở DB
-
-Trong backend, logout vẫn có thể validate token nếu có và trả success:
-
-```php
-public function logout()
-{
-    $payload = requireBearerToken();
-    response_json([
-        'status' => 'success',
-        'message' => 'Đăng xuất thành công',
-        'user' => $payload
-    ]);
-}
+```sql
+UPDATE users
+SET token_version = token_version + 1
+WHERE id = :id
+  AND token_version = :current_version
+  AND is_active = 1;
 ```
+
+Migration [BE/database/migrations/20261109_add_user_token_version.sql](BE/database/migrations/20261109_add_user_token_version.sql) thêm cột `token_version` với mặc định `0`.
+
+Sau khi tăng version, token hiện tại và mọi JWT cũ cùng user sẽ nhận HTTP 401 ở request tiếp theo. FE vẫn xóa JWT/user khỏi localStorage và chuyển trang. Login tiếp theo phát JWT có version mới.
+
+Token cũ được phát trước migration và chưa có claim `token_version` được xem là version `0`; chúng tiếp tục dùng được cho tới khi user logout hoặc token hết hạn.
 
 ## 8. Response chuẩn
 
@@ -227,12 +237,12 @@ Khi token hợp lệ:
 
 ## 10. Kết luận
 
-Cơ chế auth hiện tại là phiên bản tối giản nhưng đủ dùng cho mini project:
+Cơ chế auth hiện tại là phiên bản tối giản cho mini project:
 
 - JWT HS256
 - Bearer token
-- Middleware guard
-- Stateless auth
+- Middleware guard kiểm tra JWT và trạng thái/version user trong DB
+- Logout thu hồi mọi JWT cũ bằng `token_version`
 - Không cần thư viện phức tạp
 
-Nếu cần mở rộng thực tế sau này, có thể thay bằng database-backed user auth, refresh token, role permission, hoặc session server-side. Nhưng với mục tiêu hiện tại, cách này là đơn giản, rõ và dễ debug nhất.
+Nếu cần thu hồi riêng từng thiết bị, có thể mở rộng sang token ID/denylist hoặc refresh-token sessions. Hiện tại `token_version` chủ ý thu hồi tất cả phiên của user cùng lúc.

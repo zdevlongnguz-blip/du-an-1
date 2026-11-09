@@ -34,3 +34,17 @@ Branch: `luongviethoang/feature/top5sp`
 ### Kiểm tra
 - `npm run build` trong `FE/` và `git diff --check` pass.
 - Chưa kiểm tra browser cho giao diện Catalog/CTA sau các thay đổi của nhánh này.
+
+## Sửa lỗi hiển thị thống kê Product Card - 2026-11-09
+
+### Frontend - ProductCardCatalog và ProductCardTop5
+- Xác nhận API danh sách và top sản phẩm trả đúng hai trường `view_count` và `sales_count`; lỗi nằm ở bố cục CSS.
+- Đưa lượt xem/lượt bán ra khỏi vùng `.details` bị thu gọn bằng `max-height: 0`, để thống kê luôn hiển thị kể cả khi không hover.
+- Xếp số và nhãn thành hai hàng trong từng cột để dễ đọc trên card hẹp; bổ sung `line-clamp` chuẩn song song với khai báo WebKit trong Catalog.
+- Gỡ rule `.top5-card:focus-visible` không hoạt động vì `<article>` không nhận focus.
+- Rà `FE/src/style.css`: không có selector ghi đè hai card. `ProductCard.vue` không còn được sử dụng nhưng giữ nguyên vì file đang có thay đổi cục bộ chưa commit.
+
+### Kiểm tra
+- `npm run build` trong `FE/`: pass; diagnostics hai component không có lỗi.
+- Browser kiểm tra trang Catalog và trang chủ: lượt xem/lượt bán đều hiện khi không hover.
+- Dev server chạy tại `http://127.0.0.1:5173/`.
