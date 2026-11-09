@@ -75,6 +75,24 @@ switch ($action) {
         (new CommentController)->byProductSlug();
         break;
 
+    // API tạo bình luận; yêu cầu user đăng nhập bằng Bearer JWT.
+    case 'api-comment-create':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new CommentController)->create($authPayload);
+        break;
+
+    // API sửa bình luận của chính user đang đăng nhập.
+    case 'api-comment-update':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new CommentController)->update($authPayload);
+        break;
+
+    // API xóa bình luận của chính user đang đăng nhập.
+    case 'api-comment-delete':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new CommentController)->delete($authPayload);
+        break;
+
     case 'api-products':
         // (new AuthMiddleware())->requireAuth();
         (new ProductController)->index();
