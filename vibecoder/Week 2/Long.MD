@@ -92,3 +92,16 @@ Branch cập nhật ngày 2026-11-07: `feature/design-master-layout+auth-ui`
 ### Mặc định phân trang comments
 - Đặt mặc định trực tiếp trong `Comment::getByProductSlug`: `page = 1`, `perPage = 10`, đồng bộ với API controller.
 - PHP lint cho `Comment.php` pass.
+
+## Cập nhật công việc BE - nhánh `luongviethoang/feature/update-ui-catalog` - 2026-11-09
+
+### Lọc sản phẩm theo slug danh mục
+- Đổi tham số lọc của `GET ?action=api-products` từ `category_id` sang `category`; giá trị `category` là slug danh mục. Giá trị không phải chuỗi hoặc dài hơn 255 ký tự trả HTTP 400.
+- Đổi `Product::getFiltered()` để lọc theo `categories.slug`; bổ sung JOIN vào truy vấn đếm để số lượng và phân trang khớp với danh sách sản phẩm.
+- Giữ nguyên cấu trúc `products.data` và `products.pagination`; trường trong `filters` đổi thành `category`.
+- Cột `categories.slug` đã có trong schema nên không cần migration. FE và link banner dùng cùng tham số `category`.
+
+### Kiểm tra
+- PHP lint pass cho `ProductController.php` và `Product.php`; `git diff --check` pass.
+- Chạy lại `BE/database/seed/banners.sql` trên database local `du-an-1`; xác nhận hai CTA catalog dùng `category=`, mỗi link có đúng một bản ghi và không còn CTA dùng `category_slug`.
+- Chưa gọi API với database thật để kiểm thử tích hợp.

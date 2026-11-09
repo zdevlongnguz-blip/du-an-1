@@ -3,7 +3,7 @@ class Product extends BaseModel
 {
     protected $table = 'products';
 
-    public function getFiltered($search = '', $categoryId = null, $page = 1, $perPage = 8)
+    public function getFiltered($search = '', $category = null, $page = 1, $perPage = 8)
     {
         $page = max(1, (int)$page);
         $perPage = max(1, (int)$perPage);
@@ -17,9 +17,9 @@ class Product extends BaseModel
             $params['keyword'] = "%{$search}%";
         }
 
-        if ($categoryId !== null && $categoryId !== '' && (int)$categoryId > 0) {
-            $conditions[] = "`products`.`category_id` = :category_id";
-            $params['category_id'] = (int)$categoryId;
+        if ($category !== null && $category !== '') {
+            $conditions[] = "`categories`.`slug` = :category";
+            $params['category'] = (string)$category;
         }
 
         $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
@@ -33,8 +33,7 @@ class Product extends BaseModel
 
         $stmt = $this->pdo->prepare($sql);
         foreach ($params as $key => $value) {
-            $type = in_array($key, ['category_id'], true) ? PDO::PARAM_INT : PDO::PARAM_STR;
-            $stmt->bindValue(':' . $key, $value, $type);
+            $stmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
         }
         $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
@@ -43,11 +42,11 @@ class Product extends BaseModel
 
         $countSql = "SELECT COUNT(*) AS total_items
                      FROM `products`
+                     LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
                      {$whereSql}";
         $countStmt = $this->pdo->prepare($countSql);
         foreach ($params as $key => $value) {
-            $type = in_array($key, ['category_id'], true) ? PDO::PARAM_INT : PDO::PARAM_STR;
-            $countStmt->bindValue(':' . $key, $value, $type);
+            $countStmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
         }
         $countStmt->execute();
         $countRow = $countStmt->fetch(PDO::FETCH_ASSOC);

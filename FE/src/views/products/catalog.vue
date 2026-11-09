@@ -1,281 +1,474 @@
-//hoàng đẹp trai
-
 <script setup>
-// Import ref và watch từ Vue để quản lý dữ liệu và theo dõi thay đổi
-import { ref, watch } from 'vue'
-
-// Import useRoute và useRouter để đọc và thay đổi URL
+// Trang Catalog gọi api-products và api-categories, giữ bộ lọc/phân trang trong URL.
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-
-// Import helper API có sẵn của dự án
 import api from '@/services/api'
+import ProductCardCatalog from '@/components/ProductCardCatalog.vue'
 
-// Import component thẻ sản phẩm đã tạo
-import ProductCard from '@/components/ProductCard.vue'
-
-// Khởi tạo đối tượng quản lý URL hiện tại
 const route = useRoute()
-
-// Khởi tạo đối tượng dùng để điều hướng URL
 const router = useRouter()
 
-// Danh sách sản phẩm lấy từ Backend
+// Danh sách sản phẩm hiển thị trên trang hiện tại.
 const products = ref([])
-
-// Danh sách danh mục lấy từ Backend
+// Danh mục API dùng để lọc sản phẩm.
 const categories = ref([])
-
-// Trạng thái đang tải dữ liệu
-const loading = ref(false)
-
-// Thông báo lỗi nếu không lấy được dữ liệu
-const error = ref('')
-
-// Nội dung ô tìm kiếm
+// Tách trạng thái tải, lỗi sản phẩm và lỗi danh mục để không nhầm lỗi với danh sách rỗng.
+const loading = ref(true)
+const errorMessage = ref('')
+const categoryError = ref('')
+// Lưu dữ liệu đang nhập trong toolbar; chỉ gửi khi bấm nút tìm kiếm.
 const searchInput = ref('')
-
-// Danh mục đang được lựa chọn
-const categoryId = ref('')
-
-// Thông tin phân trang
+const categorySlug = ref('')
+// Thông tin phân trang do api-products trả về.
 const pagination = ref({
     current_page: 1,
+    per_page: 8,
     total_pages: 1,
-    total_items: 0
+    total_items: 0,
 })
+// Mã request giúp kết quả tìm kiếm cũ không ghi đè kết quả mới khi đổi bộ lọc nhanh.
+let latestProductsRequest = 0
 
-// Hàm lấy danh sách danh mục từ Backend
-const fetchCategories = async () => {
+// Lấy danh mục cho select; lỗi được hiển thị riêng và không làm mất danh sách sản phẩm.
+async function fetchCategories() {
+    categoryError.value = ''
+
     try {
-        // Gọi API lấy danh sách categories
-        const response = await api.get('?action=api-categories')
+        // api-categories trả status và mảng categories; lỗi HTTP lấy message từ BE.
+        const response = await api.get('/?action=api-categories')
 
-        // Lưu danh sách danh mục vào biến categories
-        categories.value = response.data.categories || []
+        if (response.data?.status !== 'success' || !Array.isArray(response.data.categories)) {
+            throw new Error('Dữ liệu danh mục không hợp lệ.')
+        }
 
-    } catch (err) {
-        // Hiển thị lỗi nếu API không hoạt động
-        console.error('Lỗi lấy danh mục:', err)
+        categories.value = response.data.categories
+    } catch (error) {
+        categoryError.value = error.response?.data?.message || error.message || 'Không tải được danh mục.'
     }
 }
 
-// Hàm lấy danh sách sản phẩm từ Backend
-const fetchProducts = async () => {
-    // Bật trạng thái loading
+// Lấy một trang sản phẩm theo query trên URL và hiện lỗi thay vì giả thành danh sách rỗng.
+async function fetchProducts() {
+    const requestId = ++latestProductsRequest
     loading.value = true
-
-    // Xóa thông báo lỗi cũ
-    error.value = ''
+    errorMessage.value = ''
 
     try {
-        // Đọc các tham số lọc từ URL
-        const response = await api.get('?action=api-products', {
+        // api-products trả products.data và products.pagination theo contract hiện có.
+        const response = await api.get('/?action=api-products', {
             params: {
                 search: route.query.search || '',
-                category_id: route.query.category_id || '',
+                category: route.query.category || '',
                 page: route.query.page || 1,
-                per_page: route.query.per_page || 8
-            }
+                per_page: route.query.per_page || 8,
+            },
         })
 
-        // Lấy danh sách sản phẩm từ kết quả API
-        products.value = response.data.products.data || []
+        const productResult = response.data?.products
+        if (
+            response.data?.status !== 'success'
+            || !Array.isArray(productResult?.data)
+            || !productResult.pagination
+        ) {
+            throw new Error('Dữ liệu sản phẩm không hợp lệ.')
+        }
 
-        // Lấy thông tin phân trang từ Backend
-        pagination.value = response.data.products.pagination
-
-    } catch (err) {
-        // Hiển thị thông báo khi lấy sản phẩm thất bại
-        error.value = 'Không thể tải danh sách sản phẩm.'
-
-        console.error('Lỗi lấy sản phẩm:', err)
-
+        if (requestId === latestProductsRequest) {
+            products.value = productResult.data
+            pagination.value = productResult.pagination
+        }
+    } catch (error) {
+        if (requestId === latestProductsRequest) {
+            errorMessage.value = error.response?.data?.message || error.message || 'Không thể tải danh sách sản phẩm.'
+        }
     } finally {
-        // Tắt trạng thái loading dù thành công hay thất bại
-        loading.value = false
+        // Chỉ request mới nhất được tắt loading, tránh request cũ làm nháy trạng thái.
+        if (requestId === latestProductsRequest) loading.value = false
     }
 }
 
-// Hàm áp dụng bộ lọc và cập nhật URL
-const applyFilters = () => {
+// Áp dụng từ khóa/danh mục vào URL; đổi bộ lọc luôn quay về trang đầu.
+function applyFilters() {
     router.push({
         name: 'catalog',
         query: {
             search: searchInput.value || undefined,
-            category_id: categoryId.value || undefined,
-            page: 1
-        }
+            category: categorySlug.value || undefined,
+            page: 1,
+        },
     })
 }
 
-// Hàm chuyển trang
-const changePage = (page) => {
+// Xóa bộ lọc rồi để watcher nạp lại danh sách trang đầu.
+function clearFilters() {
+    searchInput.value = ''
+    categorySlug.value = ''
+    router.push({ name: 'catalog', query: { page: 1 } })
+}
+
+// Chuyển trang nhưng vẫn giữ nguyên các bộ lọc hiện tại trên URL.
+function changePage(page) {
     router.push({
         name: 'catalog',
         query: {
             ...route.query,
-            page: page
-        }
+            page,
+        },
     })
 }
 
-// Theo dõi URL: khi query thay đổi thì tải lại sản phẩm
+// Đồng bộ input từ URL và tải lại dữ liệu khi tìm kiếm, danh mục hoặc trang đổi.
 watch(
     () => route.query,
     () => {
-        searchInput.value = route.query.search || ''
-        categoryId.value = route.query.category_id || ''
-
+        searchInput.value = typeof route.query.search === 'string' ? route.query.search : ''
+        categorySlug.value = typeof route.query.category === 'string' ? route.query.category : ''
         fetchProducts()
     },
-    { immediate: true }
+    { immediate: true },
 )
 
-// Theo dõi URL để đồng bộ dữ liệu bộ lọc
-watch(
-    () => route.query.category_id,
-    (newValue) => {
-        categoryId.value = newValue || ''
-    }
-)
-
-// Lấy danh sách danh mục khi component được khởi tạo
-fetchCategories()
-
+// Danh mục chỉ cần tải một lần khi Catalog được mở.
+onMounted(() => fetchCategories())
 </script>
 
 <template>
-    <div class="catalog">
+    <section class="catalog-page" aria-labelledby="catalog-title">
+        <header class="catalog-heading">
+            <p class="catalog-eyebrow">Sharp Barber / Shop</p>
+            <h1 id="catalog-title">Danh sách sản phẩm</h1>
+        </header>
 
-        <!-- Tiêu đề trang sản phẩm -->
-        <h2>Danh sách sản phẩm</h2>
-
-        <!-- Khu vực tìm kiếm và lọc danh mục -->
-        <div class="filter">
-
-            <!-- Ô nhập tên sản phẩm cần tìm -->
-            <input
-                v-model="searchInput"
-                type="text"
-                placeholder="Tìm kiếm sản phẩm..."
-                @keyup.enter="applyFilters"
-            >
-
-            <!-- Danh sách danh mục lấy từ API Categories -->
-            <select v-model="categoryId">
-                <option value="">Tất cả danh mục</option>
-
-                <option
-                    v-for="category in categories"
-                    :key="category.id"
-                    :value="category.id"
+        <!-- Toolbar tìm kiếm và chọn danh mục theo tỷ lệ responsive của Stitch. -->
+        <form class="catalog-toolbar" @submit.prevent="applyFilters">
+            <div class="catalog-toolbar-search">
+                <label class="visually-hidden" for="catalog-search">Tìm kiếm sản phẩm</label>
+                <input
+                    id="catalog-search"
+                    v-model="searchInput"
+                    class="catalog-control"
+                    type="search"
+                    placeholder="Tìm kiếm sản phẩm..."
                 >
-                    {{ category.name }}
-                </option>
-            </select>
+            </div>
 
-            <!-- Nút áp dụng bộ lọc -->
-            <button @click="applyFilters">
-                Tìm kiếm
-            </button>
+            <div class="catalog-toolbar-category">
+                <label class="visually-hidden" for="catalog-category">Lọc theo danh mục</label>
+                <select id="catalog-category" v-model="categorySlug" class="catalog-control" :disabled="categories.length === 0">
+                    <option value="">Tất cả danh mục</option>
+                    <option v-for="category in categories" :key="category.id" :value="category.slug">
+                        {{ category.name }}
+                    </option>
+                </select>
+            </div>
 
+            <button class="catalog-submit" type="submit">Tìm kiếm</button>
+        </form>
+
+        <p v-if="categoryError" class="catalog-category-error" role="status">{{ categoryError }}</p>
+
+        <!-- Khi đang tải, placeholder giữ nguyên tỷ lệ 3:4 của card trong thiết kế. -->
+        <div v-if="loading" class="catalog-grid" role="status" aria-label="Đang tải sản phẩm" aria-busy="true">
+            <div v-for="placeholderIndex in 8" :key="placeholderIndex" class="catalog-skeleton" aria-hidden="true"></div>
         </div>
 
-        <!-- Hiển thị trạng thái đang tải -->
-        <p v-if="loading">
-            Đang tải sản phẩm...
-        </p>
-
-        <!-- Hiển thị lỗi nếu API thất bại -->
-        <p v-else-if="error">
-            {{ error }}
-        </p>
-
-        <!-- Hiển thị danh sách sản phẩm -->
-        <div v-else class="product-list">
-
-            <!-- Tái sử dụng component ProductCard -->
-            <ProductCard
-                v-for="product in products"
-                :key="product.id"
-                :product="product"
-            />
-
-            <!-- Thông báo nếu không có sản phẩm -->
-            <p v-if="products.length === 0">
-                Không tìm thấy sản phẩm.
-            </p>
-
+        <!-- Lỗi API được tách khỏi trạng thái không có sản phẩm và có thể thử lại. -->
+        <div v-else-if="errorMessage" class="catalog-state catalog-state--error" role="alert">
+            <p>{{ errorMessage }}</p>
+            <button class="catalog-outline-button" type="button" @click="fetchProducts">Thử lại</button>
         </div>
 
-        <!-- Khu vực phân trang -->
-        <div class="pagination">
-
-            <!-- Nút trang trước -->
-            <button
-                :disabled="pagination.current_page <= 1"
-                @click="changePage(pagination.current_page - 1)"
-            >
-                Trang trước
-            </button>
-
-            <!-- Hiển thị số trang hiện tại -->
-            <span>
-                {{ pagination.current_page }} /
-                {{ pagination.total_pages }}
-            </span>
-
-            <!-- Nút trang tiếp theo -->
-            <button
-                :disabled="pagination.current_page >= pagination.total_pages"
-                @click="changePage(pagination.current_page + 1)"
-            >
-                Trang sau
-            </button>
-
+        <!-- Empty state thay grid/pagination và cho phép xóa bộ lọc. -->
+        <div v-else-if="products.length === 0" class="catalog-state" role="status">
+            <p>Không tìm thấy sản phẩm phù hợp.</p>
+            <button class="catalog-outline-button" type="button" @click="clearFilters">Xóa bộ lọc</button>
         </div>
 
-    </div>
+        <template v-else>
+            <!-- Grid responsive: 4 cột desktop, 3 tablet, 2 mobile. -->
+            <div class="catalog-grid" :aria-busy="loading">
+                <ProductCardCatalog v-for="product in products" :key="product.id" :product="product" />
+            </div>
+
+            <!-- Pagination dùng chung; ở mobile hai nút chia đều hai bên chỉ báo trang. -->
+            <nav class="catalog-pagination" aria-label="Phân trang sản phẩm">
+                <button
+                    class="catalog-outline-button catalog-page-button"
+                    type="button"
+                    :disabled="pagination.current_page <= 1"
+                    @click="changePage(Number(pagination.current_page) - 1)"
+                >
+                    Trang trước
+                </button>
+                <span class="catalog-page-indicator">{{ pagination.current_page }} / {{ pagination.total_pages }}</span>
+                <button
+                    class="catalog-outline-button catalog-page-button"
+                    type="button"
+                    :disabled="pagination.current_page >= pagination.total_pages"
+                    @click="changePage(Number(pagination.current_page) + 1)"
+                >
+                    Trang sau
+                </button>
+            </nav>
+        </template>
+    </section>
 </template>
 
-//làm đẹp 
 <style scoped>
-/* Khoảng cách tổng thể của trang */
-.catalog {
-    padding: 20px;
+.catalog-page {
+    width: 100%;
+    padding: 40px 24px 60px;
+    background: #ffffff;
 }
 
-/* Khu vực tìm kiếm và lọc */
-.filter {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
+.catalog-heading {
+    margin-bottom: 24px;
 }
 
-/* Danh sách sản phẩm */
-.product-list {
+.catalog-eyebrow {
+    margin: 0 0 6px;
+    color: #6c757d;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.catalog-heading h1 {
+    margin: 0;
+    color: #212529;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.catalog-toolbar {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 15px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
 }
 
-/* Khu vực phân trang */
-.pagination {
+.catalog-control {
+    width: 100%;
+    height: 44px;
+    padding: 0 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #212529;
+    font: inherit;
+    font-size: 14px;
+}
+
+.catalog-control::placeholder {
+    color: #6c757d;
+    opacity: 1;
+}
+
+.catalog-control:focus-visible {
+    border-color: #212529;
+    outline: 2px solid rgb(33 37 41 / 14%);
+    outline-offset: 1px;
+}
+
+.catalog-control:disabled {
+    background: #f8f9fa;
+    color: #6c757d;
+}
+
+.catalog-submit,
+.catalog-outline-button {
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px solid #212529;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.catalog-submit {
+    background: #212529;
+    color: #ffffff;
+}
+
+.catalog-submit:hover {
+    border-color: #44474a;
+    background: #44474a;
+}
+
+.catalog-outline-button {
+    background: transparent;
+    color: #212529;
+}
+
+.catalog-outline-button:hover:not(:disabled) {
+    background: #f3f4f5;
+}
+
+.catalog-submit:focus-visible,
+.catalog-outline-button:focus-visible {
+    outline: 3px solid rgb(33 37 41 / 20%);
+    outline-offset: 2px;
+}
+
+.catalog-outline-button:disabled {
+    border-color: #e9ecef;
+    background: #f8f9fa;
+    color: #adb5bd;
+    cursor: not-allowed;
+}
+
+.catalog-category-error {
+    margin: -12px 0 16px;
+    color: #6c757d;
+    font-size: 12px;
+}
+
+.catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.catalog-skeleton {
+    aspect-ratio: 3 / 4;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: linear-gradient(100deg, #f8f9fa 30%, #e9ecef 45%, #f8f9fa 60%);
+    background-size: 220% 100%;
+    animation: catalog-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.catalog-state {
     display: flex;
-    justify-content: center;
+    min-height: 260px;
+    flex-direction: column;
     align-items: center;
-    gap: 15px;
-    margin-top: 20px;
+    justify-content: center;
+    gap: 16px;
+    margin: 64px 0;
+    color: #6c757d;
+    text-align: center;
 }
 
-/* Điều chỉnh khi màn hình nhỏ */
-@media (max-width: 768px) {
-    .product-list {
-        grid-template-columns: repeat(2, 1fr);
+.catalog-state p {
+    margin: 0;
+    font-size: 15px;
+}
+
+.catalog-state--error {
+    color: #a42d2d;
+}
+
+.catalog-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 40px;
+}
+
+.catalog-page-indicator {
+    flex-shrink: 0;
+    color: #212529;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+@keyframes catalog-skeleton-shimmer {
+    to {
+        background-position-x: -220%;
+    }
+}
+
+@media (min-width: 768px) {
+    .catalog-page {
+        padding: 32px 24px 48px;
     }
 
-    .filter {
-        flex-wrap: wrap;
+    .catalog-toolbar {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        column-gap: 16px;
+        row-gap: 16px;
+    }
+
+    .catalog-toolbar-search {
+        grid-column: 1 / -1;
+    }
+
+    .catalog-toolbar-category {
+        grid-column: span 8;
+    }
+
+    .catalog-submit {
+        grid-column: span 4;
+    }
+
+    .catalog-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1200px) {
+    .catalog-page {
+        padding: 40px 24px 60px;
+    }
+
+    .catalog-toolbar {
+        column-gap: 24px;
+        row-gap: 0;
+    }
+
+    .catalog-toolbar-search {
+        grid-column: span 5;
+    }
+
+    .catalog-toolbar-category {
+        grid-column: span 3;
+    }
+
+    .catalog-submit {
+        grid-column: span 2;
+    }
+
+    .catalog-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 24px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .catalog-page {
+        padding: 24px 16px 40px;
+    }
+
+    .catalog-heading h1 {
+        font-size: 22px;
+    }
+
+    .catalog-pagination {
+        width: 100%;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .catalog-page-button {
+        flex: 1;
+        padding: 0 8px;
+    }
+
+    .catalog-page-indicator {
+        padding: 0 8px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .catalog-skeleton {
+        animation: none;
     }
 }
 </style>

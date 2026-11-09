@@ -18,3 +18,19 @@ Branch: `luongviethoang/feature/top5sp`
 - Giả lập `stock = 0`: badge Out of stock hiển thị và nút bị disable; dữ liệu thật hiện không có sản phẩm hết hàng.
 - `git diff --check`: pass.
 - Dev server chạy tại `http://localhost:5174/`.
+
+## Cập nhật nhánh `luongviethoang/feature/update-ui-catalog` - 2026-11-09
+
+### Frontend - Catalog sản phẩm
+- Thiết kế lại trang Catalog theo giao diện Sharp Barber: thanh tìm kiếm/lọc danh mục, lưới sản phẩm responsive và phân trang.
+- Thêm trạng thái loading dạng skeleton, lỗi có nút thử lại, trạng thái rỗng có thể xóa bộ lọc; tải danh mục riêng để lỗi danh mục không làm mất danh sách sản phẩm.
+- Tạo `ProductCardCatalog.vue` hiển thị ảnh, tên, danh mục, giá, lượt xem/lượt bán và tồn kho; có fallback khi ảnh lỗi, link sang chi tiết sản phẩm và nút giỏ hàng chỉ mang tính giao diện.
+- Đổi bộ lọc FE sang query param `category` có giá trị là `category.slug`; đồng bộ URL và request `api-products`.
+
+### Frontend - CTA thẻ Top 5
+- Thay CTA dạng chữ bằng hai nút icon xem chi tiết và giỏ hàng; nút xem mở trang chi tiết theo slug.
+- Gom CTA vào cùng cụm, hiện khi hover/focus và luôn hiện trên thiết bị không có hover; nút giỏ bị vô hiệu hóa khi sản phẩm hết hàng. Chức năng thêm giỏ chưa được triển khai.
+
+### Kiểm tra
+- `npm run build` trong `FE/` và `git diff --check` pass.
+- Chưa kiểm tra browser cho giao diện Catalog/CTA sau các thay đổi của nhánh này.

@@ -82,18 +82,36 @@ const isOutOfStock = computed(() => {
           <span>{{ rankingLabel }}</span>
         </p>
       </div>
-      <span class="top5-card-view" aria-hidden="true">View product</span>
     </RouterLink>
 
-    <!-- Chỉ hiển thị nút theo thiết kế; chưa gắn chức năng giỏ hàng. -->
-    <button
-      class="top5-card-cart"
-      type="button"
-      :disabled="isOutOfStock"
-      :aria-label="isOutOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`"
-    >
-      Add to cart
-    </button>
+    <!-- Gom hai icon CTA cạnh nhau ở cùng một vị trí. -->
+    <div class="top5-card-actions">
+      <RouterLink
+        class="top5-card-action top5-card-view"
+        :to="{ name: 'product-detail', params: { slug: product.slug } }"
+        :aria-label="`Xem chi tiết ${product.name}`"
+        title="Xem sản phẩm"
+      >
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </RouterLink>
+      <!-- Chỉ hiển thị nút giỏ theo thiết kế; chưa gắn chức năng thêm giỏ. -->
+      <button
+        class="top5-card-action top5-card-cart"
+        type="button"
+        :disabled="isOutOfStock"
+        :aria-label="isOutOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`"
+        :title="isOutOfStock ? 'Out of stock' : 'Add to cart'"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="9" cy="21" r="1" />
+          <circle cx="19" cy="21" r="1" />
+          <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 2-1.6L22 7H6" />
+        </svg>
+      </button>
+    </div>
   </article>
 </template>
 
@@ -262,45 +280,60 @@ const isOutOfStock = computed(() => {
   font-size: 13px;
 }
 
-.top5-card-view {
-  align-self: flex-start;
-  margin-top: 12px;
-  padding: 9px 13px;
-  border: 1px solid rgb(255 255 255 / 78%);
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 600;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity 180ms ease, transform 180ms ease;
-}
-
-.top5-card:hover .top5-card-view,
-.top5-card:focus-within .top5-card-view {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.top5-card-cart {
+.top5-card-actions {
   position: absolute;
   z-index: 3;
   right: clamp(14px, 2vw, 24px);
   bottom: clamp(14px, 2vw, 24px);
-  min-height: 42px;
-  padding: 0 16px;
-  border: 1px solid #ffffff;
-  background: #ffffff;
-  color: #0c1014;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
+  display: flex;
+  gap: 8px;
   opacity: 0;
   pointer-events: none;
   transform: translateY(4px);
-  transition: opacity 180ms ease, transform 180ms ease, background-color 180ms ease;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
-.top5-card-cart:hover {
+.top5-card-action {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 78%);
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.top5-card-view {
+  background: rgb(12 16 20 / 44%);
+  color: #ffffff;
+}
+
+.top5-card-view:hover {
+  background: rgb(12 16 20 / 72%);
+}
+
+.top5-card-view svg,
+.top5-card-cart svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.top5-card-cart {
+  border: 1px solid #ffffff;
+  background: #ffffff;
+  color: #0c1014;
+}
+
+.top5-card-cart:hover:not(:disabled) {
   background: #e7e8e9;
 }
 
@@ -311,13 +344,13 @@ const isOutOfStock = computed(() => {
   cursor: not-allowed;
 }
 
-.top5-card-cart:focus-visible {
+.top5-card-action:focus-visible {
   outline: 3px solid #ffffff;
   outline-offset: 3px;
 }
 
-.top5-card:hover .top5-card-cart,
-.top5-card:focus-within .top5-card-cart {
+.top5-card:focus-within .top5-card-actions,
+.top5-card:hover .top5-card-actions {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
@@ -336,8 +369,7 @@ const isOutOfStock = computed(() => {
 }
 
 @media (hover: none) {
-  .top5-card-view,
-  .top5-card-cart {
+  .top5-card-actions {
     opacity: 1;
     pointer-events: auto;
     transform: none;
@@ -347,8 +379,8 @@ const isOutOfStock = computed(() => {
 @media (prefers-reduced-motion: reduce) {
   .top5-card::after,
   .top5-card-image,
-  .top5-card-view,
-  .top5-card-cart {
+  .top5-card-actions,
+  .top5-card-action {
     transition: none;
   }
 }

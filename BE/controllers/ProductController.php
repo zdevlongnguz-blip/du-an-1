@@ -8,13 +8,21 @@ class ProductController{
 
     public function index(){
         $search = $_GET['search'] ?? $_GET['q'] ?? '';
-        $categoryId = $_GET['category_id'] ?? $_GET['categoryId'] ?? null;
+        $category = $_GET['category'] ?? '';
+        if (!is_string($category) || strlen(trim($category)) > 255) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Slug danh mục không hợp lệ',
+            ], 400);
+        }
+        $category = trim($category);
+        $category = $category === '' ? null : $category;
         $page = $_GET['page'] ?? 1;
         $perPage = $_GET['per_page'] ?? $_GET['perPage'] ?? 8;
 
         $products = $this->product->getFiltered(
             $search,
-            $categoryId,
+            $category,
             $page,
             $perPage
         );
@@ -24,7 +32,7 @@ class ProductController{
             'products' => $products,
             'filters' => [
                 'search' => $search,
-                'category_id' => $categoryId,
+                'category' => $category,
                 'page' => $page,
                 'per_page' => $perPage,
             ],
