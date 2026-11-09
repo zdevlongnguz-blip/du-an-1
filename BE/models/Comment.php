@@ -5,7 +5,7 @@ class Comment extends BaseModel
     protected $table = 'comments';
 
     /**
-     * Lấy một trang bình luận theo slug sản phẩm.
+        * Lấy một trang bình luận đang hiển thị theo slug sản phẩm.
      *
      * @param string $productSlug Slug của sản phẩm cần lấy bình luận.
     * @param int $page Trang hiện tại, bắt đầu từ 1 (mặc định là 1).
@@ -27,7 +27,7 @@ class Comment extends BaseModel
 
         $productId = (int) $productId;
         $countStatement = $this->pdo->prepare(
-            'SELECT COUNT(*) FROM `comments` WHERE `product_id` = :product_id'
+            'SELECT COUNT(*) FROM `comments` WHERE `product_id` = :product_id AND `status` = 1'
         );
         $countStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
         $countStatement->execute();
@@ -40,7 +40,7 @@ class Comment extends BaseModel
             . '`comments`.`created_at`, `comments`.`updated_at` '
             . 'FROM `comments` '
             . 'INNER JOIN `users` ON `users`.`id` = `comments`.`user_id` '
-            . 'WHERE `comments`.`product_id` = :product_id '
+            . 'WHERE `comments`.`product_id` = :product_id AND `comments`.`status` = 1 '
             . 'ORDER BY `comments`.`created_at` DESC, `comments`.`id` DESC LIMIT :limit OFFSET :offset'
         );
         $commentsStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
