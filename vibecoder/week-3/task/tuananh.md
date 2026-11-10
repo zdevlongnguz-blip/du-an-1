@@ -25,14 +25,14 @@ Hoàn thiện thao tác thêm giỏ nhanh quantity 1 trên hai product card. Vì
 - `FE/src/components/ProductCardCatalog.vue` và `FE/src/components/ProductCardTop5.vue` có nút thêm giỏ dạng giao diện, chưa gọi API; phần code này thuộc Tuấn Anh.
 - `FE/src/views/products/ProductDetail.vue` có luồng bình luận và stepper/giỏ dạng demo; phần code thuộc Văn Hoàng, còn kiểm thử tích hợp sau handoff thuộc Tuấn Anh.
 - BE đã có route xác thực `api-cart-add`; danh tính user được lấy từ Bearer JWT ở middleware, không nhận user ID từ FE.
-- `FE/src/services/api.js` đã phụ trách cấu hình request/interceptor; không sửa file này. Dùng `FE/src/services/toast.js` để báo thành công/lỗi.
+- `FE/src/helpers/api/client.js` đã phụ trách cấu hình request/interceptor; không sửa nội dung file này. Dùng `FE/src/helpers/ui/toast.js` để báo thành công/lỗi.
 
 ## Phạm Vi Thực Hiện
 
 ### Trạng Thái, Thông Báo Và Validate
 
 - Bao phủ các trạng thái phù hợp cho từng luồng: đang tải/đang gửi, thành công, lỗi, rỗng và thử lại khi có thể; không để lỗi API trông như danh sách rỗng hoặc thành công giả.
-- Mọi thao tác gửi form/thêm giỏ phải có alert/toast thành công hoặc lỗi dùng `FE/src/services/toast.js`; khóa nút khi đang xử lý để tránh gửi lặp.
+- Mọi thao tác gửi form/thêm giỏ phải có alert/toast thành công hoặc lỗi dùng `FE/src/helpers/ui/toast.js`; khóa nút khi đang xử lý để tránh gửi lặp.
 - Validate phía FE và hiện lỗi thân thiện ngay dưới đúng trường nhập. Với lỗi validation trả từ BE, không ánh xạ thành lỗi từng trường; hiển thị thông báo chung từ response qua toast.
 - Tham khảo cách validate và hiển thị lỗi trong các trang auth FE hiện có; validation FE chỉ hỗ trợ trải nghiệm, BE vẫn là nơi kiểm tra dữ liệu cuối cùng.
 
@@ -40,7 +40,7 @@ Hoàn thiện thao tác thêm giỏ nhanh quantity 1 trên hai product card. Vì
 
 - Chỉ nối nút thêm giỏ trong `FE/src/components/ProductCardCatalog.vue` và `FE/src/components/ProductCardTop5.vue` với `POST /?action=api-cart-add`; mỗi card gửi quantity bằng 1.
 - Khách chưa đăng nhập không gọi API và được điều hướng/nhắc đăng nhập theo flow hiện có.
-- Khóa nút của card đang gửi để tránh request lặp; báo thành công/lỗi qua `FE/src/services/toast.js`. Xử lý HTTP 409 hết hàng/vượt tồn kho, không báo thành công giả.
+- Khóa nút của card đang gửi để tránh request lặp; báo thành công/lỗi qua `FE/src/helpers/ui/toast.js`. Xử lý HTTP 409 hết hàng/vượt tồn kho, không báo thành công giả.
 - Giữ nút vô hiệu hóa khi sản phẩm hết hàng theo `stock`. Không tự cập nhật stock phía client; BE vẫn là nơi quyết định cuối cùng.
 - Không sửa `ProductDetail.vue` hoặc phần UI bình luận/giỏ trang chi tiết; đây là phần code của Văn Hoàng.
 
@@ -69,7 +69,7 @@ Không đổi action, method, field, response shape, yêu cầu đăng nhập ho
 - Guest không gọi API và nhận CTA/điều hướng đăng nhập; lỗi 401, 404, 409 và lỗi mạng hiển thị phù hợp.
 - Sau khi Văn Hoàng bàn giao, Tuấn Anh xác nhận các tiêu chí nghiệm thu của cả hai task trong `vanhoang.md` và file này, bao gồm create/update/delete comment, quyền owner, validate, stepper và thêm giỏ ProductDetail.
 - `npm run build` và kiểm thử browser/API tích hợp cho cả hai task phải pass. Nếu lỗi thuộc ProductDetail thì chuyển Văn Hoàng sửa rồi retest; nếu contract BE lỗi thì báo admin/owner BE, không sửa PHP hoặc `BE/test-api.md`.
-- `git diff --check` pass; không sửa `FE/src/services/api.js`, không thêm endpoint hoặc dependency ngoài phạm vi.
+- `git diff --check` pass; không sửa nội dung `FE/src/helpers/api/client.js`, không thêm endpoint hoặc dependency ngoài phạm vi.
 
 ## File Dự Kiến
 

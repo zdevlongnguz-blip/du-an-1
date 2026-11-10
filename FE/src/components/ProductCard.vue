@@ -2,8 +2,8 @@
 
 <script setup>
 // Import hàm định dạng tiền từ helper
-import { formatPrice } from '@/helpers/formatPrice';
-import { resolveImageUrl } from '@/helpers/imageUrl';
+import { formatPrice } from '@/helpers/format/price';
+import { resolveImageUrl } from '@/helpers/media/imageUrl';
 
 // Khai báo dữ liệu sản phẩm được truyền từ component cha
 const props = defineProps({

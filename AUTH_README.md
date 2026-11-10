@@ -99,7 +99,7 @@ Frontend lưu token và thông tin user vào localStorage:
 setAuthSession(data.token, data.user)
 ```
 
-Ví dụ trong [FE/src/services/auth.js](FE/src/services/auth.js):
+Ví dụ trong [FE/src/helpers/auth/session.js](FE/src/helpers/auth/session.js):
 
 ```js
 localStorage.setItem('auth_token', token)
@@ -232,8 +232,8 @@ Khi token hợp lệ:
 - [BE/extensions/AuthMiddleware.php](BE/extensions/AuthMiddleware.php): middleware wrapper
 - [BE/routes/index.php](BE/routes/index.php): route protected
 - [BE/controllers/AuthController.php](BE/controllers/AuthController.php): login/logout API
-- [FE/src/services/auth.js](FE/src/services/auth.js): lưu token/user
-- [FE/src/services/api.js](FE/src/services/api.js): tự gắn Authorization
+- [FE/src/helpers/auth/session.js](FE/src/helpers/auth/session.js): lưu token/user
+- [FE/src/helpers/api/client.js](FE/src/helpers/api/client.js): tự gắn Authorization
 
 ## 10. Kết luận
 

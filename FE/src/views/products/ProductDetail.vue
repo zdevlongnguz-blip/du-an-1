@@ -4,10 +4,11 @@
 // Khu vực mua hàng và form bình luận hiện là giao diện demo, chưa nối xử lý.
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import api from '@/services/api'
-import { isAuthenticated } from '@/services/auth'
-import { formatPrice } from '@/helpers/formatPrice'
-import { resolveImageUrl } from '@/helpers/imageUrl'
+import api from '@/helpers/api/client'
+import { isAuthenticated } from '@/helpers/auth/session'
+import { formatPrice } from '@/helpers/format/price'
+import { resolveImageUrl } from '@/helpers/media/imageUrl'
+import { saveReturnUrl } from '@/helpers/auth/returnUrl'
 
 // Số bình luận mỗi trang, khớp với query per_page đã thống nhất với BE.
 const COMMENTS_PER_PAGE = 10
@@ -266,7 +267,9 @@ watch(
 
           <!-- Khách chưa đăng nhập: không có khu vực mua hàng, chỉ có gợi ý đăng nhập. -->
           <p v-else class="pd-login-hint">
-            <RouterLink :to="{ name: 'login' }">Đăng nhập</RouterLink> để mua hàng và bình luận.
+            <RouterLink :to="{ name: 'login' }" @click.capture="saveReturnUrl(route.fullPath)">
+              Đăng nhập
+            </RouterLink> để mua hàng và bình luận.
           </p>
 
           <hr class="pd-divider">

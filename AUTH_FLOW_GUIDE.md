@@ -245,7 +245,7 @@ sequenceDiagram
 
 ## 9. Endpoint auth hiện có
 
-Base URL được chọn trong `FE/src/services/api.js`; bảng dưới chỉ ghi phần action để dễ đọc. Các response lỗi thường có dạng `{ "status": "error", "message": "..." }`.
+Base URL được chọn trong `FE/src/helpers/api/client.js`; bảng dưới chỉ ghi phần action để dễ đọc. Các response lỗi thường có dạng `{ "status": "error", "message": "..." }`.
 
 | Action | Method đang dùng | Auth | Mục đích / kết quả chính |
 |---|---|---|---|
@@ -271,8 +271,8 @@ Base URL được chọn trong `FE/src/services/api.js`; bảng dưới chỉ gh
 | Hồ sơ | [FE/src/views/auth/Profile.vue](FE/src/views/auth/Profile.vue) | Hiển thị dữ liệu user lưu cục bộ, gọi logout và luôn xóa session ở FE. |
 | Đổi mật khẩu | [FE/src/views/auth/ChangePassword.vue](FE/src/views/auth/ChangePassword.vue) | Gửi mật khẩu hiện tại/mới lên endpoint có yêu cầu Bearer JWT. |
 | Route | [FE/src/router/index.js](FE/src/router/index.js) | Khai báo trang auth, guard FE cho Profile và Change Password. |
-| HTTP service | [FE/src/services/api.js](FE/src/services/api.js) | Tạo Axios client, gắn Bearer JWT và xử lý 401. |
-| Lưu auth ở FE | [FE/src/services/auth.js](FE/src/services/auth.js) | Lưu/lấy/xóa `auth_token` và `auth_user` trong localStorage. |
+| HTTP client | [FE/src/helpers/api/client.js](FE/src/helpers/api/client.js) | Tạo Axios client, gắn Bearer JWT và xử lý 401. |
+| Lưu auth ở FE | [FE/src/helpers/auth/session.js](FE/src/helpers/auth/session.js) | Lưu/lấy/xóa `auth_token` và `auth_user` trong localStorage. |
 
 ## 11. Sơ đồ use case cho báo cáo
 
@@ -445,8 +445,8 @@ flowchart TD
 ### Frontend
 
 - [FE/src/router/index.js](FE/src/router/index.js): khai báo route auth và route guard.
-- [FE/src/services/api.js](FE/src/services/api.js): Axios client/interceptor.
-- [FE/src/services/auth.js](FE/src/services/auth.js): lưu session ở localStorage.
+- [FE/src/helpers/api/client.js](FE/src/helpers/api/client.js): Axios client/interceptor.
+- [FE/src/helpers/auth/session.js](FE/src/helpers/auth/session.js): lưu session ở localStorage.
 - [FE/src/views/auth/Register.vue](FE/src/views/auth/Register.vue): ví dụ view trong nhóm màn hình auth; các trang còn lại được liệt kê ở mục 10.
 
 ### Hướng dẫn sơ đồ cho báo cáo

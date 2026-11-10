@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import BannerSlideshow from '@/components/BannerSlideshow.vue'
 import ProductCardTop5 from '@/components/ProductCardTop5.vue'
-import api from '@/services/api'
+import api from '@/helpers/api/client'
 
 // Trang chủ: tải banner và top 5 sản phẩm từ các API công khai.
 

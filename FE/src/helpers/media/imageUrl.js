@@ -1,4 +1,4 @@
-import api from '@/services/api'
+import api from '@/helpers/api/client'
 
 /**
  * Tạo URL ảnh từ tên file trong DB, hoặc giữ URL đầy đủ của ảnh ngoài.
