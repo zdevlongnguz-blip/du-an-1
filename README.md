@@ -79,7 +79,7 @@ du-an-1/
 Get-Content -Raw .\BE\database\create_database.sql | mysql --host=localhost --port=3306 --user=root
 ```
 
-File [BE/database/create_database.sql](BE/database/create_database.sql) dùng để khởi tạo database `du-an-1` cùng các bảng và sản phẩm mẫu ban đầu. Cấu hình kết nối mặc định là `localhost:3306`, user `root`, mật khẩu trống, khớp với `BE/configs/env.php`. Máy cần có lệnh `mysql` trong `PATH` (có thể mở terminal từ Laragon nếu PowerShell không nhận lệnh). Không cần import bằng phpMyAdmin.
+File [BE/database/create_database.sql](BE/database/create_database.sql) dùng để khởi tạo database `du-an-1` cùng các bảng và sản phẩm mẫu ban đầu. Cấu hình không bí mật như host, port và tên database nằm trong `BE/configs/config.php`; thông tin xác thực nằm trong `BE/.env` (tạo theo mẫu `BE/.env.example`). Máy cần có lệnh `mysql` trong `PATH` (có thể mở terminal từ Laragon nếu PowerShell không nhận lệnh). Không cần import bằng phpMyAdmin.
 
 Với database đã khởi tạo, chạy các file migration cần thiết trong `BE/database/migrations/` trước, sau đó chạy seeder tương ứng trong `BE/database/seed/`. Ví dụ cập nhật bộ đếm và ảnh slide sản phẩm:
 

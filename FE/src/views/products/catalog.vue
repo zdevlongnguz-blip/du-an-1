@@ -135,7 +135,7 @@ onMounted(() => fetchCategories())
 <template>
     <section class="catalog-page" aria-labelledby="catalog-title">
         <header class="catalog-heading">
-            <p class="catalog-eyebrow">Sharp Barber / Shop</p>
+            <p class="catalog-eyebrow">FuLe BaberShop</p>
             <h1 id="catalog-title">Danh sách sản phẩm</h1>
         </header>
 

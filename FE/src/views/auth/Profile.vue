@@ -31,7 +31,7 @@ const handleLogout = async () => {
 </script>
 
 <template>
-	<AuthPage title="Your profile" description="Thông tin tài khoản Sharp Barber.">
+	<AuthPage title="Your profile" description="Thông tin tài khoản FuLe BaberShop.">
 		<!-- Thông tin tài khoản đang có trong session FE. -->
 		<dl class="profile-details">
 			<div class="profile-row">

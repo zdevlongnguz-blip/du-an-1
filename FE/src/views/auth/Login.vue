@@ -60,7 +60,7 @@ const fetchApiLogin = async () => {
 </script>
 
 <template>
-  <AuthPage title="Login" description="Đăng nhập vào tài khoản Sharp Barber để tiếp tục.">
+  <AuthPage title="Login" description="Đăng nhập vào tài khoản FuLe BaberShop để tiếp tục.">
     <!-- Form đăng nhập giữ nguyên endpoint và session JWT hiện có. -->
     <form class="auth-form" novalidate @submit.prevent="fetchApiLogin">
       <div class="auth-field">

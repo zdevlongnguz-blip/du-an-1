@@ -69,7 +69,7 @@ const register = async () => {
 <template>
 	<AuthPage
 		title="Create account"
-		description="Tạo tài khoản Sharp Barber bằng email và mật khẩu."
+		description="Tạo tài khoản FuLe BaberShop bằng email và mật khẩu."
 		variant="framed"
 	>
 		<!-- Dữ liệu gửi BE vẫn chỉ gồm email và mật khẩu. -->
