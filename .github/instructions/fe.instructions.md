@@ -126,3 +126,16 @@ Phát hiện thêm vấn đề tương tự: báo lại, không tự sửa ngầ
 - Chạy thử màn hình bằng `npm run dev` với các trường hợp: có dữ liệu, rỗng, lỗi API, chưa đăng nhập (với route bảo vệ).
 - Xem diff: không có file ngoài phạm vi, không sửa `api.js`, không có URL cứng mới, không đổi contract ngoài ý muốn.
 - Mọi hàm, API call, route, `ref/computed/watch` mới đều có comment tiếng Việt theo mục 6; chỗ khó hiểu có giải thích lý do.
+
+## Bao Phủ Đầy Đủ Luồng Giao Diện
+- Với mỗi thao tác/API được triển khai, xử lý các trạng thái phù hợp: loading, thành công, lỗi, rỗng và thử lại khi có thể. Không để lỗi bị hiểu nhầm thành dữ liệu rỗng hoặc báo thành công giả.
+- Mọi thao tác gửi form/thay đổi dữ liệu cần có thông báo thành công/lỗi bằng `services/toast.js`; khóa nút trong lúc request để tránh gửi lặp.
+- Form phải validate ở FE và hiện lỗi thân thiện ngay dưới từng trường liên quan; xóa/cập nhật lỗi trường khi người dùng sửa dữ liệu.
+- Lỗi validation trả về từ BE hiển thị bằng thông báo chung lấy từ `err.response?.data?.message`, không cần ánh xạ thành lỗi từng trường. Không coi validation FE là thay thế cho kiểm tra của BE.
+- Tham khảo pattern validate, loading và thông báo của các trang auth hiện có; không dùng `window.alert` nếu luồng thông báo chung của ứng dụng đã có toast.
+
+## Điều Kiện Database Cho Task FE Tích Hợp API
+- Nếu task FE phụ thuộc dữ liệu database local/dev, trước khi code hoặc kiểm thử tích hợp phải chạy file SQL đầy đủ được admin cung cấp và xác nhận database sẵn sàng.
+- Nếu không có file SQL đầy đủ, thiếu schema/dữ liệu cần thiết hoặc chạy thất bại: dừng phần tích hợp và báo admin để xin file đầy đủ; không tự tạo/chỉnh SQL hay sửa BE để khắc phục.
+- Chỉ chạy SQL trên database local/dev được chỉ định; không chạy script có nguy cơ xóa dữ liệu trên môi trường dùng chung/production.
+- FE chỉ được đọc/đối chiếu BE contract. Không sửa `BE/`, schema, migration hoặc endpoint nếu task chỉ giao phạm vi FE; khi thấy lỗi BE, báo owner kèm request/response thực tế.
