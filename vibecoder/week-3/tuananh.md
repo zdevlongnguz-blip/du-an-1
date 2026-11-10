@@ -4,6 +4,12 @@ Tuần: 3
 Ngày giao task này: 10/11/2026
 Phạm vi: chỉ hoàn thiện giao diện và luồng gọi API trên FE. Tuấn Anh không được sửa bất kỳ file nào trong `BE/`, không đổi API contract, schema hoặc migration.
 
+## Tạo Branch Trước Khi Làm
+
+- Trước khi code, yêu cầu AI trong VS Code kiểm tra `git status`, fetch code mới nhất từ remote `origin`, rồi tạo branch riêng cho task này từ `origin/dev` mới nhất. Không code trực tiếp trên `dev` hoặc branch của người khác.
+- Branch đề xuất: `feature/week3-tuananh-cart-card`. Ví dụ: `git fetch origin` rồi `git switch -c feature/week3-tuananh-cart-card origin/dev`.
+- Nếu working tree không sạch hoặc branch đề xuất đã tồn tại, dừng và báo admin để thống nhất; không bỏ thay đổi hiện có, không dùng chung branch với Văn Hoàng.
+
 ## Điều Kiện Bắt Đầu
 
 - Trước khi code, Tuấn Anh phải chạy file SQL đầy đủ được cung cấp để chuẩn bị database local/dev và xác nhận dữ liệu cần cho task dùng được.

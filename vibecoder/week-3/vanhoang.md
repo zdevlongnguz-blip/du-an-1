@@ -4,6 +4,12 @@ Tuần: 3
 Ngày giao task này: 10/11/2026
 Phạm vi: phần FE khó hơn trên trang chi tiết sản phẩm: gửi/sửa/xóa bình luận của user đang đăng nhập và thêm giỏ theo số lượng. Không sửa bất kỳ file nào trong `BE/`, không đổi API contract, schema hoặc migration.
 
+## Tạo Branch Trước Khi Làm
+
+- Trước khi code, yêu cầu AI trong VS Code kiểm tra `git status`, fetch code mới nhất từ remote `origin`, rồi tạo branch riêng cho task này từ `origin/dev` mới nhất. Không code trực tiếp trên `dev` hoặc branch của người khác.
+- Branch đề xuất: `feature/week3-vanhoang-product-detail`. Ví dụ: `git fetch origin` rồi `git switch -c feature/week3-vanhoang-product-detail origin/dev`.
+- Nếu working tree không sạch hoặc branch đề xuất đã tồn tại, dừng và báo admin để thống nhất; không bỏ thay đổi hiện có, không dùng chung branch với Tuấn Anh.
+
 ## Điều Kiện Bắt Đầu
 
 - Trước khi code, Văn Hoàng phải chạy file SQL đầy đủ được cung cấp để chuẩn bị database local/dev và xác nhận dữ liệu cần cho task dùng được.
