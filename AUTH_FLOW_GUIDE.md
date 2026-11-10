@@ -200,6 +200,14 @@ BE không lưu từng JWT riêng lẻ; thay vào đó dùng một version counte
 
 Do đó cùng một token đi qua bridge, GET kiểm tra, và POST hoàn tất. Đây là cùng một token, không phải hai token được tạo. Kiểm tra cuối trong POST là bắt buộc vì token có thể hết hạn hoặc bị dùng sau lần GET.
 
+### Token trên URL và trong bộ nhớ FE
+
+- Khi `ResetPassword.vue` được khởi tạo từ URL có `?token=...`, FE đọc query vào biến `const token` trong bộ nhớ của component. Đây không phải `localStorage`/`sessionStorage` và cũng không phải Bearer JWT.
+- `onMounted()` gửi token trong query của GET để kiểm tra hiệu lực; khi người dùng gửi form, FE gửi cùng token trong body của POST. Việc render trang tự nó không gửi GET; GET được gọi riêng trong `onMounted()`.
+- Hiện FE không xóa query khỏi URL. Giữ query giúp tải lại trang khi link còn hạn, nhưng token tiếp tục xuất hiện trong thanh địa chỉ và lịch sử trình duyệt, có thể bị lộ khi chụp/chia sẻ URL.
+- Nếu xóa query sau khi FE đã đọc token, biến trong component vẫn dùng được cho GET/POST hiện tại. Tuy nhiên, tải lại trang sẽ mất token, trừ khi lưu tạm nơi khác như `sessionStorage`.
+- Token reset hiện có hạn dùng một giờ, chỉ dùng thành công một lần và BE chỉ lưu hash token. Các biện pháp này giảm rủi ro nhưng không làm URL chứa token trở thành thông tin công khai; khi triển khai cần dùng HTTPS và không chia sẻ URL reset.
+
 ```mermaid
 sequenceDiagram
     actor U as Người dùng
@@ -439,7 +447,7 @@ flowchart TD
 - [BE/extensions/AuthMiddleware.php](BE/extensions/AuthMiddleware.php): yêu cầu Bearer JWT cho route được bảo vệ.
 - [BE/configs/helper.php](BE/configs/helper.php): tạo/xác minh JWT, đọc Bearer header, response JSON.
 - [BE/configs/mail_helper.php](BE/configs/mail_helper.php): cấu hình PHPMailer và tạo email xác minh/reset.
-- [BE/configs/env.php](BE/configs/env.php): cấu hình DB, JWT TTL, thời hạn email và SMTP; không sao chép giá trị bí mật vào tài liệu.
+- [BE/configs/config.php](BE/configs/config.php): cấu hình không bí mật của BE; credential và JWT secret nằm trong file `BE/.env` không đưa lên Git.
 - [BE/database/create_database.sql](BE/database/create_database.sql): bảng `users` và các cột token.
 
 ### Frontend

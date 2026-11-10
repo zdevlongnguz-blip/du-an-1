@@ -1,5 +1,5 @@
 <script setup>
-// Card Catalog hiển thị thông tin sản phẩm và hai CTA dùng chung giao diện Sharp Barber.
+// Card Catalog hiển thị thông tin sản phẩm và hai CTA dùng chung giao diện FuLe BaberShop.
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { formatPrice } from '@/helpers/format/price'
@@ -45,7 +45,7 @@ const isOutOfStock = computed(() => {
     >
       <div class="catalog-product-details">
         <div class="catalog-product-heading">
-          <p class="catalog-product-category">{{ product.category_name || 'Sharp Barber' }}</p>
+          <p class="catalog-product-category">{{ product.category_name || 'FuLe BaberShop' }}</p>
           <p v-if="product.code" class="catalog-product-code">{{ product.code }}</p>
         </div>
         <p v-if="product.description" class="catalog-product-description">{{ product.description }}</p>

@@ -44,41 +44,40 @@ function send_verification_email(string $recipientEmail, string $verificationTok
     try {
         $mailer = create_configured_mailer($recipientEmail);
         $mailer->isHTML(true);
-        $mailer->Subject = 'Thông báo từ Anh Long';
+        $mailer->Subject = 'Xác minh địa chỉ email | FuLe BaberShop';
 
         $verificationUrl = BASE_URL . '?action=api-verify-email&token=' . rawurlencode($verificationToken);
         $safeUrl = htmlspecialchars($verificationUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $expiryMinutes = (int) ceil(EMAIL_VERIFICATION_TTL / 60);
         $mailer->Body = '
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#070b12" style="background-color:#070b12; padding:32px 12px; font-family:Arial,Helvetica,sans-serif;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f5f7" style="background-color:#f3f5f7; padding:32px 12px; font-family:Arial,Helvetica,sans-serif;">
                 <tr>
                     <td align="center">
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; border:1px solid #17414b; background-color:#0d141d;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; border:1px solid #dfe5eb; background-color:#ffffff;">
                             <tr>
-                                <td style="padding:18px 26px; border-bottom:1px solid #17414b; color:#35f2e3; font-family:Courier New,monospace; font-size:12px; letter-spacing:2px;">
-                                    NIGHT SIGNAL <span style="color:#ff477e;">//</span> ACCOUNT NOTICE
+                                <td style="padding:20px 26px; border-bottom:1px solid #e7ebef; color:#17324d; font-size:18px; font-weight:bold;">
+                                    FuLe BaberShop
                                 </td>
                             </tr>
                             <tr>
-                                <td style="padding:32px 26px; color:#e7f2f4;">
-                                    <p style="margin:0 0 12px; color:#ff477e; font-family:Courier New,monospace; font-size:12px;">TRANSMISSION RECEIVED</p>
-                                    <h1 style="margin:0 0 18px; color:#35f2e3; font-size:25px; line-height:1.3;">Anh Long nhắc nhở các em:</h1>
-                                    <p style="margin:0 0 24px; color:#c2d0d5; font-size:15px; line-height:1.7;">Hãy xác minh email để hoàn tất đăng ký tài khoản.</p>
+                                <td style="padding:32px 26px; color:#263442;">
+                                    <h1 style="margin:0 0 18px; color:#17324d; font-size:24px; line-height:1.3;">Xác minh địa chỉ email</h1>
+                                    <p style="margin:0 0 24px; color:#526170; font-size:15px; line-height:1.7;">Vui lòng xác minh địa chỉ email để hoàn tất đăng ký tài khoản tại FuLe BaberShop.</p>
                                     <p style="margin:0 0 24px;">
-                                        <a href="' . $safeUrl . '" style="display:inline-block; padding:13px 20px; border:1px solid #35f2e3; background-color:#10272d; color:#35f2e3; font-family:Courier New,monospace; font-size:13px; font-weight:bold; letter-spacing:1px; text-decoration:none;">XÁC MINH EMAIL</a>
+                                        <a href="' . $safeUrl . '" style="display:inline-block; padding:13px 20px; background-color:#174f70; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none;">Xác minh email</a>
                                     </p>
-                                    <p style="margin:0 0 16px; color:#84949d; font-size:12px; line-height:1.6;">Liên kết có hiệu lực trong ' . $expiryMinutes . ' phút.</p>
-                                    <p style="margin:0; color:#84949d; font-size:12px; line-height:1.6;">Nếu bạn không đăng ký tài khoản này, hãy bỏ qua email.</p>
+                                    <p style="margin:0 0 16px; color:#667482; font-size:13px; line-height:1.6;">Liên kết có hiệu lực trong ' . $expiryMinutes . ' phút.</p>
+                                    <p style="margin:0; color:#667482; font-size:13px; line-height:1.6;">Nếu bạn không tạo tài khoản, vui lòng bỏ qua email này.</p>
                                 </td>
                             </tr>
                             <tr>
-                                <td style="padding:14px 26px; border-top:1px solid #17414b; color:#71838c; font-family:Courier New,monospace; font-size:11px;">END OF MESSAGE <span style="color:#ff477e;">[OK]</span></td>
+                                <td style="padding:16px 26px; border-top:1px solid #e7ebef; color:#7a8793; font-size:12px;">FuLe BaberShop | Email tự động, vui lòng không trả lời.</td>
                             </tr>
                         </table>
                     </td>
                 </tr>
             </table>';
-        $mailer->AltBody = "Anh Long nhắc nhở các em:\n\nHãy xác minh email để hoàn tất đăng ký tài khoản:\n{$verificationUrl}\n\nNếu bạn không đăng ký tài khoản này, hãy bỏ qua email.";
+        $mailer->AltBody = "FuLe BaberShop - Xác minh địa chỉ email\n\nVui lòng xác minh địa chỉ email để hoàn tất đăng ký tài khoản:\n{$verificationUrl}\n\nLiên kết có hiệu lực trong {$expiryMinutes} phút. Nếu bạn không tạo tài khoản, vui lòng bỏ qua email này.";
         $mailer->send();
     } catch (PHPMailerException $exception) {
         throw new RuntimeException('Unable to send verification email.', 0, $exception);
@@ -91,32 +90,31 @@ function send_password_reset_email(string $recipientEmail, string $resetToken): 
     try {
         $mailer = create_configured_mailer($recipientEmail);
         $mailer->isHTML(true);
-        $mailer->Subject = 'Yêu cầu đặt lại mật khẩu';
+        $mailer->Subject = 'Đặt lại mật khẩu | FuLe BaberShop';
 
         $resetUrl = BASE_URL . '?action=reset-password-bridge&token=' . rawurlencode($resetToken);
         $safeUrl = htmlspecialchars($resetUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $expiryMinutes = (int) ceil(PASSWORD_RESET_TTL / 60);
         $mailer->Body = '
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#070b12" style="background-color:#070b12; padding:32px 12px; font-family:Arial,Helvetica,sans-serif;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f5f7" style="background-color:#f3f5f7; padding:32px 12px; font-family:Arial,Helvetica,sans-serif;">
                 <tr>
                     <td align="center">
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; border:1px solid #17414b; background-color:#0d141d;">
-                            <tr><td style="padding:18px 26px; border-bottom:1px solid #17414b; color:#35f2e3; font-family:Courier New,monospace; font-size:12px;">NIGHT SIGNAL // PASSWORD RECOVERY</td></tr>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; border:1px solid #dfe5eb; background-color:#ffffff;">
+                            <tr><td style="padding:20px 26px; border-bottom:1px solid #e7ebef; color:#17324d; font-size:18px; font-weight:bold;">FuLe BaberShop</td></tr>
                             <tr>
-                                <td style="padding:32px 26px; color:#e7f2f4;">
-                                    <p style="margin:0 0 12px; color:#ff477e; font-family:Courier New,monospace; font-size:12px;">ACCOUNT NOTICE</p>
-                                    <h1 style="margin:0 0 18px; color:#35f2e3; font-size:25px; line-height:1.3;">Anh Long nhắc nhở các em:</h1>
-                                    <p style="margin:0 0 24px; color:#c2d0d5; font-size:15px; line-height:1.7;">Có yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Liên kết có hiệu lực trong ' . $expiryMinutes . ' phút.</p>
-                                    <p style="margin:0 0 24px;"><a href="' . $safeUrl . '" style="display:inline-block; padding:13px 20px; border:1px solid #35f2e3; background-color:#10272d; color:#35f2e3; font-family:Courier New,monospace; font-size:13px; font-weight:bold; text-decoration:none;">ĐẶT LẠI MẬT KHẨU</a></p>
-                                    <p style="margin:0; color:#84949d; font-size:12px; line-height:1.6;">Nếu bạn không yêu cầu thay đổi mật khẩu, hãy bỏ qua email này.</p>
+                                <td style="padding:32px 26px; color:#263442;">
+                                    <h1 style="margin:0 0 18px; color:#17324d; font-size:24px; line-height:1.3;">Yêu cầu đặt lại mật khẩu</h1>
+                                    <p style="margin:0 0 24px; color:#526170; font-size:15px; line-height:1.7;">Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản FuLe BaberShop của bạn. Liên kết có hiệu lực trong ' . $expiryMinutes . ' phút.</p>
+                                    <p style="margin:0 0 24px;"><a href="' . $safeUrl . '" style="display:inline-block; padding:13px 20px; background-color:#174f70; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none;">Đặt lại mật khẩu</a></p>
+                                    <p style="margin:0; color:#667482; font-size:13px; line-height:1.6;">Nếu bạn không yêu cầu thay đổi mật khẩu, vui lòng bỏ qua email này. Mật khẩu hiện tại của bạn sẽ không thay đổi.</p>
                                 </td>
                             </tr>
-                            <tr><td style="padding:14px 26px; border-top:1px solid #17414b; color:#71838c; font-family:Courier New,monospace; font-size:11px;">END OF MESSAGE [OK]</td></tr>
+                            <tr><td style="padding:16px 26px; border-top:1px solid #e7ebef; color:#7a8793; font-size:12px;">FuLe BaberShop | Email tự động, vui lòng không trả lời.</td></tr>
                         </table>
                     </td>
                 </tr>
             </table>';
-        $mailer->AltBody = "Anh Long nhắc nhở các em:\n\nCó yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Mở liên kết trong {$expiryMinutes} phút:\n{$resetUrl}\n\nNếu bạn không yêu cầu thay đổi mật khẩu, hãy bỏ qua email này.";
+        $mailer->AltBody = "FuLe BaberShop - Đặt lại mật khẩu\n\nChúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Mở liên kết trong {$expiryMinutes} phút:\n{$resetUrl}\n\nNếu bạn không yêu cầu thay đổi mật khẩu, vui lòng bỏ qua email này. Mật khẩu hiện tại của bạn sẽ không thay đổi.";
         $mailer->send();
     } catch (PHPMailerException $exception) {
         throw new RuntimeException('Unable to send password reset email.', 0, $exception);

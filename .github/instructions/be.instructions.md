@@ -9,7 +9,7 @@ Dự án môn học: PHP MVC thuần + MySQL (PDO). Ưu tiên đơn giản, đú
 ## 1. Phạm vi và nguyên tắc
 - Chỉ sửa `BE/` khi task thuộc BE. Không sửa `FE/` để che lỗi API, không đổi schema/contract ngoài yêu cầu.
 - Trước khi sửa: chạy `git status`, đọc đúng route/controller/model/helper liên quan. Không ghi đè, revert hay format hàng loạt thay đổi chưa commit của người khác.
-- Mỗi file chỉ một owner tại một thời điểm. Vùng ảnh hưởng rộng (cần phân công trước): `routes/index.php`, `configs/helper.php`, `configs/env.php`, `extensions/AuthMiddleware.php`, `models/BaseModel.php`, `models/User.php`.
+- Mỗi file chỉ một owner tại một thời điểm. Vùng ảnh hưởng rộng (cần phân công trước): `routes/index.php`, `configs/helper.php`, `configs/config.php`, `extensions/AuthMiddleware.php`, `models/BaseModel.php`, `models/User.php`.
 - Sửa tối thiểu. Không đổi framework, không thêm dependency (Composer), không tạo tầng kiến trúc mới, không refactor diện rộng nếu task không yêu cầu.
 
 ## 2. Kiến trúc
@@ -20,11 +20,11 @@ Dự án môn học: PHP MVC thuần + MySQL (PDO). Ưu tiên đơn giản, đú
 - Không đổi tên/di chuyển class hoặc action đang được dùng.
 - Mọi method mới hoặc được sửa trong Model/Controller phải khai báo giá trị mặc định cho tất cả tham số; chọn giá trị mặc định an toàn và validate trước khi dùng.
 
-## 3. Cấu hình (`configs/env.php`)
-- `BE/configs/env.php` là nơi cấu hình duy nhất của BE (DB, JWT, SMTP, URL, TTL...) bằng hằng `define(...)`. Dự án môn học nên cho phép giữ giá trị trực tiếp trong file này.
-- Cần cấu hình mới: thêm `define(...)` vào `env.php`, đặt tên IN HOA_SNAKE_CASE, kèm comment tiếng Việt. Không tạo cơ chế cấu hình khác (không thêm `.env` loader, không thêm thư viện).
-- Không đổi giá trị hiện có (DB, JWT_SECRET, SMTP...) trừ khi task yêu cầu rõ.
-- Không in giá trị cấu hình ra response, log hay comment. Không copy secret sang file khác.
+## 3. Cấu hình (`configs/config.php` và `.env`)
+- `BE/configs/config.php` giữ cấu hình không bí mật của BE bằng hằng `define(...)`; `BE/.env` giữ credential và secret (DB credentials, `JWT_SECRET`, SMTP username/password).
+- `.env` không được commit. Cập nhật `.env.example` chỉ với tên biến và giá trị mẫu, không đưa secret thật vào đó.
+- Cấu hình không bí mật mới: thêm `define(...)` vào `config.php`, đặt tên IN HOA_SNAKE_CASE, kèm comment tiếng Việt. Cấu hình nhạy cảm mới: thêm tên biến vào `.env.example` và đọc từ môi trường trong `config.php`.
+- Không in giá trị cấu hình ra response, log hay comment. Không sao chép secret sang tài liệu hoặc mã nguồn được theo dõi.
 
 ## 4. Hợp đồng API (phối hợp bắt buộc với FE)
 - Endpoint là contract công khai. Trước khi thêm/đổi, thống nhất với FE: action, method, query/body, yêu cầu auth, response thành công, lỗi, mã HTTP. Ghi contract vào task/trao đổi nhóm trước khi code.

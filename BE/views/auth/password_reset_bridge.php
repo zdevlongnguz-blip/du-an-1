@@ -15,13 +15,13 @@ $scriptContinueUrl = json_encode(
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="referrer" content="no-referrer">
-    <title>Khôi phục mật khẩu</title>
+    <title>FuLe BaberShop | Khôi phục mật khẩu</title>
     <style>
         :root {
-            color-scheme: dark;
-            font-family: "Courier New", monospace;
-            background: #070b12;
-            color: #e7f2f4;
+            color-scheme: light;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f3f5f7;
+            color: #263442;
         }
 
         * { box-sizing: border-box; }
@@ -32,37 +32,39 @@ $scriptContinueUrl = json_encode(
             margin: 0;
             padding: 24px;
             place-items: center;
-            background: radial-gradient(ellipse at 50% 0, #10272d 0, #070b12 65%);
+            background: #f3f5f7;
         }
 
         main {
             width: min(100%, 440px);
             padding: 28px;
-            border: 1px solid #35f2e3;
-            box-shadow: 0 0 28px #35f2e322;
+            border: 1px solid #dfe5eb;
+            background: #ffffff;
+            box-shadow: 0 8px 28px #17324d12;
         }
 
-        .eyebrow { color: #ff477e; font-size: 12px; letter-spacing: 2px; }
-        h1 { margin: 18px 0 10px; color: #35f2e3; font-size: 24px; }
-        p { color: #c2d0d5; line-height: 1.6; }
+        .eyebrow { color: #174f70; font-size: 14px; font-weight: 700; }
+        h1 { margin: 24px 0 10px; color: #17324d; font-size: 24px; }
+        p { color: #526170; line-height: 1.6; }
 
         a {
             display: inline-block;
             margin-top: 12px;
             padding: 12px 16px;
-            border: 1px solid #35f2e3;
-            color: #35f2e3;
+            border: 1px solid #174f70;
+            background: #174f70;
+            color: #ffffff;
             text-decoration: none;
         }
 
-        a:hover { background: #10272d; }
-        .expired h1 { color: #ff477e; }
-        .expired a { border-color: #ff477e; color: #ff477e; }
+        a:hover { background: #123d58; }
+        .expired h1 { color: #a33b49; }
+        .expired a { border-color: #a33b49; background: #a33b49; }
     </style>
 </head>
 <body>
     <main class="<?= $isValid ? 'verified' : 'expired' ?>">
-        <div class="eyebrow">NIGHT SIGNAL // ACCOUNT RECOVERY</div>
+        <div class="eyebrow">FuLe BaberShop</div>
         <?php if ($isValid): ?>
             <h1>Liên kết đã xác thực</h1>
             <p>Đang chuyển bạn đến biểu mẫu đặt lại mật khẩu trong 8 giây.</p>

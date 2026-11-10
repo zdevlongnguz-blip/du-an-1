@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
-require_once __DIR__ . '/configs/env.php';
+require_once __DIR__ . '/configs/config.php';
 require_once __DIR__ . '/configs/helper.php';
 require_once __DIR__ . '/configs/mail_helper.php';
 // require_once __DIR__ . '/extensions/VipUpload.php';

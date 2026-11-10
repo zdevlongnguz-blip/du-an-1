@@ -58,7 +58,7 @@ const isOutOfStock = computed(() => {
     >
       <div class="top5-card-details">
         <div class="top5-card-heading">
-          <p class="top5-card-category">{{ product.category_name || 'Sharp Barber' }}</p>
+          <p class="top5-card-category">{{ product.category_name || 'FuLe BaberShop' }}</p>
           <p v-if="product.code" class="top5-card-code">{{ product.code }}</p>
         </div>
         <p v-if="product.description" class="top5-card-description">{{ product.description }}</p>

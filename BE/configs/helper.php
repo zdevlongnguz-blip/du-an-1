@@ -68,7 +68,7 @@ function handleGlobalError(Throwable $e) {
 
     // 2. Nếu đang ở môi trường Production thì hiển thị giao diện meme nhẹ nhàng
     // Nếu đang ở môi trường Development thì show chi tiết lỗi để fix nhanh hơn
-    if (getenv('APP_ENV') === 'production') {
+    if (APP_ENV === 'production') {
         renderMemeError("Server đã bị hack hoặc code của bạn có vấn đề!");
     } else {
         // Hiển thị thông tin lỗi cho dev

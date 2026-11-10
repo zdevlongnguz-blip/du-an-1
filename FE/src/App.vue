@@ -20,7 +20,7 @@ watch(() => route.fullPath, () => {
 // Dùng toast hệ thống cho lời chào; giữ lại thông báo khác nếu route đã tạo trước đó.
 onMounted(() => {
   if (!toast.value) {
-    showToast('Welcome to Sharp Barber.', 'info')
+    showToast('Chào mừng đến với FuLe BaberShop.', 'info')
   }
 })
 </script>
@@ -31,11 +31,16 @@ onMounted(() => {
       <!-- Navbar và alert dùng chung luôn nằm cùng nhau khi cuộn trang. -->
       <header class="site-header">
         <nav class="site-navigation" aria-label="Điều hướng chính">
-          <router-link class="site-brand" to="/" aria-label="Sharp Barber, trang chủ">
-            SHARP BARBER
+          <router-link class="site-brand" to="/" aria-label="FuLe BaberShop, trang chủ">
+            FULE BABERSHOP
           </router-link>
 
           <div class="site-nav-primary" aria-label="Điều hướng cửa hàng">
+            <router-link
+              class="site-nav-link site-nav-home"
+              to="/"
+              :aria-current="route.path === '/' ? 'page' : undefined"
+            >Home</router-link>
             <router-link
               class="site-nav-link site-nav-catalog"
               to="/catalog"
@@ -84,6 +89,11 @@ onMounted(() => {
         <div v-if="menuOpen" id="mobile-navigation" class="site-mobile-menu">
           <div class="site-mobile-menu-inner">
             <div class="site-mobile-links" aria-label="Điều hướng cửa hàng">
+              <router-link
+                class="site-mobile-link site-mobile-home"
+                to="/"
+                :aria-current="route.path === '/' ? 'page' : undefined"
+              >Home</router-link>
               <router-link
                 class="site-mobile-link site-mobile-catalog"
                 to="/catalog"
@@ -136,7 +146,7 @@ onMounted(() => {
     <!-- Footer chung cho trang chủ và các màn hình tài khoản. -->
     <footer class="site-footer">
       <p>
-        <span>&copy; {{ currentYear }} Sharp Barber.</span>
+        <span>&copy; {{ currentYear }} FuLe BaberShop.</span>
         <span>All rights reserved.</span>
       </p>
     </footer>

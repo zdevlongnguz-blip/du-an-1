@@ -79,7 +79,7 @@ const resetPassword = async () => {
 <template>
   <AuthPage
     title="Reset password"
-    description="Tạo mật khẩu mới để tiếp tục sử dụng tài khoản Sharp Barber."
+    description="Tạo mật khẩu mới để tiếp tục sử dụng tài khoản FuLe BaberShop."
   >
     <!-- Trạng thái kiểm tra link và form đặt lại mật khẩu. -->
     <div v-if="checkingToken" class="auth-status" role="status">
