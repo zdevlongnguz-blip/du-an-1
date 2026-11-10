@@ -78,10 +78,20 @@ define('EMAIL_VERIFICATION_TTL', 3600);
 define('PASSWORD_RESET_TTL', 3600);
 define('FRONTEND_URL', 'http://localhost:5173');
 
-define('MAIL_HOST', 'smtp.gmail.com');
-define('MAIL_PORT', 587);
+// Mailer và phần tích hợp ShePay chỉ đọc cấu hình từ biến môi trường.
+$mailPort = getenv('MAIL_PORT');
+define('MAIL_HOST', getenv('MAIL_HOST') ?: '');
+define('MAIL_PORT', $mailPort !== false && ctype_digit($mailPort) ? (int) $mailPort : 0);
 define('MAIL_USERNAME', getenv('MAIL_USERNAME') ?: '');
 define('MAIL_PASSWORD', getenv('MAIL_PASSWORD') ?: '');
-define('MAIL_FROM_ADDRESS', 'xuanlonghh4@gmail.com');
-define('MAIL_FROM_NAME', 'FuLe BaberShop');
-define('MAIL_ENCRYPTION', 'tls');
+define('MAIL_FROM_ADDRESS', getenv('MAIL_FROM_ADDRESS') ?: '');
+define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: '');
+define('MAIL_ENCRYPTION', getenv('MAIL_ENCRYPTION') ?: '');
+
+define('SHEPAY_API_URL', getenv('SHEPAY_API_URL') ?: '');
+define('SHEPAY_MERCHANT_ID', getenv('SHEPAY_MERCHANT_ID') ?: '');
+define('SHEPAY_API_KEY', getenv('SHEPAY_API_KEY') ?: '');
+define('SHEPAY_SECRET_KEY', getenv('SHEPAY_SECRET_KEY') ?: '');
+define('SHEPAY_RETURN_URL', getenv('SHEPAY_RETURN_URL') ?: '');
+define('SHEPAY_CANCEL_URL', getenv('SHEPAY_CANCEL_URL') ?: '');
+define('SHEPAY_WEBHOOK_SECRET', getenv('SHEPAY_WEBHOOK_SECRET') ?: '');
