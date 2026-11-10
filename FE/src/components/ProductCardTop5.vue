@@ -2,8 +2,8 @@
 // Thẻ sản phẩm Top 5: mặc định hiện tên/giá, hover hoặc focus để xem đầy đủ thông tin.
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { formatPrice } from '@/helpers/formatPrice'
-import { resolveImageUrl } from '@/helpers/imageUrl'
+import { formatPrice } from '@/helpers/format/price'
+import { resolveImageUrl } from '@/helpers/media/imageUrl'
 
 const props = defineProps({
   product: {

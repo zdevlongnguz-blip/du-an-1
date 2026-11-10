@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken, clearAuthSession } from './auth'
+import { getToken, clearAuthSession } from '../auth/session'
 
 const getApiBaseUrl = () => {
   const { origin, hostname, pathname, port } = window.location

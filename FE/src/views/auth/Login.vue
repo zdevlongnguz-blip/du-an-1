@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '@/services/api'
-import { setAuthSession } from '@/services/auth'
-import { useToast } from '@/services/toast'
+import api from '@/helpers/api/client'
+import { setAuthSession } from '@/helpers/auth/session'
+import { useToast } from '@/helpers/ui/toast'
 import AuthPage from '@/components/AuthPage.vue'
-import { validateEmail, validateRequired } from '@/helpers/authValidation'
+import { validateEmail, validateRequired } from '@/helpers/auth/validation'
+import { pushToReturnUrl } from '@/helpers/auth/returnUrl'
 
 const router = useRouter()
 const { showToast } = useToast()
@@ -48,7 +49,7 @@ const fetchApiLogin = async () => {
 
     setAuthSession(token, user)
     showToast(response.data?.message || 'Đăng nhập thành công', 'success')
-    router.push('/')
+    await pushToReturnUrl(router, '/')
   } catch (error) {
     showToast(error.response?.data?.message || 'Lỗi đăng nhập', 'danger')
     console.error('Login failed:', error)

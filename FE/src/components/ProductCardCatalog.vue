@@ -2,8 +2,8 @@
 // Card Catalog hiển thị thông tin sản phẩm và hai CTA dùng chung giao diện Sharp Barber.
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { formatPrice } from '@/helpers/formatPrice'
-import { resolveImageUrl } from '@/helpers/imageUrl'
+import { formatPrice } from '@/helpers/format/price'
+import { resolveImageUrl } from '@/helpers/media/imageUrl'
 
 const props = defineProps({
   product: {

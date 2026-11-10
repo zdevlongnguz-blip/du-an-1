@@ -1,8 +1,8 @@
 <script setup>
 import { RouterView, useRoute } from 'vue-router'
 import { onMounted, ref, watch } from 'vue'
-import { isAuthenticated } from '@/services/auth'
-import { useToast } from '@/services/toast'
+import { isAuthenticated } from '@/helpers/auth/session'
+import { useToast } from '@/helpers/ui/toast'
 
 const checkAuth = ref(isAuthenticated())
 // Trạng thái mở menu điều hướng trên màn hình nhỏ.

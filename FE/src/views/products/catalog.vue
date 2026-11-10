@@ -2,7 +2,7 @@
 // Trang Catalog gọi api-products và api-categories, giữ bộ lọc/phân trang trong URL.
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import api from '@/services/api'
+import api from '@/helpers/api/client'
 import ProductCardCatalog from '@/components/ProductCardCatalog.vue'
 
 const route = useRoute()

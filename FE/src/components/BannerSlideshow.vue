@@ -2,7 +2,7 @@
 import Carousel from 'bootstrap/js/dist/carousel'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { resolveImageUrl } from '@/helpers/imageUrl'
+import { resolveImageUrl } from '@/helpers/media/imageUrl'
 
 // Carousel trang chủ: Bootstrap xử lý tự chuyển, swipe và nút điều khiển.
 const props = defineProps({

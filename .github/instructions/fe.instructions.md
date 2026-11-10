@@ -9,16 +9,16 @@ Dự án môn học: Vue 3 + Vite + Vue Router + Axios + Bootstrap 5. Ưu tiên 
 ## 1. Phạm vi và nguyên tắc
 - Chỉ sửa `FE/` khi task thuộc FE. Không sửa `BE/`, contract API, schema DB hay cấu hình deploy để giao diện chạy được.
 - Trước khi sửa: chạy `git status`, đọc đúng component/service/router liên quan. Không ghi đè, revert hay format hàng loạt thay đổi chưa commit của người khác.
-- Mỗi file chỉ một owner tại một thời điểm. Vùng dùng chung (cần phân công trước): `App.vue`, `router/index.js`, `services/*`, `style.css`.
+- Mỗi file chỉ một owner tại một thời điểm. Vùng dùng chung (cần phân công trước): `App.vue`, `router/index.js`, `helpers/*`, `style.css`.
 - Sửa tối thiểu. Không đổi framework, không thêm dependency, không tạo service HTTP mới, không refactor diện rộng nếu task không yêu cầu.
 
 ## 2. File KHÔNG ĐƯỢC SỬA
-- `FE/src/services/api.js`: giữ nguyên hoàn toàn (base URL, interceptor, xử lý 401). Chỉ import để dùng, không chỉnh, không "dọn", không refactor, kể cả khi thấy hardcode. Cần đổi thì phải có yêu cầu trực tiếp từ chủ dự án.
+- `FE/src/helpers/api/client.js`: giữ nguyên hoàn toàn nội dung (base URL, interceptor, xử lý 401). Chỉ import để dùng, không chỉnh, không "dọn", không refactor, kể cả khi thấy hardcode. Cần đổi thì phải có yêu cầu trực tiếp từ chủ dự án.
 - Không bắt chước cách `api.js` xác định base URL ở nơi khác. Mọi nơi khác chỉ gọi `api.get/post/...`.
 - `services/auth.js` (cách lưu token trong `localStorage`, key `auth_token`/`auth_user`): không đổi nếu task không yêu cầu trực tiếp.
 
 ## 3. Cấu trúc và pattern
-- `src/router/index.js` (route), `src/services/` (api, auth, toast), `src/views/` (trang), `src/views/auth/` (nhóm auth), `src/components/` (tái sử dụng), `src/helpers/` (hàm tiện ích như `formatPrice`).
+- `src/router/index.js` (route), `src/helpers/` (module dùng chung, chia theo nhóm `api/`, `auth/`, `ui/`, `format/`, `media/`, `debug/`), `src/views/` (trang), `src/components/` (tái sử dụng).
 - Dùng Composition API với `<script setup>`, `ref`/`computed`. Không dùng `this`, không dùng Options API. Ngoại lệ: trang tĩnh không có logic (như `NotFound.vue`).
 - Bootstrap 5 đã import trong `main.js`: dùng class có sẵn, không import lại, không thêm UI library. CSS riêng dùng `<style scoped>`; `style.css` chỉ cho style toàn cục thật sự.
 - Thông báo cho người dùng dùng `services/toast.js`, theo cách các view auth đang dùng.
@@ -26,7 +26,7 @@ Dự án môn học: Vue 3 + Vite + Vue Router + Axios + Bootstrap 5. Ưu tiên 
 - Tái sử dụng component/service sẵn có. Không nhồi logic màn hình vào `App.vue`.
 
 ## 4. Tích hợp API
-- Mọi request đi qua `import api from '@/services/api'`. Không dùng `fetch`, không `axios.create`, không hardcode host/URL.
+- Mọi request đi qua `import api from '@/helpers/api/client'`. Không dùng `fetch`, không `axios.create`, không hardcode host/URL.
 - Gọi theo query action của router PHP, ví dụ `api.get('/?action=api-products', { params })`, `api.post('/?action=api-login', body)`. Không đoán action, method, field, kiểu dữ liệu, phân trang hay yêu cầu đăng nhập.
 - Endpoint mới/thay đổi: xác nhận contract với người phụ trách BE trước (action, method, query/body, auth, response thành công, lỗi, mã HTTP). Chưa xác nhận thì không tự dựng contract giả: làm phần UI cô lập hoặc hỏi đúng thông tin còn thiếu.
 - Đọc đúng response thực tế. Shape hiện tại:
@@ -77,7 +77,7 @@ Nhóm có nhiều thành viên mới học, code do AI sinh ra phải đọc hi�
 <script setup>
 // Trang danh sách sản phẩm: gọi API api-products, có tìm kiếm và phân trang.
 import { ref, onMounted } from 'vue'
-import api from '@/services/api'
+import api from '@/helpers/api/client'
 
 // Danh sách sản phẩm đang hiển thị. ref: khi giá trị đổi, giao diện tự cập nhật.
 const products = ref([])

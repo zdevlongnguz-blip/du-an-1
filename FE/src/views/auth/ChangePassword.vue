@@ -1,14 +1,14 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '@/services/api'
-import { useToast } from '@/services/toast'
+import api from '@/helpers/api/client'
+import { useToast } from '@/helpers/ui/toast'
 import AuthPage from '@/components/AuthPage.vue'
 import {
   validateNewPassword,
   validatePasswordConfirmation,
   validateRequired
-} from '@/helpers/authValidation'
+} from '@/helpers/auth/validation'
 
 const router = useRouter()
 const { showToast } = useToast()

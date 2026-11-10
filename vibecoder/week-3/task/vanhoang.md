@@ -33,7 +33,7 @@ Hoàn thiện các tương tác trên `ProductDetail.vue`: thành viên có th�
 ### Trạng Thái, Thông Báo Và Validate
 
 - Bao phủ các trạng thái phù hợp: loading/đang gửi, thành công, lỗi, rỗng và thử lại; không báo thành công giả hoặc nhầm lỗi API thành danh sách rỗng.
-- Dùng `FE/src/services/toast.js` cho thông báo chung thành công/lỗi; khóa nút khi request đang chạy để tránh gửi lặp.
+- Dùng `FE/src/helpers/ui/toast.js` cho thông báo chung thành công/lỗi; khóa nút khi request đang chạy để tránh gửi lặp.
 - Validate phía FE và hiện lỗi thân thiện ngay dưới trường nhập. Lỗi validation từ BE hiển thị bằng toast chung từ `response.data.message`, không ánh xạ thành lỗi từng trường.
 - Tham khảo pattern form/validation của các trang auth hiện có. Validation FE hỗ trợ trải nghiệm, BE vẫn quyết định dữ liệu cuối cùng.
 
@@ -46,7 +46,7 @@ Hoàn thiện các tương tác trên `ProductDetail.vue`: thành viên có th�
 
 ### Sửa/Xóa Bình Luận Của Mình
 
-- Chỉ hiện Sửa/Xóa cho comment có `comment.user_id` khớp ID user hiện tại lấy từ `getUser()` trong `FE/src/services/auth.js`. Đây chỉ là điều kiện hiển thị UI; không gửi user ID lên API và không thay thế kiểm tra quyền của BE.
+- Chỉ hiện Sửa/Xóa cho comment có `comment.user_id` khớp ID user hiện tại lấy từ `getUser()` trong `FE/src/helpers/auth/session.js`. Đây chỉ là điều kiện hiển thị UI; không gửi user ID lên API và không thay thế kiểm tra quyền của BE.
 - Sửa inline với Hủy/Lưu; validate nội dung ở FE không rỗng, tối đa 2.000 ký tự, lỗi dưới trường. Gọi `PUT /?action=api-comment-update&id=<commentId>` với `{ "content": content }`.
 - Xóa cần xác nhận trước khi gọi `DELETE /?action=api-comment-delete&id=<commentId>`; không gửi body. Khóa nút khi đang xử lý.
 - Sau sửa/xóa, tải lại trang comment hiện tại, cập nhật count/phân trang. Nếu xóa item cuối của trang thì lùi trang phù hợp; lỗi 401/404 không được giả thành thành công.
@@ -105,14 +105,14 @@ Không đổi action, method, field, response shape, yêu cầu đăng nhập ho
 - Thêm giỏ gửi đúng product ID và quantity; chặn quantity sai/vượt stock, khóa nút khi request, và hiển thị lỗi 409 mà không báo thành công giả.
 - Văn Hoàng bàn giao code và hướng dẫn/repro các điểm đã triển khai; không nhận quyền owner kiểm thử tích hợp. Tuấn Anh chạy `npm run build` và kiểm thử browser/API cho cả hai task theo `vibecoder/week-3/task/tuananh.md`.
 - Nếu Tuấn Anh phát hiện lỗi trong phần ProductDetail, Văn Hoàng sửa đúng file mình sở hữu rồi bàn giao lại để Tuấn Anh retest. Lỗi BE/API được báo admin/owner BE; không sửa PHP hoặc `BE/test-api.md`.
-- `git diff --check` pass; không sửa `FE/src/services/api.js`, không thêm endpoint hoặc dependency.
+- `git diff --check` pass; không sửa nội dung `FE/src/helpers/api/client.js`, không thêm endpoint hoặc dependency.
 
 ## Phạm Vi File Và Ownership
 
 - Owner code Văn Hoàng: chỉ `FE/src/views/products/ProductDetail.vue`.
 - Owner code Tuấn Anh: `FE/src/components/ProductCardCatalog.vue` và `FE/src/components/ProductCardTop5.vue`; Tuấn Anh cũng là owner kiểm thử tích hợp cuối cho cả hai task.
 - Tuấn Anh chỉ bắt đầu test ProductDetail sau khi Văn Hoàng báo handoff; không sửa ProductDetail. Nếu có lỗi, giao lại Văn Hoàng sửa và Tuấn Anh retest.
-- Không sửa file BE, `FE/src/services/api.js`, auth/toast service dùng chung hoặc component của Tuấn Anh. Nếu thấy cần sửa file dùng chung, dừng và báo admin để phân công owner.
+- Không sửa file BE, nội dung `FE/src/helpers/api/client.js`, module auth/toast dùng chung hoặc component của Tuấn Anh. Nếu thấy cần sửa file dùng chung, dừng và báo admin để phân công owner.
 
 ## Ghi Chú Phối Hợp
 

@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import api from '../services/api'
+import api from '../helpers/api/client'
 
 const products = ref([])
 

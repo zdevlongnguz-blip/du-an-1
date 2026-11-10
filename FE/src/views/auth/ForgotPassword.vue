@@ -1,9 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import api from '@/services/api'
-import { useToast } from '@/services/toast'
+import api from '@/helpers/api/client'
+import { useToast } from '@/helpers/ui/toast'
 import AuthPage from '@/components/AuthPage.vue'
-import { validateEmail } from '@/helpers/authValidation'
+import { validateEmail } from '@/helpers/auth/validation'
 
 const { showToast } = useToast()
 const email = ref('')

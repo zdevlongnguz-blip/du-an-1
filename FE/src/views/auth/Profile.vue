@@ -1,9 +1,9 @@
 <script setup>
-import { getUser, clearAuthSession } from '@/services/auth' // import hàm getUser và clearAuth từ file auth.js
+import { getUser, clearAuthSession } from '@/helpers/auth/session' // import hàm getUser và clearAuth từ file auth.js
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useToast } from '@/services/toast'
-import api from '@/services/api'
+import { useToast } from '@/helpers/ui/toast'
+import api from '@/helpers/api/client'
 import AuthPage from '@/components/AuthPage.vue'
 
 const user = getUser() || {}

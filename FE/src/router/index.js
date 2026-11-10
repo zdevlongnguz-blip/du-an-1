@@ -4,7 +4,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import TestView from "../views/TestView.vue";
 import LoginView from "../views/auth/Login.vue";
-import { isAuthenticated } from "@/services/auth";
+import { isAuthenticated } from "@/helpers/auth/session";
 import RegisterView from '../views/auth/Register.vue'
 import ProfileView from '../views/auth/Profile.vue'
 import ChangePasswordView from '../views/auth/ChangePassword.vue'

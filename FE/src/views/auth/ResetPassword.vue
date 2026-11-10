@@ -1,10 +1,10 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import api from '@/services/api'
-import { useToast } from '@/services/toast'
+import api from '@/helpers/api/client'
+import { useToast } from '@/helpers/ui/toast'
 import AuthPage from '@/components/AuthPage.vue'
-import { validateNewPassword, validatePasswordConfirmation } from '@/helpers/authValidation'
+import { validateNewPassword, validatePasswordConfirmation } from '@/helpers/auth/validation'
 
 const route = useRoute()
 const router = useRouter()
