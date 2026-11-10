@@ -48,7 +48,7 @@ Hoàn thiện thao tác thêm giỏ nhanh quantity 1 trên hai product card. Vì
 
 - Chỉ bắt đầu test `ProductDetail.vue` sau khi Văn Hoàng hoàn tất, kiểm tra và bàn giao; xác nhận file không còn thay đổi đồng thời. Tuấn Anh là người chạy build/browser/API test cuối cho cả hai task.
 - Chạy test task mình: quick add từ cả hai card, quantity đúng 1, guest, success, loading/khóa nút, stock 0, lỗi 401/404/409 và lỗi mạng.
-- Chạy test task Văn Hoàng theo checklist trong `vibecoder/week-3/vanhoang.md`: tạo comment, sửa/xóa comment của mình, guest/owner, validation, stepper/quantity và thêm giỏ trên ProductDetail.
+- Chạy test task Văn Hoàng theo checklist trong `vibecoder/week-3/task/vanhoang.md`: tạo comment, sửa/xóa comment của mình, guest/owner, validation, stepper/quantity và thêm giỏ trên ProductDetail.
 - Để test sửa/xóa comment đang public, dùng comment của chính tài khoản test trên DB local/dev. Ghi lại `comment_id`, `user_id`, `status` ban đầu; chỉ đặt `status = 1` cho đúng comment của mình. Sau test xóa fixture hoặc khôi phục status ban đầu. Không sửa comment người khác hoặc dữ liệu dùng chung/production.
 - Nếu không truy cập DB được để chuẩn bị fixture, báo admin hỗ trợ; nếu phát hiện lỗi code của ProductDetail, gửi bằng chứng cho Văn Hoàng sửa rồi Tuấn Anh chạy lại đúng ca test. Tuấn Anh không sửa file của Văn Hoàng.
 - Không test bằng việc sửa BE/schema/migration. Nếu contract API lỗi, lưu request/response và báo admin/owner BE.
@@ -84,7 +84,7 @@ Không đổi action, method, field, response shape, yêu cầu đăng nhập ho
 - Tuấn Anh là owner code của hai product card và owner kiểm thử tích hợp cuối cho cả hai task.
 - Văn Hoàng là owner code duy nhất của `FE/src/views/products/ProductDetail.vue`; Tuấn Anh không sửa file này. Chỉ test sau khi Văn Hoàng báo handoff rõ ràng.
 - Không sửa BE dưới bất kỳ hình thức nào; nếu phát hiện lỗi contract/BE thì báo admin/owner BE kèm bằng chứng.
-- Sau khi hoàn tất task, ghi đè nội dung giao việc trong chính file này bằng báo cáo hoàn thành thực tế trên branch: file FE đã đổi, hành vi đã làm, kết quả build/browser, lỗi còn tồn tại và vấn đề đã báo admin. Không ghi nhận hạng mục chưa kiểm chứng là đã xong.
+- Không sửa hoặc ghi đè task brief này. Sau khi hoàn tất, ghi báo cáo thực tế vào `vibecoder/week-3/mission-completed/tuananh.md`; nếu folder chưa tồn tại trên branch thì tạo folder trước. Log gồm task/branch, file đã đổi, kết quả test của cả hai task, build/browser, lỗi còn lại và vấn đề đã báo admin. Chỉ ghi nhận điều đã kiểm chứng.
 
 ## Chuẩn Bị MCP Thiết Kế Cho Task Sau
 
