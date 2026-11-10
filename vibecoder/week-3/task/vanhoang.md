@@ -4,6 +4,12 @@ Tuần: 3
 Ngày giao task này: 10/11/2026
 Phạm vi: phần FE khó hơn trên trang chi tiết sản phẩm: gửi/sửa/xóa bình luận của user đang đăng nhập và thêm giỏ theo số lượng. Không sửa bất kỳ file nào trong `BE/`, không đổi API contract, schema hoặc migration.
 
+## Tạo Branch Trước Khi Làm
+
+- Trước khi code, yêu cầu AI trong VS Code kiểm tra `git status`, fetch code mới nhất từ remote `origin`, rồi tạo branch riêng cho task này từ `origin/dev` mới nhất. Không code trực tiếp trên `dev` hoặc branch của người khác.
+- Branch đề xuất: `feature/week3-vanhoang-product-detail`. Ví dụ: `git fetch origin` rồi `git switch -c feature/week3-vanhoang-product-detail origin/dev`.
+- Nếu working tree không sạch hoặc branch đề xuất đã tồn tại, dừng và báo admin để thống nhất; không bỏ thay đổi hiện có, không dùng chung branch với Tuấn Anh.
+
 ## Điều Kiện Bắt Đầu
 
 - Trước khi code, Văn Hoàng phải chạy file SQL đầy đủ được cung cấp để chuẩn bị database local/dev và xác nhận dữ liệu cần cho task dùng được.
@@ -50,7 +56,7 @@ Hoàn thiện các tương tác trên `ProductDetail.vue`: thành viên có th�
 
 - Tuấn Anh phụ trách chạy test tích hợp. Để test sửa/xóa, cần comment của chính tài khoản test với `status = 1`, vì API public chỉ trả comment đã duyệt.
 - Khi bàn giao, cung cấp cho Tuấn Anh thông tin sản phẩm phù hợp và xác nhận luồng comment mới đang chờ duyệt (`status = 0`); không tự sửa dữ liệu người khác.
-- Việc tạo/duyệt comment fixture trên DB local/dev và cleanup sau test do Tuấn Anh thực hiện theo task `vibecoder/week-3/tuananh.md`. Nếu cần quyền DB/admin, báo admin; không sửa BE.
+- Việc tạo/duyệt comment fixture trên DB local/dev và cleanup sau test do Tuấn Anh thực hiện theo task `vibecoder/week-3/task/tuananh.md`. Nếu cần quyền DB/admin, báo admin; không sửa BE.
 
 ### Thêm Giỏ Từ Trang Chi Tiết
 
@@ -97,7 +103,7 @@ Không đổi action, method, field, response shape, yêu cầu đăng nhập ho
 - Ca sửa/xóa dùng comment của chính user với `status = 1` trên DB local/dev; sau test fixture được xóa hoặc khôi phục status ban đầu.
 - Guest không thể gọi API bình luận/giỏ từ UI và được hướng dẫn đăng nhập.
 - Thêm giỏ gửi đúng product ID và quantity; chặn quantity sai/vượt stock, khóa nút khi request, và hiển thị lỗi 409 mà không báo thành công giả.
-- Văn Hoàng bàn giao code và hướng dẫn/repro các điểm đã triển khai; không nhận quyền owner kiểm thử tích hợp. Tuấn Anh chạy `npm run build` và kiểm thử browser/API cho cả hai task theo `vibecoder/week-3/tuananh.md`.
+- Văn Hoàng bàn giao code và hướng dẫn/repro các điểm đã triển khai; không nhận quyền owner kiểm thử tích hợp. Tuấn Anh chạy `npm run build` và kiểm thử browser/API cho cả hai task theo `vibecoder/week-3/task/tuananh.md`.
 - Nếu Tuấn Anh phát hiện lỗi trong phần ProductDetail, Văn Hoàng sửa đúng file mình sở hữu rồi bàn giao lại để Tuấn Anh retest. Lỗi BE/API được báo admin/owner BE; không sửa PHP hoặc `BE/test-api.md`.
 - `git diff --check` pass; không sửa `FE/src/services/api.js`, không thêm endpoint hoặc dependency.
 
@@ -112,7 +118,7 @@ Không đổi action, method, field, response shape, yêu cầu đăng nhập ho
 
 - Trước khi code, chạy SQL đầy đủ theo Điều Kiện Bắt Đầu và kiểm tra `git status`; database chưa sẵn sàng thì dừng, báo admin.
 - Không gửi user ID/role từ client; quyền sửa/xóa do BE xác minh.
-- Sau khi code xong, ghi đè nội dung giao việc trong chính file này bằng báo cáo implementation và handoff: file đã sửa, hành vi, các bước tái hiện/điểm cần test, lỗi còn lại và vấn đề đã báo admin. Không tự ghi build/browser/API test là pass; Tuấn Anh cập nhật kết quả kiểm thử tích hợp sau khi chạy.
+- Không sửa hoặc ghi đè task brief này. Sau khi code xong, ghi báo cáo implementation/handoff vào `vibecoder/week-3/mission-completed/vanhoang.md`; nếu folder chưa tồn tại trên branch thì tạo folder trước. Log gồm branch, file đã sửa, hành vi, các bước tái hiện/điểm cần test, lỗi còn lại và vấn đề đã báo admin. Không ghi build/browser/API test là pass; Tuấn Anh cập nhật kết quả kiểm thử tích hợp trong log của mình sau khi chạy.
 
 ## Chuẩn Bị MCP Thiết Kế Cho Task Sau
 
