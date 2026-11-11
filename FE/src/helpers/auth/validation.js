@@ -10,7 +10,8 @@ export function validateEmail(value) {
     return 'Email không được dài quá 255 ký tự.'
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  const emailPattern = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/
+  if (!emailPattern.test(email)) {
     return 'Vui lòng nhập email đúng định dạng, ví dụ ten@email.com.'
   }
 
@@ -19,7 +20,7 @@ export function validateEmail(value) {
 
 // Kiểm tra trường bắt buộc và trả thông báo phù hợp với nhãn của trường.
 export function validateRequired(value, label) {
-  return value.trim() ? '' : `Vui lòng nhập ${label}.`
+  return value !== '' ? '' : `Vui lòng nhập ${label}.`
 }
 
 // Đếm byte UTF-8 để khớp giới hạn mật khẩu mà BE đang áp dụng.
