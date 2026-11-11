@@ -274,9 +274,17 @@ class AuthController
      */
     public function login()
     {
-        $input = json_decode(file_get_contents('php://input'), true) ?? [];
-        $email = trim((string) ($input['email'] ?? ''));
-        $password = (string) ($input['password'] ?? '');
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($input) || !is_string($input['email'] ?? null) || !is_string($input['password'] ?? null)) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Email và mật khẩu không được để trống'
+            ], 400);
+            return;
+        }
+
+        $email = trim($input['email']);
+        $password = $input['password'];
 
         if ($email === '' || $password === '') {
             http_response_code(400);
@@ -284,6 +292,14 @@ class AuthController
                 'status' => 'error',
                 'message' => 'Email và mật khẩu không được để trống'
             ], 400);
+            return;
+        }
+
+        if (strlen($email) > 255 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Email không hợp lệ'
+            ], 422);
             return;
         }
 
