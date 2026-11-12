@@ -1,11 +1,12 @@
 <script setup>
 // Trang chi tiết sản phẩm: khi mở trang gọi api-product-detail và api-product-comments theo slug.
 // Nút bình luận chỉ ẩn hoặc hiện khu vực, không quyết định thời điểm tải dữ liệu.
-// Khu vực mua hàng và form bình luận hiện là giao diện demo, chưa nối xử lý.
+// Khu vực mua hàng và bình luận được xử lý trực tiếp tại trang này.
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import api from '@/helpers/api/client'
-import { isAuthenticated } from '@/helpers/auth/session'
+import { getUser, isAuthenticated } from '@/helpers/auth/session'
+import { useToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
 import { saveReturnUrl } from '@/helpers/auth/returnUrl'
@@ -14,6 +15,7 @@ import { saveReturnUrl } from '@/helpers/auth/returnUrl'
 const COMMENTS_PER_PAGE = 10
 
 const route = useRoute()
+const { showToast } = useToast()
 
 // ref: biến "phản ứng", khi giá trị đổi thì giao diện tự cập nhật.
 // Dữ liệu sản phẩm từ api-product-detail; null khi đang tải hoặc bị lỗi.
@@ -37,8 +39,26 @@ const commentsError = ref('')
 // Khu vực bình luận đang mở hay thu gọn. Ẩn/hiện lại không gọi API lần nữa.
 const commentsVisible = ref(false)
 
-// Chỉ dùng để chọn giao diện cho khách hay thành viên; quyền thật do BE kiểm soát.
+// Trạng thái gửi bình luận mới.
+const newCommentContent = ref('')
+const newCommentError = ref('')
+const commentSubmitting = ref(false)
+
+// Trạng thái sửa bình luận inline.
+const editingCommentId = ref(null)
+const editingCommentContent = ref('')
+const editingCommentError = ref('')
+const commentUpdatingId = ref(null)
+const commentDeletingId = ref(null)
+
+// Trạng thái thêm giỏ hàng.
+const quantity = ref(1)
+const cartAdding = ref(false)
+
+// Chỉ dùng để chọn giao diện; BE vẫn xác minh JWT và quyền sở hữu.
 const loggedIn = isAuthenticated()
+const currentUser = getUser()
+const currentUserId = currentUser?.id ?? currentUser?.user_id ?? null
 
 // computed: giá trị tự tính lại mỗi khi dữ liệu nó dùng thay đổi.
 // Album ảnh: lấy từ product.images; nếu rỗng thì dùng ảnh đại diện product.image.
@@ -70,6 +90,8 @@ const hasStock = computed(() => {
   return stock !== null && stock !== undefined && Number.isFinite(Number(stock))
 })
 const isOutOfStock = computed(() => hasStock.value && Number(product.value.stock) <= 0)
+const maxQuantity = computed(() => hasStock.value ? Math.max(0, Math.floor(Number(product.value.stock))) : 0)
+const canManageComment = (comment) => currentUserId != null && String(comment.user_id) === String(currentUserId)
 
 // Tổng số bình luận chỉ biết sau khi đã tải; trước đó không hiện số để tránh hiện sai.
 const commentCount = computed(() => commentsPagination.value?.total_items ?? null)
@@ -114,6 +136,7 @@ async function fetchProduct(slug) {
     // Nếu người dùng đã chuyển sang sản phẩm khác trong lúc chờ thì bỏ kết quả cũ.
     if (slug !== route.params.slug) return
     product.value = res.data.product
+    quantity.value = Number(product.value?.stock) > 0 ? 1 : 0
   } catch (err) {
     if (slug !== route.params.slug) return
     productError.value = err.response?.data?.message || 'Không tải được thông tin sản phẩm.'
@@ -146,6 +169,125 @@ async function fetchComments(page = 1) {
   }
 }
 
+
+
+// Kiểm tra nội dung bình luận ở FE để người dùng nhận lỗi ngay tại trường nhập.
+function validateComment(content, errorRef) {
+  const value = String(content ?? '')
+  if (!value.trim()) {
+    errorRef.value = 'Vui lòng nhập nội dung bình luận.'
+    return false
+  }
+  if (value.length > 2000) {
+    errorRef.value = 'Bình luận không được vượt quá 2.000 ký tự.'
+    return false
+  }
+  errorRef.value = ''
+  return true
+}
+
+async function submitComment() {
+  if (!loggedIn || commentSubmitting.value) return
+  if (!validateComment(newCommentContent.value, newCommentError)) return
+
+  commentSubmitting.value = true
+  try {
+    const response = await api.post('/?action=api-comment-create', {
+      product_id: product.value.id,
+      content: newCommentContent.value,
+    })
+    newCommentContent.value = ''
+    newCommentError.value = ''
+    showToast(response.data?.message || 'Bình luận đã được gửi và đang chờ duyệt.', 'success')
+    // Không thêm comment pending vào danh sách public hoặc tăng count.
+  } catch (error) {
+    showToast(error.response?.data?.message || 'Không thể gửi bình luận.', 'danger')
+  } finally {
+    commentSubmitting.value = false
+  }
+}
+
+function startEditComment(comment) {
+  editingCommentId.value = comment.id
+  editingCommentContent.value = comment.content || ''
+  editingCommentError.value = ''
+}
+
+function cancelEditComment() {
+  editingCommentId.value = null
+  editingCommentContent.value = ''
+  editingCommentError.value = ''
+}
+
+async function updateComment(comment) {
+  if (commentUpdatingId.value !== null) return
+  if (!validateComment(editingCommentContent.value, editingCommentError)) return
+
+  commentUpdatingId.value = comment.id
+  try {
+    const response = await api.put(`/?action=api-comment-update&id=${encodeURIComponent(comment.id)}`, {
+      content: editingCommentContent.value,
+    })
+    showToast(response.data?.message || 'Cập nhật bình luận thành công.', 'success')
+    cancelEditComment()
+    await fetchComments(commentsPagination.value?.current_page || 1)
+  } catch (error) {
+    showToast(error.response?.data?.message || 'Không thể cập nhật bình luận.', 'danger')
+  } finally {
+    commentUpdatingId.value = null
+  }
+}
+
+async function deleteComment(comment) {
+  if (commentDeletingId.value !== null) return
+  if (!window.confirm('Bạn có chắc chắn muốn xóa bình luận này không?')) return
+
+  commentDeletingId.value = comment.id
+  try {
+    const response = await api.delete(`/?action=api-comment-delete&id=${encodeURIComponent(comment.id)}`)
+    showToast(response.data?.message || 'Xóa bình luận thành công.', 'success')
+    const currentPage = commentsPagination.value?.current_page || 1
+    const totalItems = Number(commentsPagination.value?.total_items ?? 0)
+    const nextPage = comments?.value?.length === 1 && currentPage > 1 && totalItems > 1
+      ? currentPage - 1
+      : currentPage
+    await fetchComments(nextPage)
+  } catch (error) {
+    showToast(error.response?.data?.message || 'Không thể xóa bình luận.', 'danger')
+  } finally {
+    commentDeletingId.value = null
+  }
+}
+
+function decreaseQuantity() {
+  if (quantity.value > 1) quantity.value -= 1
+}
+
+function increaseQuantity() {
+  if (quantity.value < maxQuantity.value) quantity.value += 1
+}
+
+async function addToCart() {
+  if (!loggedIn || cartAdding.value || isOutOfStock.value) return
+  if (!Number.isInteger(quantity.value) || quantity.value < 1 || quantity.value > maxQuantity.value) {
+    showToast('Số lượng không hợp lệ hoặc vượt quá số lượng tồn kho.', 'warning')
+    return
+  }
+
+  cartAdding.value = true
+  try {
+    const response = await api.post('/?action=api-cart-add', {
+      product_id: product.value.id,
+      quantity: quantity.value,
+    })
+    showToast(response.data?.message || 'Đã thêm sản phẩm vào giỏ hàng.', 'success')
+  } catch (error) {
+    showToast(error.response?.data?.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'danger')
+  } finally {
+    cartAdding.value = false
+  }
+}
+
 // Nút này chỉ mở hoặc thu gọn khu vực; tải dữ liệu được thực hiện khi slug trang thay đổi.
 function toggleComments() {
   commentsVisible.value = !commentsVisible.value
@@ -162,6 +304,10 @@ watch(
     commentsError.value = ''
     commentsLoading.value = false
     commentsVisible.value = false
+    newCommentContent.value = ''
+    newCommentError.value = ''
+    cancelEditComment()
+    quantity.value = 1
     activeImageIndex.value = 0
     failedImages.value = new Set()
 
@@ -248,21 +394,23 @@ watch(
           <p v-if="isOutOfStock" class="pd-stock pd-stock--out">Hết hàng</p>
           <p v-else-if="hasStock" class="pd-stock">Còn {{ product.stock }} sản phẩm</p>
 
-          <!-- Khu vực mua hàng cho thành viên: giao diện demo, các nút chưa nối xử lý giỏ hàng. -->
+          <!-- Khu vực mua hàng cho thành viên. -->
           <div v-if="loggedIn" class="pd-purchase">
             <div class="pd-quantity-row">
               <span id="pd-quantity-label" class="pd-quantity-label">Số lượng</span>
               <div class="pd-stepper" role="group" aria-labelledby="pd-quantity-label">
-                <button type="button" :disabled="isOutOfStock" aria-label="Giảm số lượng">−</button>
-                <span class="pd-stepper-value">{{ isOutOfStock ? 0 : 1 }}</span>
-                <button type="button" :disabled="isOutOfStock" aria-label="Tăng số lượng">+</button>
+                <button type="button" :disabled="isOutOfStock || quantity <= 1" aria-label="Giảm số lượng" @click="decreaseQuantity">−</button>
+                <span class="pd-stepper-value">{{ isOutOfStock ? 0 : quantity }}</span>
+                <button type="button" :disabled="isOutOfStock || quantity >= maxQuantity" aria-label="Tăng số lượng" @click="increaseQuantity">+</button>
               </div>
             </div>
             <div class="pd-purchase-actions">
-              <button type="button" class="pd-btn pd-btn--primary" :disabled="isOutOfStock">Thêm vào giỏ</button>
+              <button type="button" class="pd-btn pd-btn--primary" :disabled="isOutOfStock || cartAdding || quantity < 1" @click="addToCart">
+                {{ cartAdding ? 'Đang thêm...' : 'Thêm vào giỏ' }}
+              </button>
               <button type="button" class="pd-btn pd-btn--outline" :disabled="isOutOfStock">Mua ngay</button>
             </div>
-            <p class="pd-demo-note">Giao diện demo, chức năng mua hàng chưa hoạt động.</p>
+
           </div>
 
           <!-- Khách chưa đăng nhập: không có khu vực mua hàng, chỉ có gợi ý đăng nhập. -->
@@ -297,23 +445,34 @@ watch(
 
         <!-- v-show chỉ ẩn bằng CSS nên dữ liệu đã tải vẫn được giữ khi thu gọn. -->
         <div v-show="commentsVisible" id="pd-comments-body" class="pd-comments-body">
-          <!-- Form bình luận cho thành viên: giao diện demo, chưa gửi dữ liệu lên BE. -->
-          <div v-if="loggedIn" class="pd-comment-form">
+          <!-- Thành viên có thể gửi bình luận; comment mới chờ BE duyệt. -->
+          <form v-if="loggedIn" class="pd-comment-form" @submit.prevent="submitComment">
             <span class="pd-avatar" aria-hidden="true">SB</span>
             <div class="pd-comment-form-body">
               <label class="visually-hidden" for="pd-comment-input">Nội dung bình luận</label>
               <textarea
                 id="pd-comment-input"
+                v-model="newCommentContent"
                 class="pd-textarea"
                 rows="3"
+                maxlength="2000"
                 placeholder="Viết bình luận của bạn..."
+                :aria-invalid="Boolean(newCommentError)"
+                @input="newCommentError && validateComment(newCommentContent, newCommentError)"
               ></textarea>
+              <p v-if="newCommentError" class="pd-field-error" role="alert">{{ newCommentError }}</p>
               <div class="pd-comment-form-footer">
-                <span class="pd-demo-note">Giao diện demo, chưa gửi được bình luận.</span>
-                <button type="button" class="pd-btn pd-btn--primary pd-btn--inline">Gửi bình luận</button>
+                <span class="pd-demo-note">Tối đa 2.000 ký tự. Bình luận sẽ hiển thị sau khi được duyệt.</span>
+                <button type="submit" class="pd-btn pd-btn--primary pd-btn--inline" :disabled="commentSubmitting">
+                  {{ commentSubmitting ? 'Đang gửi...' : 'Gửi bình luận' }}
+                </button>
               </div>
             </div>
-          </div>
+          </form>
+          <p v-else class="pd-login-hint">
+            <RouterLink :to="{ name: 'login' }" @click.capture="saveReturnUrl(route.fullPath)">Đăng nhập</RouterLink>
+            để gửi bình luận.
+          </p>
 
           <!-- Các trạng thái tải bình luận: đang tải, lỗi (có thử lại), rỗng, có dữ liệu. -->
           <p v-if="commentsLoading" class="pd-comments-state" role="status">Đang tải bình luận...</p>
@@ -342,7 +501,32 @@ watch(
                     <strong>{{ commentAuthor(comment) }}</strong>
                     <time :datetime="comment.created_at">{{ formatCommentDate(comment.created_at) }}</time>
                   </p>
-                  <p class="pd-comment-content">{{ comment.content }}</p>
+                  <template v-if="editingCommentId === comment.id">
+                    <textarea
+                      v-model="editingCommentContent"
+                      class="pd-textarea pd-edit-textarea"
+                      rows="3"
+                      maxlength="2000"
+                      :aria-invalid="Boolean(editingCommentError)"
+                      @input="editingCommentError && validateComment(editingCommentContent, editingCommentError)"
+                    ></textarea>
+                    <p v-if="editingCommentError" class="pd-field-error" role="alert">{{ editingCommentError }}</p>
+                    <div class="pd-comment-actions">
+                      <button type="button" class="pd-btn pd-btn--primary pd-btn--inline" :disabled="commentUpdatingId === comment.id" @click="updateComment(comment)">
+                        {{ commentUpdatingId === comment.id ? 'Đang lưu...' : 'Lưu' }}
+                      </button>
+                      <button type="button" class="pd-btn pd-btn--outline pd-btn--inline" :disabled="commentUpdatingId === comment.id" @click="cancelEditComment">Hủy</button>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <p class="pd-comment-content">{{ comment.content }}</p>
+                    <div v-if="canManageComment(comment)" class="pd-comment-actions">
+                      <button type="button" class="pd-btn pd-btn--outline pd-btn--inline" :disabled="commentDeletingId === comment.id || commentUpdatingId !== null" @click="startEditComment(comment)">Sửa</button>
+                      <button type="button" class="pd-btn pd-btn--outline pd-btn--inline" :disabled="commentDeletingId === comment.id || commentUpdatingId !== null" @click="deleteComment(comment)">
+                        {{ commentDeletingId === comment.id ? 'Đang xóa...' : 'Xóa' }}
+                      </button>
+                    </div>
+                  </template>
                 </div>
               </li>
             </ul>
@@ -796,6 +980,23 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.pd-field-error {
+  margin: 6px 0 0;
+  color: #a42d2d;
+  font-size: 13px;
+}
+
+.pd-edit-textarea {
+  margin-top: 8px;
+}
+
+.pd-comment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .pd-comments-state {
