@@ -10,6 +10,9 @@ import ProfileView from '../views/auth/Profile.vue'
 import ChangePasswordView from '../views/auth/ChangePassword.vue'
 import ForgotPasswordView from '../views/auth/ForgotPassword.vue'
 import ResetPasswordView from '../views/auth/ResetPassword.vue'
+import PaymentDemoView from '../views/PaymentDemo.vue'
+import PaymentResultView from '../views/PaymentResult.vue'
+import CheckoutView from '../views/CheckoutView.vue'
 
 const routes = [
   {
@@ -72,6 +75,40 @@ const routes = [
     path: "/reset-password",
     name: "reset-password",
     component: ResetPasswordView,
+  },
+
+  // Trang demo tạo form thanh toán cho đơn của user đã đăng nhập.
+  {
+    path: "/payment",
+    name: "payment-demo",
+    component: PaymentDemoView,
+    meta: { requiresAuth: true },
+  },
+  // Checkout đọc giỏ hàng của user và cho chọn COD hoặc thanh toán online sandbox.
+  {
+    path: "/checkout",
+    name: "checkout",
+    component: CheckoutView,
+    meta: { requiresAuth: true },
+  },
+  // Các trang dưới đây chỉ hiển thị kết quả điều hướng, không xác nhận giao dịch.
+  {
+    path: "/payment/success",
+    name: "payment-success",
+    component: PaymentResultView,
+    meta: { paymentResult: "success" },
+  },
+  {
+    path: "/payment/error",
+    name: "payment-error",
+    component: PaymentResultView,
+    meta: { paymentResult: "error" },
+  },
+  {
+    path: "/payment/cancel",
+    name: "payment-cancel",
+    component: PaymentResultView,
+    meta: { paymentResult: "cancel" },
   },
 
   {
