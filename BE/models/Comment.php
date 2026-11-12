@@ -100,7 +100,7 @@ class Comment extends BaseModel
      * @param string $content Nội dung mới đã được kiểm tra.
      * @return bool True nếu bình luận thuộc user và được xử lý thành công.
      */
-    public function updateOwned(int $commentId, int $userId, string $content): bool
+    public function updateOwned(int $commentId, int $userId, string $content, int $status = 0): bool
     {
         $findStatement = $this->pdo->prepare(
             'SELECT `content` FROM `comments` '
@@ -120,10 +120,11 @@ class Comment extends BaseModel
         }
 
         $updateStatement = $this->pdo->prepare(
-            'UPDATE `comments` SET `content` = :content '
+            'UPDATE `comments` SET `content` = :content, `status` = :status '
             . 'WHERE `id` = :id AND `user_id` = :user_id'
         );
         $updateStatement->bindValue(':content', $content, PDO::PARAM_STR);
+        $updateStatement->bindValue(':status', $status, PDO::PARAM_INT);
         $updateStatement->bindValue(':id', $commentId, PDO::PARAM_INT);
         $updateStatement->bindValue(':user_id', $userId, PDO::PARAM_INT);
         $updateStatement->execute();

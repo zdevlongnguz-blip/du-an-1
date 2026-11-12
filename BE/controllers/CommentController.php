@@ -79,7 +79,7 @@ class CommentController
 
         response_json([
             'status' => 'success',
-            'message' => 'Thêm bình luận thành công',
+            'message' => 'Thêm bình luận thành công, đã tạm ẩn để chờ phê duyệt!',
             'comment' => [
                 'id' => $commentId,
                 'product_id' => $productId,
@@ -115,7 +115,7 @@ class CommentController
 
         response_json([
             'status' => 'success',
-            'message' => 'Cập nhật bình luận thành công',
+            'message' => 'Cập nhật bình luận thành công, đã tạm ẩn để chờ phê duyệt!',
             'comment' => [
                 'id' => $commentId,
                 'content' => $content,
