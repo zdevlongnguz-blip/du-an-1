@@ -78,7 +78,7 @@ define('EMAIL_VERIFICATION_TTL', 3600);
 define('PASSWORD_RESET_TTL', 3600);
 define('FRONTEND_URL', 'http://localhost:5173');
 
-// Mailer và phần tích hợp ShePay chỉ đọc cấu hình từ biến môi trường.
+// Mailer và phần tích hợp SePay chỉ đọc cấu hình từ biến môi trường.
 $mailPort = getenv('MAIL_PORT');
 define('MAIL_HOST', getenv('MAIL_HOST') ?: '');
 define('MAIL_PORT', $mailPort !== false && ctype_digit($mailPort) ? (int) $mailPort : 0);
@@ -88,10 +88,10 @@ define('MAIL_FROM_ADDRESS', getenv('MAIL_FROM_ADDRESS') ?: '');
 define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: '');
 define('MAIL_ENCRYPTION', getenv('MAIL_ENCRYPTION') ?: '');
 
-define('SHEPAY_API_URL', getenv('SHEPAY_API_URL') ?: '');
-define('SHEPAY_MERCHANT_ID', getenv('SHEPAY_MERCHANT_ID') ?: '');
-define('SHEPAY_API_KEY', getenv('SHEPAY_API_KEY') ?: '');
-define('SHEPAY_SECRET_KEY', getenv('SHEPAY_SECRET_KEY') ?: '');
-define('SHEPAY_RETURN_URL', getenv('SHEPAY_RETURN_URL') ?: '');
-define('SHEPAY_CANCEL_URL', getenv('SHEPAY_CANCEL_URL') ?: '');
-define('SHEPAY_WEBHOOK_SECRET', getenv('SHEPAY_WEBHOOK_SECRET') ?: '');
+define('SEPAY_ENVIRONMENT', getenv('SEPAY_ENVIRONMENT') ?: 'sandbox');
+define('SEPAY_MERCHANT_ID', getenv('SEPAY_MERCHANT_ID') ?: '');
+define('SEPAY_SECRET_KEY', getenv('SEPAY_SECRET_KEY') ?: '');
+define('SEPAY_SUCCESS_URL', getenv('SEPAY_SUCCESS_URL') ?: rtrim(FRONTEND_URL, '/') . '/payment/success');
+define('SEPAY_ERROR_URL', getenv('SEPAY_ERROR_URL') ?: rtrim(FRONTEND_URL, '/') . '/payment/error');
+define('SEPAY_CANCEL_URL', getenv('SEPAY_CANCEL_URL') ?: rtrim(FRONTEND_URL, '/') . '/payment/cancel');
+define('SEPAY_IPN_SECRET', getenv('SEPAY_IPN_SECRET') ?: '');

@@ -1,5 +1,8 @@
 <?php
 /** Controller xử lý checkout, lịch sử đơn và quản trị trạng thái đơn hàng. */
+use SePay\Builders\CheckoutBuilder;
+use SePay\SePayClient;
+
 class OrderController
 {
     private Order $order;
@@ -59,6 +62,84 @@ class OrderController
                 'payment_status' => 'unpaid',
             ],
         ], 201);
+    }
+
+    /**
+     * Tạo dữ liệu form thanh toán sandbox cho đơn pending/unpaid của user.
+     * Sai method trả 405, đơn không tồn tại trả 404, trạng thái không hợp lệ trả 409.
+     *
+     * @param array $authPayload Payload JWT từ middleware.
+     * @return void
+     */
+    public function createPayment(array $authPayload = []): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $userId = $this->getUserId($authPayload);
+        $orderId = $this->getOrderId();
+        $invoice = $this->order->getInvoice($orderId, $userId);
+        if ($invoice === null) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy đơn hàng'], 404);
+        }
+
+        $order = $invoice['order'];
+        if ($order['order_status'] !== 'pending' || $order['payment_status'] !== 'unpaid') {
+            response_json(['status' => 'error', 'message' => 'Đơn hàng không ở trạng thái chờ thanh toán'], 409);
+        }
+
+        if (SEPAY_ENVIRONMENT !== SePayClient::ENVIRONMENT_SANDBOX) {
+            response_json(['status' => 'error', 'message' => 'Tích hợp hiện chỉ hỗ trợ môi trường sandbox'], 503);
+        }
+        if (SEPAY_MERCHANT_ID === '' || SEPAY_SECRET_KEY === '') {
+            response_json(['status' => 'error', 'message' => 'Chưa cấu hình thông tin merchant SePay'], 503);
+        }
+
+        foreach ([SEPAY_SUCCESS_URL, SEPAY_ERROR_URL, SEPAY_CANCEL_URL] as $returnUrl) {
+            if (filter_var($returnUrl, FILTER_VALIDATE_URL) === false) {
+                response_json(['status' => 'error', 'message' => 'URL quay về từ SePay chưa được cấu hình hợp lệ'], 503);
+            }
+        }
+
+        $amountText = (string) $order['total_amount'];
+        // Giá VND trong bảng phải là số nguyên; regex này chỉ chấp nhận dạng 123 hoặc 123.00.
+        if (!preg_match('/^([0-9]+)(?:\\.00)?$/D', $amountText, $amountMatches)) {
+            response_json(['status' => 'error', 'message' => 'Số tiền đơn hàng không hợp lệ'], 422);
+        }
+        $amount = (int) $amountMatches[1];
+        if ($amount < 1) {
+            response_json(['status' => 'error', 'message' => 'Số tiền đơn hàng không hợp lệ'], 422);
+        }
+
+        // Mã ngẫu nhiên giúp mỗi lần thử có invoice riêng; phần ID đơn vẫn giữ để đối soát sau này.
+        $invoiceNumber = 'FULE-' . $orderId . '-' . strtoupper(bin2hex(random_bytes(4)));
+        $checkoutData = CheckoutBuilder::make()
+            ->currency('VND')
+            ->orderAmount($amount)
+            ->operation('PURCHASE')
+            ->orderDescription('Thanh toan don hang #' . $orderId)
+            ->orderInvoiceNumber($invoiceNumber)
+            ->customerId((string) $userId)
+            ->successUrl(SEPAY_SUCCESS_URL)
+            ->errorUrl(SEPAY_ERROR_URL)
+            ->cancelUrl(SEPAY_CANCEL_URL)
+            ->build();
+
+        $sepay = new SePayClient(
+            SEPAY_MERCHANT_ID,
+            SEPAY_SECRET_KEY,
+            SePayClient::ENVIRONMENT_SANDBOX
+        );
+        $checkout = $sepay->checkout();
+
+        response_json([
+            'status' => 'success',
+            'checkout' => [
+                'action' => $checkout->getCheckoutUrl(SePayClient::ENVIRONMENT_SANDBOX),
+                'fields' => $checkout->generateFormFields($checkoutData),
+            ],
+        ]);
     }
 
     /**

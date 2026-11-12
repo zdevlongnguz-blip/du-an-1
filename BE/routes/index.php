@@ -123,6 +123,12 @@ switch ($action) {
         (new OrderController)->checkout($authPayload);
         break;
 
+    // API tạo form thanh toán SePay sandbox cho đơn của user đang đăng nhập.
+    case 'api-order-payment':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new OrderController)->createPayment($authPayload);
+        break;
+
     // API lấy danh sách đơn của user đang đăng nhập.
     case 'api-orders':
         $authPayload = (new AuthMiddleware())->requireAuth();
