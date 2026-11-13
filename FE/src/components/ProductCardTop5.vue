@@ -24,6 +24,15 @@ const props = defineProps({
 const imageSrc = computed(() => resolveImageUrl(props.product.image))
 // Khi ảnh lỗi, thẻ chuyển sang vùng ảnh dự phòng.
 const imageFailed = ref(false)
+// Giá hiển thị là giá thấp nhất của các biến thể đang bán; có nhiều mức giá thì thêm "Từ".
+// Không có biến thể đang bán (min null) thì hiện "Liên hệ" thay vì ₫0.
+const priceText = computed(() => {
+  const min = props.product.min_final_price
+  if (min === null || min === undefined) return 'Liên hệ'
+  const max = Number(props.product.max_final_price)
+  const prefix = Number.isFinite(max) && max > Number(min) ? 'Từ ' : ''
+  return prefix + formatPrice(Number(min))
+})
 // Luôn có cả lượt xem và lượt bán để không mất một chỉ số theo chế độ xếp hạng.
 const viewCount = computed(() => Number(props.product.view_count ?? 0).toLocaleString('vi-VN'))
 const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocaleString('vi-VN'))
@@ -74,10 +83,7 @@ const isOutOfStock = computed(() => {
       <div class="top5-card-summary">
         <h2 class="top5-card-name">{{ product.name }}</h2>
         <div class="top5-card-price">
-          <strong>{{ formatPrice(product.sale_price || product.price) }}</strong>
-          <span v-if="product.sale_price && Number(product.sale_price) < Number(product.price)">
-            {{ formatPrice(product.price) }}
-          </span>
+          <strong>{{ priceText }}</strong>
         </div>
         <div class="top5-card-stats" aria-label="Thống kê sản phẩm">
           <p class="top5-card-stat" :class="{ 'is-ranked': sortBy === 'views' }">

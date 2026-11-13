@@ -26,6 +26,7 @@ class ProductController{
             $page,
             $perPage
         );
+        $products['data'] = array_map([$this, 'formatProductListItem'], $products['data']);
 
         response_json([
             'status' => 'success',
@@ -37,6 +38,19 @@ class ProductController{
                 'per_page' => $perPage,
             ],
         ]);
+    }
+
+    private function formatProductListItem(array $product): array
+    {
+        $product['stock'] = (int)($product['stock'] ?? 0);
+        unset($product['total_stock']);
+        $product['variant_count'] = (int)$product['variant_count'];
+        $product['in_stock'] = (bool)$product['in_stock'];
+        $product['min_final_price'] = $product['min_final_price'] === null ? null : (float)$product['min_final_price'];
+        $product['max_final_price'] = $product['max_final_price'] === null ? null : (float)$product['max_final_price'];
+        $product['price'] = $product['price'] === null ? null : (float)$product['price'];
+        $product['sale_price'] = $product['sale_price'] === null ? null : (float)$product['sale_price'];
+        return $product;
     }
 
     /**
@@ -54,6 +68,7 @@ class ProductController{
         }
 
         $products = $this->product->getTop($sortBy);
+        $products = array_map([$this, 'formatProductListItem'], $products);
 
         response_json([
             'status' => 'success',

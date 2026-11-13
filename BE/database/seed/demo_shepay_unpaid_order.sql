@@ -30,22 +30,30 @@ WHERE `u`.`email` = 'user@example.com'
       AND `o`.`payment_status` = 'unpaid'
   );
 
+-- Giá và biến thể lấy từ biến thể mặc định của CLAYMATION (giá bán thực tế = final_price).
 INSERT INTO `order_details` (
   `order_id`,
   `product_id`,
+  `variant_id`,
   `product_name`,
+  `variant_sku`,
+  `variant_label`,
   `quantity`,
   `unit_price`
 )
 SELECT
   `o`.`id`,
   `p`.`id`,
+  `v`.`id`,
   `p`.`name`,
+  `v`.`sku`,
+  `v`.`variant_name`,
   1,
-  COALESCE(`p`.`sale_price`, `p`.`price`)
+  `v`.`final_price`
 FROM `orders` AS `o`
 JOIN `users` AS `u` ON `u`.`id` = `o`.`user_id`
 JOIN `products` AS `p` ON `p`.`code` = 'CLAYMATION'
+JOIN `product_variants` AS `v` ON `v`.`product_id` = `p`.`id` AND `v`.`is_default` = 1
 WHERE `u`.`email` = 'user@example.com'
   AND `o`.`recipient_name` = 'Nguyễn Văn Demo'
   AND `o`.`order_status` = 'pending'

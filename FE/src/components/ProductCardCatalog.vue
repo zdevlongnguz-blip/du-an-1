@@ -18,6 +18,16 @@ const imageSrc = computed(() => resolveImageUrl(props.product.image))
 // Khi ảnh lỗi, card dùng vùng thay thế thay vì hiện ảnh hỏng.
 const imageFailed = ref(false)
 
+// Giá hiển thị là giá thấp nhất của các biến thể đang bán; có nhiều mức giá thì thêm "Từ".
+// Không có biến thể đang bán (min null) thì hiện "Liên hệ" thay vì ₫0.
+const priceText = computed(() => {
+  const min = props.product.min_final_price
+  if (min === null || min === undefined) return 'Liên hệ'
+  const max = Number(props.product.max_final_price)
+  const prefix = Number.isFinite(max) && max > Number(min) ? 'Từ ' : ''
+  return prefix + formatPrice(Number(min))
+})
+
 // Chỉ đánh dấu hết hàng khi API có stock hợp lệ bằng 0 hoặc nhỏ hơn.
 const isOutOfStock = computed(() => {
   const stock = props.product.stock
@@ -59,10 +69,7 @@ const isOutOfStock = computed(() => {
       <div class="catalog-product-summary">
         <h2 class="catalog-product-name">{{ product.name }}</h2>
         <div class="catalog-product-price">
-          <strong>{{ formatPrice(product.sale_price || product.price) }}</strong>
-          <span v-if="product.sale_price && Number(product.sale_price) < Number(product.price)">
-            {{ formatPrice(product.price) }}
-          </span>
+          <strong>{{ priceText }}</strong>
         </div>
         <div class="catalog-product-stats" aria-label="Thống kê sản phẩm">
           <p class="catalog-product-stat">
