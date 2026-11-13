@@ -96,16 +96,22 @@ class Product extends BaseModel
     }
 
     /**
-     * Lấy thông tin sản phẩm theo slug kèm danh sách ảnh album.
+     * Lấy chi tiết sản phẩm theo slug: tổng hợp giá/tồn kho, danh sách biến thể đang bán và album ảnh.
      *
      * @param string $slug Slug duy nhất của sản phẩm
-     * @return array|null Dữ liệu sản phẩm và images, hoặc null nếu không tìm thấy
+     * @return array|null Dữ liệu sản phẩm, hoặc null nếu không tìm thấy
      */
     public function getBySlug($slug)
     {
-        $sql = "SELECT `products`.*, `categories`.`name` AS `category_name`
+        // Lấy tổng hợp từ view và giá của biến thể mặc định, giống nguồn của danh sách sản phẩm.
+        $sql = "SELECT `products`.*, `categories`.`name` AS `category_name`,
+                       `catalog`.`variant_count`, `catalog`.`min_final_price`, `catalog`.`max_final_price`,
+                       `catalog`.`total_stock` AS `stock`, `catalog`.`in_stock`,
+                       `dv`.`price`, `dv`.`sale_price`
                 FROM `products`
                 LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
+                LEFT JOIN `v_product_catalog` AS `catalog` ON `catalog`.`id` = `products`.`id`
+                LEFT JOIN `product_variants` AS `dv` ON `dv`.`product_id` = `products`.`id` AND `dv`.`is_default` = 1 AND `dv`.`is_active` = 1
                 WHERE `products`.`slug` = :slug
                 LIMIT 1";
 
@@ -118,6 +124,15 @@ class Product extends BaseModel
             return null;
         }
 
+        $variantsSql = "SELECT `id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `final_price`, `stock`, `is_default`
+                        FROM `product_variants`
+                        WHERE `product_id` = :product_id AND `is_active` = 1
+                        ORDER BY `is_default` DESC, `id` ASC";
+        $variantsStmt = $this->pdo->prepare($variantsSql);
+        $variantsStmt->bindValue(':product_id', (int)$product['id'], PDO::PARAM_INT);
+        $variantsStmt->execute();
+        $product['variants'] = $variantsStmt->fetchAll(PDO::FETCH_ASSOC);
+
         $imagesSql = "SELECT `id`, `image_path`, `sort_order`
                       FROM `product_images`
                       WHERE `product_id` = :product_id
@@ -125,7 +140,20 @@ class Product extends BaseModel
         $imagesStmt = $this->pdo->prepare($imagesSql);
         $imagesStmt->bindValue(':product_id', (int)$product['id'], PDO::PARAM_INT);
         $imagesStmt->execute();
-        $product['images'] = $imagesStmt->fetchAll(PDO::FETCH_ASSOC);
+        $slides = $imagesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Ảnh đại diện luôn đứng đầu album; bỏ qua nếu đã có trong danh sách slide để không trùng.
+        $cover = trim((string)($product['image'] ?? ''));
+        $images = [];
+        if ($cover !== '') {
+            $images[] = ['id' => null, 'image_path' => $cover, 'sort_order' => -1];
+        }
+        foreach ($slides as $slide) {
+            if ($slide['image_path'] !== $cover) {
+                $images[] = $slide;
+            }
+        }
+        $product['images'] = $images;
 
         return $product;
     }

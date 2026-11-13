@@ -100,8 +100,45 @@ class ProductController{
 
         response_json([
             'status' => 'success',
-            'product' => $product,
+            'product' => $this->formatProductDetail($product),
         ]);
+    }
+
+    /**
+     * Chuẩn hoá kiểu dữ liệu của chi tiết sản phẩm và từng biến thể trước khi trả cho FE.
+     */
+    private function formatProductDetail(array $product): array
+    {
+        $product = $this->formatProductListItem($product);
+        $product['id'] = (int)$product['id'];
+        $product['category_id'] = $product['category_id'] === null ? null : (int)$product['category_id'];
+        $product['view_count'] = (int)$product['view_count'];
+        $product['sales_count'] = (int)$product['sales_count'];
+
+        $product['variants'] = array_map(function (array $variant): array {
+            $attributes = json_decode((string)$variant['attributes'], true);
+            return [
+                'id' => (int)$variant['id'],
+                'sku' => $variant['sku'],
+                'variant_name' => $variant['variant_name'],
+                'attributes' => is_array($attributes) ? $attributes : [],
+                'price' => (float)$variant['price'],
+                'sale_price' => $variant['sale_price'] === null ? null : (float)$variant['sale_price'],
+                'final_price' => (float)$variant['final_price'],
+                'stock' => (int)$variant['stock'],
+                'is_default' => (bool)$variant['is_default'],
+            ];
+        }, $product['variants']);
+
+        $product['images'] = array_map(function (array $image): array {
+            return [
+                'id' => $image['id'] === null ? null : (int)$image['id'],
+                'image_path' => $image['image_path'],
+                'sort_order' => (int)$image['sort_order'],
+            ];
+        }, $product['images']);
+
+        return $product;
     }
 
     //test mock data

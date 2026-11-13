@@ -51,9 +51,10 @@ const editingCommentError = ref('')
 const commentUpdatingId = ref(null)
 const commentDeletingId = ref(null)
 
-// Trạng thái thêm giỏ hàng.
-const quantity = ref(1)
-const cartAdding = ref(false)
+// Số lượng nhập riêng cho từng biến thể, key là id biến thể.
+const variantQuantities = ref({})
+// Biến thể đang gửi thêm giỏ; null khi không có request nào đang chạy.
+const cartAddingVariantId = ref(null)
 
 // Chỉ dùng để chọn giao diện; BE vẫn xác minh JWT và quyền sở hữu.
 const loggedIn = isAuthenticated()
@@ -61,7 +62,7 @@ const currentUser = getUser()
 const currentUserId = currentUser?.id ?? currentUser?.user_id ?? null
 
 // computed: giá trị tự tính lại mỗi khi dữ liệu nó dùng thay đổi.
-// Album ảnh: lấy từ product.images; nếu rỗng thì dùng ảnh đại diện product.image.
+// Album ảnh: BE đã đưa ảnh đại diện (product.image) lên đầu product.images; nếu rỗng thì dùng product.image.
 const galleryImages = computed(() => {
   if (!product.value) return []
 
@@ -78,19 +79,59 @@ const galleryImages = computed(() => {
 
 const activeImage = computed(() => galleryImages.value[activeImageIndex.value] ?? '')
 
-// Có giá giảm khi sale_price hợp lệ và nhỏ hơn giá gốc.
-const hasSale = computed(() => {
-  const salePrice = Number(product.value?.sale_price)
-  return product.value?.sale_price != null && salePrice > 0 && salePrice < Number(product.value.price)
+// Khoảng giá (đã tính giảm giá) của các biến thể đang bán, do BE tổng hợp; null nếu không có biến thể.
+const priceRange = computed(() => {
+  const min = product.value?.min_final_price
+  const max = product.value?.max_final_price
+  if (min == null || max == null) return null
+  return { min: Number(min), max: Number(max) }
 })
 
-// Chỉ coi là hết hàng khi API trả stock là số và nhỏ hơn hoặc bằng 0.
-const hasStock = computed(() => {
-  const stock = product.value?.stock
-  return stock !== null && stock !== undefined && Number.isFinite(Number(stock))
-})
-const isOutOfStock = computed(() => hasStock.value && Number(product.value.stock) <= 0)
-const maxQuantity = computed(() => hasStock.value ? Math.max(0, Math.floor(Number(product.value.stock))) : 0)
+// Hết hàng khi tổng tồn kho của mọi biến thể bằng 0.
+const isOutOfStock = computed(() => product.value != null && Number(product.value.stock ?? 0) <= 0)
+
+// Số lượng tối đa của một biến thể là tồn kho riêng của biến thể đó.
+function variantMaxQuantity(variant) {
+  return Math.max(0, Math.floor(Number(variant.stock) || 0))
+}
+
+// Có giá giảm khi sale_price của biến thể hợp lệ và nhỏ hơn giá gốc.
+function variantIsOnSale(variant) {
+  const salePrice = Number(variant.sale_price)
+  return variant.sale_price != null && salePrice > 0 && salePrice < Number(variant.price)
+}
+
+function getVariantQuantity(variant) {
+  if (variantMaxQuantity(variant) <= 0) return 0
+  return variantQuantities.value[variant.id] ?? 1
+}
+
+function setVariantQuantity(variant, value) {
+  variantQuantities.value = {
+    ...variantQuantities.value,
+    [variant.id]: Math.min(Math.max(1, value), variantMaxQuantity(variant)),
+  }
+}
+
+// Người dùng gõ số tay: khi rời ô (change) mới kẹp về khoảng hợp lệ, để không ngắt lúc đang gõ.
+function onVariantQuantityChange(variant, event) {
+  const parsed = Math.floor(Number(event.target.value))
+  setVariantQuantity(variant, Number.isFinite(parsed) ? parsed : 1)
+  event.target.value = getVariantQuantity(variant)
+}
+
+// Ghép giá trị thuộc tính thành chuỗi hiển thị, ví dụ {"dung_tich":"113g"} -> "113g".
+function formatVariantAttributes(attributes) {
+  return Object.values(attributes || {}).join(' · ')
+}
+
+// Ẩn dòng thuộc tính nếu tên biến thể đã chứa nội dung đó, tránh lặp "Hũ 56g" rồi "56g".
+function variantAttributesLine(variant) {
+  const attrs = formatVariantAttributes(variant.attributes)
+  if (!attrs || variant.variant_name?.toLowerCase().includes(attrs.toLowerCase())) return ''
+  return attrs
+}
+
 const canManageComment = (comment) => currentUserId != null && String(comment.user_id) === String(currentUserId)
 
 // Tổng số bình luận chỉ biết sau khi đã tải; trước đó không hiện số để tránh hiện sai.
@@ -136,7 +177,7 @@ async function fetchProduct(slug) {
     // Nếu người dùng đã chuyển sang sản phẩm khác trong lúc chờ thì bỏ kết quả cũ.
     if (slug !== route.params.slug) return
     product.value = res.data.product
-    quantity.value = Number(product.value?.stock) > 0 ? 1 : 0
+    variantQuantities.value = {}
   } catch (err) {
     if (slug !== route.params.slug) return
     productError.value = err.response?.data?.message || 'Không tải được thông tin sản phẩm.'
@@ -259,32 +300,27 @@ async function deleteComment(comment) {
   }
 }
 
-function decreaseQuantity() {
-  if (quantity.value > 1) quantity.value -= 1
-}
-
-function increaseQuantity() {
-  if (quantity.value < maxQuantity.value) quantity.value += 1
-}
-
-async function addToCart() {
-  if (!loggedIn || cartAdding.value || isOutOfStock.value) return
-  if (!Number.isInteger(quantity.value) || quantity.value < 1 || quantity.value > maxQuantity.value) {
-    showToast('Số lượng không hợp lệ hoặc vượt quá số lượng tồn kho.', 'warning')
+// Thêm đúng biến thể và số lượng đã chọn của biến thể đó vào giỏ.
+async function addVariantToCart(variant) {
+  if (!loggedIn || cartAddingVariantId.value !== null) return
+  const quantityToAdd = getVariantQuantity(variant)
+  if (quantityToAdd < 1 || quantityToAdd > variantMaxQuantity(variant)) {
+    showToast('Phiên bản này đã hết hàng hoặc số lượng không hợp lệ.', 'warning')
     return
   }
 
-  cartAdding.value = true
+  cartAddingVariantId.value = variant.id
   try {
     const response = await api.post('/?action=api-cart-add', {
       product_id: product.value.id,
-      quantity: quantity.value,
+      variant_id: variant.id,
+      quantity: quantityToAdd,
     })
     showToast(response.data?.message || 'Đã thêm sản phẩm vào giỏ hàng.', 'success')
   } catch (error) {
     showToast(error.response?.data?.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'danger')
   } finally {
-    cartAdding.value = false
+    cartAddingVariantId.value = null
   }
 }
 
@@ -307,7 +343,7 @@ watch(
     newCommentContent.value = ''
     newCommentError.value = ''
     cancelEditComment()
-    quantity.value = 1
+    variantQuantities.value = {}
     activeImageIndex.value = 0
     failedImages.value = new Set()
 
@@ -321,7 +357,7 @@ watch(
 </script>
 
 <template>
-  <div class="pd-page" :class="{ 'pd-page--has-bar': product && loggedIn }">
+  <div class="pd-page">
     <!-- Trạng thái đang tải sản phẩm. -->
     <div v-if="productLoading" class="pd-card pd-state" role="status">Đang tải sản phẩm...</div>
 
@@ -384,37 +420,81 @@ watch(
           <p class="pd-meta">{{ formatCount(product.view_count) }} lượt xem · {{ formatCount(product.sales_count) }} đã bán</p>
 
           <div class="pd-price">
-            <strong :class="{ 'is-sale': hasSale }">{{ formatPrice(hasSale ? product.sale_price : product.price) }}</strong>
-            <template v-if="hasSale">
-              <del>{{ formatPrice(product.price) }}</del>
-              <span class="pd-sale-badge">Giảm giá</span>
+            <template v-if="priceRange">
+              <span v-if="priceRange.min !== priceRange.max" class="pd-price-from">Từ</span>
+              <strong>{{ formatPrice(priceRange.min) }}</strong>
             </template>
+            <strong v-else>Liên hệ</strong>
           </div>
 
           <p v-if="isOutOfStock" class="pd-stock pd-stock--out">Hết hàng</p>
-          <p v-else-if="hasStock" class="pd-stock">Còn {{ product.stock }} sản phẩm</p>
+          <p v-else class="pd-stock">Còn {{ product.stock }} sản phẩm</p>
 
-          <!-- Khu vực mua hàng cho thành viên. -->
-          <div v-if="loggedIn" class="pd-purchase">
-            <div class="pd-quantity-row">
-              <span id="pd-quantity-label" class="pd-quantity-label">Số lượng</span>
-              <div class="pd-stepper" role="group" aria-labelledby="pd-quantity-label">
-                <button type="button" :disabled="isOutOfStock || quantity <= 1" aria-label="Giảm số lượng" @click="decreaseQuantity">−</button>
-                <span class="pd-stepper-value">{{ isOutOfStock ? 0 : quantity }}</span>
-                <button type="button" :disabled="isOutOfStock || quantity >= maxQuantity" aria-label="Tăng số lượng" @click="increaseQuantity">+</button>
-              </div>
-            </div>
-            <div class="pd-purchase-actions">
-              <button type="button" class="pd-btn pd-btn--primary" :disabled="isOutOfStock || cartAdding || quantity < 1" @click="addToCart">
-                {{ cartAdding ? 'Đang thêm...' : 'Thêm vào giỏ' }}
-              </button>
-              <button type="button" class="pd-btn pd-btn--outline" :disabled="isOutOfStock">Mua ngay</button>
-            </div>
+          <!-- Danh sách đầy đủ biến thể; thành viên đăng nhập mới có số lượng và nút thêm giỏ theo từng biến thể. -->
+          <section class="pd-variants" aria-labelledby="pd-variants-title">
+            <h2 id="pd-variants-title" class="pd-subheading">Chọn phiên bản</h2>
+            <p v-if="!product.variants || product.variants.length === 0" class="pd-description">Sản phẩm chưa có phiên bản để bán.</p>
+            <ul v-else class="pd-variant-list">
+              <li
+                v-for="variant in product.variants"
+                :key="variant.id"
+                class="pd-variant"
+                :class="{ 'is-out': variantMaxQuantity(variant) <= 0 }"
+              >
+                <div class="pd-variant-info">
+                  <strong class="pd-variant-name">{{ variant.variant_name }}</strong>
+                  <span v-if="variantAttributesLine(variant)" class="pd-variant-attrs">
+                    {{ variantAttributesLine(variant) }}
+                  </span>
+                  <div class="pd-variant-price">
+                    <strong :class="{ 'is-sale': variantIsOnSale(variant) }">{{ formatPrice(variant.final_price) }}</strong>
+                    <del v-if="variantIsOnSale(variant)">{{ formatPrice(variant.price) }}</del>
+                  </div>
+                  <span class="pd-variant-stock">
+                    {{ variantMaxQuantity(variant) > 0 ? `Còn ${variantMaxQuantity(variant)} sản phẩm` : 'Hết hàng' }}
+                  </span>
+                </div>
 
-          </div>
+                <div v-if="loggedIn" class="pd-variant-actions">
+                  <div class="pd-stepper" role="group" :aria-label="`Số lượng ${variant.variant_name}`">
+                    <button
+                      type="button"
+                      :disabled="variantMaxQuantity(variant) <= 0 || getVariantQuantity(variant) <= 1"
+                      aria-label="Giảm số lượng"
+                      @click="setVariantQuantity(variant, getVariantQuantity(variant) - 1)"
+                    >−</button>
+                    <input
+                      type="number"
+                      class="pd-stepper-input"
+                      min="1"
+                      :max="variantMaxQuantity(variant)"
+                      :value="getVariantQuantity(variant)"
+                      :disabled="variantMaxQuantity(variant) <= 0"
+                      :aria-label="`Số lượng ${variant.variant_name}`"
+                      @change="onVariantQuantityChange(variant, $event)"
+                    />
+                    <button
+                      type="button"
+                      :disabled="getVariantQuantity(variant) >= variantMaxQuantity(variant)"
+                      aria-label="Tăng số lượng"
+                      @click="setVariantQuantity(variant, getVariantQuantity(variant) + 1)"
+                    >+</button>
+                  </div>
+                  <button
+                    type="button"
+                    class="pd-btn pd-btn--primary pd-btn--inline"
+                    :disabled="variantMaxQuantity(variant) <= 0 || cartAddingVariantId !== null"
+                    @click="addVariantToCart(variant)"
+                  >
+                    {{ cartAddingVariantId === variant.id ? 'Đang thêm...' : 'Thêm vào giỏ' }}
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
 
-          <!-- Khách chưa đăng nhập: không có khu vực mua hàng, chỉ có gợi ý đăng nhập. -->
-          <p v-else class="pd-login-hint">
+          <!-- Khách chưa đăng nhập: không có nút mua hàng, chỉ có gợi ý đăng nhập. -->
+          <p v-if="!loggedIn" class="pd-login-hint">
             <RouterLink :to="{ name: 'login' }" @click.capture="saveReturnUrl(route.fullPath)">
               Đăng nhập
             </RouterLink> để mua hàng và bình luận.
@@ -749,27 +829,6 @@ watch(
   color: #dc3545;
 }
 
-.pd-purchase {
-  display: grid;
-  gap: 16px;
-  padding: 24px 16px 16px;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  background: #f8f9fa;
-}
-
-.pd-quantity-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.pd-quantity-label {
-  font-size: 14px;
-  font-weight: 600;
-}
-
 .pd-stepper {
   display: flex;
   overflow: hidden;
@@ -796,19 +855,94 @@ watch(
   cursor: not-allowed;
 }
 
-.pd-stepper-value {
-  display: grid;
-  width: 48px;
-  place-items: center;
+.pd-stepper-input {
+  width: 56px;
+  padding: 0;
+  border: 0;
   border-right: 1px solid #dee2e6;
   border-left: 1px solid #dee2e6;
+  border-radius: 0;
+  color: #212529;
   font-size: 15px;
   font-weight: 600;
+  text-align: center;
+  -moz-appearance: textfield;
 }
 
-.pd-purchase-actions {
+.pd-stepper-input::-webkit-outer-spin-button,
+.pd-stepper-input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.pd-stepper-input:focus {
+  outline: none;
+  background: #f8f9fa;
+}
+
+.pd-stepper-input:disabled {
+  background: #e9ecef;
+  color: #adb5bd;
+}
+
+.pd-variants {
+  margin-top: 20px;
+}
+
+.pd-variant-list {
   display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pd-variant {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+}
+
+.pd-variant.is-out {
+  opacity: 0.6;
+}
+
+.pd-variant-info {
+  display: grid;
+  gap: 4px;
+}
+
+.pd-variant-attrs,
+.pd-variant-stock {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.pd-variant-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: 8px;
+}
+
+.pd-variant-price del {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.pd-variant-actions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.pd-price-from {
+  margin-right: 6px;
+  color: #6c757d;
+  font-size: 14px;
 }
 
 .pd-btn {
@@ -1099,28 +1233,6 @@ watch(
 
   .pd-name {
     font-size: 20px;
-  }
-
-  .pd-purchase {
-    padding: 16px;
-  }
-
-  /* Mobile: hai nút mua cố định ở đáy màn hình như thiết kế 1E. */
-  .pd-purchase-actions {
-    position: fixed;
-    z-index: 900;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid #dee2e6;
-    background: #ffffff;
-  }
-
-  /* Chừa chỗ để thanh mua cố định không che nội dung cuối trang. */
-  .pd-page--has-bar {
-    padding-bottom: 72px;
   }
 
   .pd-comments-header {
