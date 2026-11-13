@@ -153,6 +153,46 @@ a {
   text-decoration: none;
 }
 
+/* Nút giỏ hàng: pill đặc màu tối, không gạch chân; badge là chấm trắng có số. */
+.site-nav-link.site-cart-link,
+.site-nav-link.site-cart-link:hover,
+.site-nav-link.site-cart-link.router-link-exact-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: #101316;
+  color: #ffffff;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.site-nav-link.site-cart-link:hover {
+  background: #2b3036;
+}
+
+.site-cart-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #101316;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.site-mobile-cart {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .site-nav-divider {
   width: 1px;
   height: 20px;

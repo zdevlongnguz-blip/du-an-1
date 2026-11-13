@@ -27,24 +27,41 @@ class Cart extends BaseModel
             return ['items' => [], 'total_amount' => '0.00'];
         }
 
+        // Ảnh lấy từ sản phẩm; giá và tồn kho lấy từ đúng biến thể trong giỏ.
         $itemsStatement = $this->pdo->prepare(
-            'SELECT `cart_items`.`id`, `cart_items`.`product_id`, `products`.`name`, '
-            . '`products`.`image`, `products`.`stock`, `cart_items`.`quantity`, '
-            . 'CASE WHEN `products`.`sale_price` IS NOT NULL AND `products`.`sale_price` > 0 '
-            . 'AND `products`.`sale_price` < `products`.`price` THEN `products`.`sale_price` '
-            . 'ELSE `products`.`price` END AS `unit_price` '
-            . 'FROM `cart_items` INNER JOIN `products` ON `products`.`id` = `cart_items`.`product_id` '
+            'SELECT `cart_items`.`id`, `cart_items`.`variant_id`, `cart_items`.`quantity`, '
+            . '`products`.`id` AS `product_id`, `products`.`name` AS `product_name`, '
+            . '`products`.`slug` AS `product_slug`, `products`.`image`, '
+            . '`product_variants`.`variant_name`, `product_variants`.`attributes`, '
+            . '`product_variants`.`final_price` AS `unit_price`, `product_variants`.`stock`, '
+            . '`product_variants`.`is_active` '
+            . 'FROM `cart_items` '
+            . 'INNER JOIN `product_variants` ON `product_variants`.`id` = `cart_items`.`variant_id` '
+            . 'INNER JOIN `products` ON `products`.`id` = `product_variants`.`product_id` '
             . 'WHERE `cart_items`.`cart_id` = :cart_id ORDER BY `cart_items`.`id` ASC'
         );
         $itemsStatement->bindValue(':cart_id', (int) $cartId, PDO::PARAM_INT);
         $itemsStatement->execute();
         $items = $itemsStatement->fetchAll(PDO::FETCH_ASSOC);
 
+        // Chỉ tính tiền các dòng còn bán và còn hàng; dòng khác vẫn trả về để FE báo người dùng.
         $totalCents = 0;
         foreach ($items as &$item) {
+            $item['id'] = (int) $item['id'];
+            $item['variant_id'] = (int) $item['variant_id'];
+            $item['product_id'] = (int) $item['product_id'];
+            $item['quantity'] = (int) $item['quantity'];
+            $item['stock'] = (int) $item['stock'];
+            $item['attributes'] = json_decode((string) $item['attributes'], true) ?: [];
+            $item['is_available'] = (int) $item['is_active'] === 1 && $item['stock'] > 0;
+            unset($item['is_active']);
+
             $unitPriceCents = $this->toCents((string) $item['unit_price']);
-            $item['line_total'] = $this->fromCents($unitPriceCents * (int) $item['quantity']);
-            $totalCents += $unitPriceCents * (int) $item['quantity'];
+            $lineCents = $unitPriceCents * $item['quantity'];
+            $item['line_total'] = $this->fromCents($lineCents);
+            if ($item['is_available']) {
+                $totalCents += $lineCents;
+            }
         }
         unset($item);
 
@@ -55,58 +72,58 @@ class Cart extends BaseModel
     }
 
     /**
-     * Thêm sản phẩm vào giỏ; sản phẩm trùng được cộng số lượng.
+     * Thêm biến thể vào giỏ; biến thể trùng được cộng số lượng.
      *
      * @param int $userId ID user lấy từ JWT.
-     * @param int $productId ID sản phẩm.
+     * @param int $variantId ID biến thể sản phẩm.
      * @param int $quantity Số lượng cần thêm.
-     * @return string Kết quả: ok, not_found, out_of_stock hoặc stock_exceeded.
+     * @return string Kết quả: ok, invalid, not_found, unavailable, out_of_stock hoặc stock_exceeded.
      */
-    public function addItem(int $userId = 0, int $productId = 0, int $quantity = 1): string
+    public function addItem(int $userId = 0, int $variantId = 0, int $quantity = 1): string
     {
-        if ($userId < 1 || $productId < 1 || $quantity < 1) {
+        if ($userId < 1 || $variantId < 1 || $quantity < 1) {
             return 'invalid';
         }
 
         $this->pdo->beginTransaction();
         try {
-            $productStatement = $this->pdo->prepare(
-                'SELECT `stock` FROM `products` WHERE `id` = :product_id FOR UPDATE'
-            );
-            $productStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
-            $productStatement->execute();
-            $stock = $productStatement->fetchColumn();
+            $variant = $this->lockVariant($variantId);
 
-            if ($stock === false) {
+            if ($variant === false) {
                 $this->pdo->rollBack();
                 return 'not_found';
             }
-            if ($stock === null || (int) $stock < 1) {
+            if ((int) $variant['is_active'] !== 1) {
+                $this->pdo->rollBack();
+                return 'unavailable';
+            }
+            $stock = (int) $variant['stock'];
+            if ($stock < 1) {
                 $this->pdo->rollBack();
                 return 'out_of_stock';
             }
 
             $cartId = $this->getOrCreateCartId($userId);
             $currentStatement = $this->pdo->prepare(
-                'SELECT `quantity` FROM `cart_items` WHERE `cart_id` = :cart_id AND `product_id` = :product_id LIMIT 1'
+                'SELECT `quantity` FROM `cart_items` WHERE `cart_id` = :cart_id AND `variant_id` = :variant_id LIMIT 1'
             );
             $currentStatement->bindValue(':cart_id', $cartId, PDO::PARAM_INT);
-            $currentStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $currentStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
             $currentStatement->execute();
-            $currentQuantity = $currentStatement->fetchColumn();
+            $currentQuantity = (int) $currentStatement->fetchColumn();
 
-            if ((int) $currentQuantity + $quantity > (int) $stock) {
+            if ($currentQuantity + $quantity > $stock) {
                 $this->pdo->rollBack();
                 return 'stock_exceeded';
             }
 
             $insertStatement = $this->pdo->prepare(
-                'INSERT INTO `cart_items` (`cart_id`, `product_id`, `quantity`) '
-                . 'VALUES (:cart_id, :product_id, :quantity) '
+                'INSERT INTO `cart_items` (`cart_id`, `variant_id`, `quantity`) '
+                . 'VALUES (:cart_id, :variant_id, :quantity) '
                 . 'ON DUPLICATE KEY UPDATE `quantity` = `quantity` + VALUES(`quantity`)'
             );
             $insertStatement->bindValue(':cart_id', $cartId, PDO::PARAM_INT);
-            $insertStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $insertStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
             $insertStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
             $insertStatement->execute();
             $this->pdo->commit();
@@ -126,7 +143,7 @@ class Cart extends BaseModel
      * @param int $userId ID user lấy từ JWT.
      * @param int $itemId ID dòng hàng trong giỏ.
      * @param int $quantity Số lượng mới.
-     * @return string Kết quả: ok, not_found hoặc stock_exceeded.
+     * @return string Kết quả: ok, invalid, not_found, unavailable hoặc stock_exceeded.
      */
     public function updateItem(int $userId = 0, int $itemId = 0, int $quantity = 1): string
     {
@@ -137,22 +154,27 @@ class Cart extends BaseModel
         $this->pdo->beginTransaction();
         try {
             $statement = $this->pdo->prepare(
-                'SELECT `cart_items`.`product_id`, `products`.`stock` '
+                'SELECT `cart_items`.`variant_id` '
                 . 'FROM `cart_items` '
                 . 'INNER JOIN `carts` ON `carts`.`id` = `cart_items`.`cart_id` '
-                . 'INNER JOIN `products` ON `products`.`id` = `cart_items`.`product_id` '
-                . 'WHERE `cart_items`.`id` = :item_id AND `carts`.`user_id` = :user_id FOR UPDATE'
+                . 'WHERE `cart_items`.`id` = :item_id AND `carts`.`user_id` = :user_id LIMIT 1'
             );
             $statement->bindValue(':item_id', $itemId, PDO::PARAM_INT);
             $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
             $statement->execute();
-            $item = $statement->fetch(PDO::FETCH_ASSOC);
+            $variantId = $statement->fetchColumn();
 
-            if ($item === false) {
+            if ($variantId === false) {
                 $this->pdo->rollBack();
                 return 'not_found';
             }
-            if ($item['stock'] === null || $quantity > (int) $item['stock']) {
+
+            $variant = $this->lockVariant((int) $variantId);
+            if ((int) $variant['is_active'] !== 1) {
+                $this->pdo->rollBack();
+                return 'unavailable';
+            }
+            if ($quantity > (int) $variant['stock']) {
                 $this->pdo->rollBack();
                 return 'stock_exceeded';
             }
@@ -197,6 +219,23 @@ class Cart extends BaseModel
         $statement->execute();
 
         return $statement->rowCount() === 1;
+    }
+
+    /**
+     * Khóa dòng biến thể để kiểm tra tồn kho và trạng thái bán trong cùng transaction.
+     *
+     * @param int $variantId ID biến thể sản phẩm.
+     * @return array|false Dòng biến thể, hoặc false nếu không tồn tại.
+     */
+    private function lockVariant(int $variantId = 0): array|false
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT `id`, `stock`, `is_active` FROM `product_variants` WHERE `id` = :variant_id FOR UPDATE'
+        );
+        $statement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return $statement->fetch(PDO::FETCH_ASSOC);
     }
 
     /**

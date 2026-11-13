@@ -6,6 +6,7 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import api from '@/helpers/api/client'
 import { getUser, isAuthenticated } from '@/helpers/auth/session'
+import { refreshCartCount } from '@/helpers/cart/cartCount'
 import { useToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
@@ -317,6 +318,7 @@ async function addVariantToCart(variant) {
       quantity: quantityToAdd,
     })
     showToast(response.data?.message || 'Đã thêm sản phẩm vào giỏ hàng.', 'success')
+    refreshCartCount()
   } catch (error) {
     showToast(error.response?.data?.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'danger')
   } finally {
