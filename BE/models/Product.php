@@ -24,9 +24,10 @@ class Product extends BaseModel
 
         $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
 
-        $sql = "SELECT `products`.*, `categories`.`name` AS `category_name`
-                FROM `products`
+        $sql = "SELECT `products`.*, `products`.`total_stock` AS `stock`, `dv`.`price`, `dv`.`sale_price`, `categories`.`name` AS `category_name`
+                FROM `v_product_catalog` AS `products`
                 LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
+                LEFT JOIN `product_variants` AS `dv` ON `dv`.`product_id` = `products`.`id` AND `dv`.`is_default` = 1 AND `dv`.`is_active` = 1
                 {$whereSql}
                 ORDER BY `products`.`id` DESC
                 LIMIT :limit OFFSET :offset";
@@ -41,7 +42,7 @@ class Product extends BaseModel
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $countSql = "SELECT COUNT(*) AS total_items
-                     FROM `products`
+                     FROM `v_product_catalog` AS `products`
                      LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
                      {$whereSql}";
         $countStmt = $this->pdo->prepare($countSql);
@@ -80,9 +81,11 @@ class Product extends BaseModel
         ];
         $sortColumn = $sortColumns[$sortBy] ?? $sortColumns['sales'];
 
-        $sql = "SELECT `products`.*, `categories`.`name` AS `category_name`
-                FROM `products`
+        // Dùng cùng nguồn và cùng cột với danh sách sản phẩm (view + biến thể mặc định) để FE nhận đủ giá và tồn kho.
+        $sql = "SELECT `products`.*, `products`.`total_stock` AS `stock`, `dv`.`price`, `dv`.`sale_price`, `categories`.`name` AS `category_name`
+                FROM `v_product_catalog` AS `products`
                 LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
+                LEFT JOIN `product_variants` AS `dv` ON `dv`.`product_id` = `products`.`id` AND `dv`.`is_default` = 1 AND `dv`.`is_active` = 1
                 ORDER BY {$sortColumn} DESC, `products`.`id` DESC
                 LIMIT 5";
 

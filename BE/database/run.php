@@ -1,5 +1,6 @@
 <?php
 // Chạy các migration theo thứ tự tên file; seeder chỉ chạy khi truyền --seed.
+// Truyền --verify để kiểm tra toàn vẹn dữ liệu sau khi chạy (thoát mã 2 nếu có vi phạm).
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -129,6 +130,48 @@ function executeSqlFile(PDO $pdo, string $filePath): void
     }
 }
 
+/**
+ * Kiểm tra các quy tắc toàn vẹn mà khóa ngoại/CHECK không ép được bằng khai báo.
+ * Mỗi truy vấn trả về các dòng VI PHẠM; không có dòng nào nghĩa là đạt.
+ *
+ * @param PDO $pdo Kết nối đến cơ sở dữ liệu.
+ * @return int Tổng số dòng vi phạm.
+ */
+function verifyIntegrity(PDO $pdo): int
+{
+    $checks = [
+        'Sản phẩm chưa có biến thể nào' =>
+            'SELECT `p`.`id`, `p`.`code` FROM `products` AS `p` '
+            . 'WHERE NOT EXISTS (SELECT 1 FROM `product_variants` AS `v` WHERE `v`.`product_id` = `p`.`id`)',
+        'Sản phẩm chưa có biến thể mặc định' =>
+            'SELECT `p`.`id`, `p`.`code` FROM `products` AS `p` '
+            . 'WHERE NOT EXISTS (SELECT 1 FROM `product_variants` AS `v` WHERE `v`.`product_id` = `p`.`id` AND `v`.`is_default` = 1)',
+        'Dòng đơn hàng còn sản phẩm nhưng thiếu biến thể' =>
+            'SELECT `id`, `order_id`, `product_id` FROM `order_details` '
+            . 'WHERE `product_id` IS NOT NULL AND `variant_id` IS NULL',
+        'Dòng đơn hàng có biến thể nhưng thiếu snapshot SKU' =>
+            'SELECT `id`, `order_id`, `variant_id` FROM `order_details` '
+            . 'WHERE `variant_id` IS NOT NULL AND (`variant_sku` IS NULL OR `variant_sku` = \'\')',
+    ];
+
+    $violations = 0;
+    foreach ($checks as $label => $query) {
+        $rows = $pdo->query($query)->fetchAll(PDO::FETCH_ASSOC);
+        if (count($rows) === 0) {
+            echo '[ĐẠT] ' . $label . PHP_EOL;
+            continue;
+        }
+
+        $violations += count($rows);
+        echo '[LỖI] ' . $label . ': ' . count($rows) . ' dòng vi phạm' . PHP_EOL;
+        foreach (array_slice($rows, 0, 10) as $row) {
+            echo '       ' . json_encode($row, JSON_UNESCAPED_UNICODE) . PHP_EOL;
+        }
+    }
+
+    return $violations;
+}
+
 try {
     $dsn = 'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';charset=utf8mb4';
     $pdo = new PDO($dsn, DB_USERNAME, DB_PASSWORD, DB_OPTIONS);
@@ -174,6 +217,12 @@ try {
             echo 'Đã chạy seeder: ' . basename($seedFile) . PHP_EOL;
         }
     }
+
+    if (in_array('--verify', $argv ?? [], true)) {
+        if (verifyIntegrity($pdo) > 0) {
+            exit(2);
+        }
+    }
 } catch (Throwable $exception) {
     fwrite(STDERR, 'Lỗi chạy database: ' . $exception->getMessage() . PHP_EOL);
     exit(1);
@@ -181,3 +230,4 @@ try {
 
 // & 'C:\laragon\bin\php\php-8.1.10-Win32-vs16-x64\php.exe' BE/database/run.php
 // & 'C:\laragon\bin\php\php-8.1.10-Win32-vs16-x64\php.exe' BE/database/run.php --seed
+// & 'C:\laragon\bin\php\php-8.1.10-Win32-vs16-x64\php.exe' BE/database/run.php --seed --verify
