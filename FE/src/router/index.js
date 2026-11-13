@@ -13,6 +13,7 @@ import ResetPasswordView from '../views/auth/ResetPassword.vue'
 import PaymentDemoView from '../views/PaymentDemo.vue'
 import PaymentResultView from '../views/PaymentResult.vue'
 import CheckoutView from '../views/CheckoutView.vue'
+import CartView from '../views/cart/CartView.vue'
 
 const routes = [
   {
@@ -82,6 +83,13 @@ const routes = [
     path: "/payment",
     name: "payment-demo",
     component: PaymentDemoView,
+    meta: { requiresAuth: true },
+  },
+  // Trang giỏ hàng để user xem, đổi số lượng và xóa từng phiên bản sản phẩm.
+  {
+    path: "/cart",
+    name: "cart",
+    component: CartView,
     meta: { requiresAuth: true },
   },
   // Checkout đọc giỏ hàng của user và cho chọn COD hoặc thanh toán online sandbox.

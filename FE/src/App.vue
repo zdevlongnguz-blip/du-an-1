@@ -2,6 +2,7 @@
 import { RouterView, useRoute } from 'vue-router'
 import { onMounted, ref, watch } from 'vue'
 import { isAuthenticated } from '@/helpers/auth/session'
+import { cartCount, refreshCartCount } from '@/helpers/cart/cartCount'
 import { useToast } from '@/helpers/ui/toast'
 
 const checkAuth = ref(isAuthenticated())
@@ -11,10 +12,11 @@ const route = useRoute()
 const { toast, showToast, dismissToast } = useToast()
 const currentYear = new Date().getFullYear()
 
-// Đồng bộ trạng thái đăng nhập để menu cập nhật sau login hoặc logout.
+// Đồng bộ trạng thái đăng nhập và số lượng giỏ để menu cập nhật sau login, logout hoặc chuyển trang.
 watch(() => route.fullPath, () => {
   checkAuth.value = isAuthenticated()
   menuOpen.value = false
+  refreshCartCount()
 })
 
 // Dùng toast hệ thống cho lời chào; giữ lại thông báo khác nếu route đã tạo trước đó.
@@ -22,6 +24,7 @@ onMounted(() => {
   if (!toast.value) {
     showToast('Chào mừng đến với FuLe BaberShop.', 'info')
   }
+  refreshCartCount()
 })
 </script>
 
@@ -57,6 +60,16 @@ onMounted(() => {
               <span class="site-nav-divider" aria-hidden="true"></span>
               <router-link class="site-nav-link" to="/register" :aria-current="route.path === '/register' ? 'page' : undefined">Register</router-link>
             </template>
+            <router-link
+              v-if="checkAuth"
+              class="site-nav-link site-cart-link"
+              to="/cart"
+              :aria-current="route.path === '/cart' ? 'page' : undefined"
+              :aria-label="`Giỏ hàng, ${cartCount} sản phẩm`"
+            >
+              <span>Giỏ hàng</span>
+              <span v-if="cartCount > 0" class="site-cart-count" aria-hidden="true">{{ cartCount }}</span>
+            </router-link>
             <router-link
               class="site-account-button"
               :to="checkAuth ? '/profile' : '/login'"
@@ -110,6 +123,15 @@ onMounted(() => {
               </template>
               <router-link
                 v-else
+                class="site-mobile-link site-mobile-cart"
+                to="/cart"
+                :aria-current="route.path === '/cart' ? 'page' : undefined"
+              >
+                <span>Giỏ hàng</span>
+                <span v-if="cartCount > 0" class="site-cart-count" aria-hidden="true">{{ cartCount }}</span>
+              </router-link>
+              <router-link
+                v-if="checkAuth"
                 class="site-mobile-link"
                 to="/profile"
                 :aria-current="['/profile', '/change-password'].includes(route.path) ? 'page' : undefined"

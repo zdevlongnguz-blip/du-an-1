@@ -28,8 +28,8 @@ class CartController
     }
 
     /**
-     * Thêm sản phẩm vào giỏ; quantity mặc định là 1 nếu không gửi.
-     * Sai dữ liệu trả 400/422, không có sản phẩm trả 404, thiếu hàng trả 409.
+     * Thêm biến thể vào giỏ; quantity mặc định là 1 nếu không gửi.
+     * Sai dữ liệu trả 422, không có biến thể trả 404, ngừng bán/thiếu hàng trả 409.
      *
      * @param array $authPayload Payload JWT từ middleware.
      * @return void
@@ -46,15 +46,18 @@ class CartController
             response_json(['status' => 'error', 'message' => 'Dữ liệu giỏ hàng không hợp lệ'], 400);
         }
 
-        $productId = filter_var($input['product_id'] ?? null, FILTER_VALIDATE_INT);
+        $variantId = filter_var($input['variant_id'] ?? null, FILTER_VALIDATE_INT);
         $quantity = filter_var($input['quantity'] ?? 1, FILTER_VALIDATE_INT);
-        if ($productId === false || $productId < 1 || $quantity === false || $quantity < 1) {
-            response_json(['status' => 'error', 'message' => 'ID sản phẩm hoặc số lượng không hợp lệ'], 422);
+        if ($variantId === false || $variantId < 1 || $quantity === false || $quantity < 1) {
+            response_json(['status' => 'error', 'message' => 'ID biến thể hoặc số lượng không hợp lệ'], 422);
         }
 
-        $result = $this->cart->addItem($userId, $productId, $quantity);
+        $result = $this->cart->addItem($userId, $variantId, $quantity);
         if ($result === 'not_found') {
-            response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy phiên bản sản phẩm'], 404);
+        }
+        if ($result === 'unavailable') {
+            response_json(['status' => 'error', 'message' => 'Phiên bản sản phẩm đã ngừng bán'], 409);
         }
         if ($result === 'out_of_stock' || $result === 'stock_exceeded') {
             response_json(['status' => 'error', 'message' => 'Số lượng vượt quá tồn kho'], 409);
@@ -99,8 +102,14 @@ class CartController
         if ($result === 'not_found') {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm trong giỏ'], 404);
         }
+        if ($result === 'unavailable') {
+            response_json(['status' => 'error', 'message' => 'Phiên bản sản phẩm đã ngừng bán'], 409);
+        }
         if ($result === 'stock_exceeded') {
             response_json(['status' => 'error', 'message' => 'Số lượng vượt quá tồn kho'], 409);
+        }
+        if ($result !== 'ok') {
+            response_json(['status' => 'error', 'message' => 'Dữ liệu giỏ hàng không hợp lệ'], 422);
         }
 
         response_json([
