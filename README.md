@@ -113,6 +113,7 @@ Mở `BE/.env` và điền các giá trị cần thiết:
 | --- | --- | --- |
 | Database | `DB_USERNAME`, `DB_PASSWORD` | Laragon mặc định: `root` và mật khẩu trống |
 | Bảo mật | `JWT_SECRET` | Chuỗi bí mật ngẫu nhiên, bắt buộc |
+| URL công khai | `APP_URL`, `FRONTEND_URL` | Không bắt buộc. `APP_URL=https://ten-mien` dùng khi deploy hoặc chia sẻ ngrok để link trong email đúng domain; `FRONTEND_URL` chỉ cần khi FE ở origin khác BE |
 | Email | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_ENCRYPTION` | Dùng gửi email xác thực và đặt lại mật khẩu |
 | SePay | `SEPAY_ENVIRONMENT`, `SEPAY_MERCHANT_ID`, `SEPAY_SECRET_KEY`, `SEPAY_IPN_SECRET`, `SEPAY_SUCCESS_URL`, `SEPAY_ERROR_URL`, `SEPAY_CANCEL_URL` | Dùng khóa sandbox khi phát triển; `SEPAY_IPN_SECRET` là secret riêng để xác thực IPN |
 
@@ -162,7 +163,7 @@ http://localhost:5173
 
 Cổng 5173 là cổng mặc định của Vite. Nếu cổng đang bị chiếm, Vite sẽ tự chuyển sang cổng khác; dùng `npm run dev -- --strictPort` để báo lỗi thay vì đổi cổng. Chi tiết biến môi trường xem mục [Cấu hình môi trường frontend](#cấu-hình-môi-trường-frontend).
 
-Email đặt lại mật khẩu mở frontend qua `FRONTEND_URL`. Mặc định là `http://localhost:5173`; khi deploy, cấu hình biến môi trường `FRONTEND_URL` thành URL frontend thực tế.
+Email xác minh và đặt lại mật khẩu tạo link từ `APP_URL` trong `BE/.env` (nếu trống thì suy ra từ request). Trang đặt lại mật khẩu mở frontend qua `FRONTEND_URL`: mặc định là `http://localhost:5173`, tự lấy theo `APP_URL` khi có, hoặc đặt riêng `FRONTEND_URL` trong `BE/.env`. Khi deploy hoặc chia sẻ qua ngrok, xem mục [Deploy](#deploy) và [Chia sẻ qua ngrok](#chia-sẻ-qua-ngrok).
 
 #### Lệnh npm (chạy trong thư mục `FE`)
 
@@ -238,6 +239,24 @@ Các trường hợp khác:
 - **BE ở domain khác:** đặt `VITE_API_BASE_URL=https://api.example.com` trong `FE/.env.production` (hoặc `FE/.env.local`) và bật CORS ở BE.
 - **Web root trỏ thẳng vào `BE/public/dist`:** dùng `FE/public/.htaccess` (được Vite copy vào dist) để fallback route; BE phải được phục vụ riêng và `VITE_API_BASE_URL` trỏ tới đó.
 
+Khi deploy, đặt `APP_URL=https://ten-mien` trong `BE/.env` để link trong email xác minh/đặt lại mật khẩu trỏ đúng domain, và cập nhật `SEPAY_SUCCESS_URL`, `SEPAY_ERROR_URL`, `SEPAY_CANCEL_URL` (nếu có khai báo) theo domain đó.
+
+### Chia sẻ qua ngrok
+
+Tunnel vào Apache và giữ host `du-an-1.test` để vhost của Laragon nhận đúng dự án:
+
+```bash
+ngrok http 80 --host-header=du-an-1.test
+```
+
+Vì `--host-header` ghi đè Host, BE không biết domain công khai nên link trong email sẽ trỏ về `du-an-1.test`. Trước khi test đăng ký, quên mật khẩu hoặc thanh toán, thêm vào `BE/.env` (thay bằng URL ngrok đang chạy):
+
+```text
+APP_URL=https://ten-cua-ban.ngrok-free.dev
+```
+
+Với `APP_URL`, `FRONTEND_URL` tự dùng cùng origin. Trong `BE/.env`, các dòng `SEPAY_SUCCESS_URL`, `SEPAY_ERROR_URL`, `SEPAY_CANCEL_URL` nếu đang trỏ `http://localhost:5173` thì cần đổi sang `https://ten-cua-ban.ngrok-free.dev/payment/success` (và `/error`, `/cancel`), hoặc xóa để dùng giá trị mặc định. Xóa `APP_URL` khi không chia sẻ nữa để email về lại link local. Link ngrok miễn phí hiện trang cảnh báo ở lần truy cập đầu tiên; người nhận chỉ cần bấm "Visit Site".
+
 ## API backend
 
 BE dùng một điểm vào duy nhất `BE/index.php`; endpoint được chọn bằng tham số `?action=`, ví dụ:
@@ -278,6 +297,7 @@ Các endpoint đánh dấu "đăng nhập" cần header `Authorization: Bearer <
 | Lỗi "Thiếu DB_USERNAME, DB_PASSWORD hoặc JWT_SECRET" | Chưa tạo `BE/.env` từ `BE/.env.example` hoặc thiếu biến |
 | Lỗi thiếu class PHPMailer hoặc SePay | Chưa chạy `composer install` ở thư mục gốc |
 | Ảnh sản phẩm báo 404 | Tên ảnh trong database không có file tương ứng trong `BE/assets/uploads` |
+| Qua ngrok, link trong email trỏ về `du-an-1.test` hoặc `localhost:5173` | Chưa đặt `APP_URL` (và các `SEPAY_*_URL`) theo URL ngrok trong `BE/.env`; xem [Chia sẻ qua ngrok](#chia-sẻ-qua-ngrok) |
 
 ## Tài liệu liên quan
 

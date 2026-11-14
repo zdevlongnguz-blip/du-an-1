@@ -142,7 +142,13 @@ onMounted(() => {
       </p>
 
       <!-- Mỗi sản phẩm dùng chung card top 5 với thứ hạng và chỉ số hiện tại. -->
-      <div v-else class="top-products-grid" :aria-busy="isLoadingTopProducts">
+      <!-- data-count để CSS chọn bố cục bất đối xứng theo số sản phẩm, tránh ô bị lẻ khi không đủ 5. -->
+      <div
+        v-else
+        class="top-products-grid"
+        :data-count="topProducts.length"
+        :aria-busy="isLoadingTopProducts"
+      >
         <ProductCardTop5
           v-for="(product, index) in topProducts"
           :key="product.id"
@@ -296,18 +302,19 @@ onMounted(() => {
     grid-template-rows: auto;
   }
 
-  .top-products-grid > :first-child {
+  /* Số ô lẻ thì ô đầu chiếm cả hàng để hai cột còn lại luôn đủ cặp. */
+  .top-products-grid[data-count="1"] > :first-child,
+  .top-products-grid[data-count="3"] > :first-child,
+  .top-products-grid[data-count="5"] > :first-child {
     grid-column: 1 / -1;
   }
 }
 
 @media (min-width: 992px) {
+  /* Lưới bất đối xứng 12 cột: ô hạng 1 nổi bật bên trái, bố cục khép kín theo số sản phẩm. */
   .top-products-grid {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows:
-      minmax(clamp(280px, 28vw, 340px), auto)
-      minmax(clamp(280px, 28vw, 340px), auto)
-      minmax(clamp(210px, 22vw, 270px), auto);
+    grid-template-rows: repeat(2, minmax(clamp(280px, 28vw, 340px), auto));
   }
 
   .top-products-grid > :nth-child(1) {
@@ -325,14 +332,61 @@ onMounted(() => {
     grid-row: 2;
   }
 
-  .top-products-grid > :nth-child(4) {
+  /* 5 sản phẩm: hàng thứ ba gồm ô 4 hẹp và ô 5 rộng. */
+  .top-products-grid[data-count="5"] {
+    grid-template-rows:
+      minmax(clamp(280px, 28vw, 340px), auto)
+      minmax(clamp(280px, 28vw, 340px), auto)
+      minmax(clamp(210px, 22vw, 270px), auto);
+  }
+
+  .top-products-grid[data-count="5"] > :nth-child(4) {
     grid-column: 1 / span 4;
     grid-row: 3;
   }
 
-  .top-products-grid > :nth-child(5) {
+  .top-products-grid[data-count="5"] > :nth-child(5) {
     grid-column: 5 / span 8;
     grid-row: 3;
+  }
+
+  /* 4 sản phẩm: hai hàng so le 7/5 rồi 5/7, không còn ô lẻ. */
+  .top-products-grid[data-count="4"] > :nth-child(1) {
+    grid-column: 1 / span 7;
+    grid-row: 1;
+  }
+
+  .top-products-grid[data-count="4"] > :nth-child(2) {
+    grid-column: 8 / span 5;
+    grid-row: 1;
+  }
+
+  .top-products-grid[data-count="4"] > :nth-child(3) {
+    grid-column: 1 / span 5;
+    grid-row: 2;
+  }
+
+  .top-products-grid[data-count="4"] > :nth-child(4) {
+    grid-column: 6 / span 7;
+    grid-row: 2;
+  }
+
+  .top-products-grid[data-count="2"] {
+    grid-template-rows: minmax(clamp(280px, 28vw, 340px), auto);
+  }
+
+  .top-products-grid[data-count="2"] > :nth-child(1) {
+    grid-row: 1;
+  }
+
+  .top-products-grid[data-count="1"] {
+    grid-template-columns: minmax(0, 420px);
+    grid-template-rows: auto;
+  }
+
+  .top-products-grid[data-count="1"] > :nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
   }
 }
 

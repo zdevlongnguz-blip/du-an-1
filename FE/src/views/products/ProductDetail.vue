@@ -54,8 +54,8 @@ const commentDeletingId = ref(null)
 
 // Số lượng nhập riêng cho từng biến thể, key là id biến thể.
 const variantQuantities = ref({})
-// Biến thể đang gửi thêm giỏ; null khi không có request nào đang chạy.
-const cartAddingVariantId = ref(null)
+// Các biến thể đang gửi thêm giỏ; mỗi nút chỉ khóa theo đúng biến thể của nó.
+const cartAddingVariantIds = ref(new Set())
 
 // Chỉ dùng để chọn giao diện; BE vẫn xác minh JWT và quyền sở hữu.
 const loggedIn = isAuthenticated()
@@ -301,16 +301,27 @@ async function deleteComment(comment) {
   }
 }
 
+function isVariantAdding(variant) {
+  return cartAddingVariantIds.value.has(variant.id)
+}
+
+function setVariantAdding(variant, adding) {
+  const next = new Set(cartAddingVariantIds.value)
+  if (adding) next.add(variant.id)
+  else next.delete(variant.id)
+  cartAddingVariantIds.value = next
+}
+
 // Thêm đúng biến thể và số lượng đã chọn của biến thể đó vào giỏ.
 async function addVariantToCart(variant) {
-  if (!loggedIn || cartAddingVariantId.value !== null) return
+  if (!loggedIn || isVariantAdding(variant)) return
   const quantityToAdd = getVariantQuantity(variant)
   if (quantityToAdd < 1 || quantityToAdd > variantMaxQuantity(variant)) {
     showToast('Phiên bản này đã hết hàng hoặc số lượng không hợp lệ.', 'warning')
     return
   }
 
-  cartAddingVariantId.value = variant.id
+  setVariantAdding(variant, true)
   try {
     const response = await api.post('/?action=api-cart-add', {
       product_id: product.value.id,
@@ -322,7 +333,7 @@ async function addVariantToCart(variant) {
   } catch (error) {
     showToast(error.response?.data?.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'danger')
   } finally {
-    cartAddingVariantId.value = null
+    setVariantAdding(variant, false)
   }
 }
 
@@ -485,10 +496,10 @@ watch(
                   <button
                     type="button"
                     class="pd-btn pd-btn--primary pd-btn--inline"
-                    :disabled="variantMaxQuantity(variant) <= 0 || cartAddingVariantId !== null"
+                    :disabled="variantMaxQuantity(variant) <= 0 || isVariantAdding(variant)"
                     @click="addVariantToCart(variant)"
                   >
-                    {{ cartAddingVariantId === variant.id ? 'Đang thêm...' : 'Thêm vào giỏ' }}
+                    {{ isVariantAdding(variant) ? 'Đang thêm...' : 'Thêm vào giỏ' }}
                   </button>
                 </div>
               </li>
