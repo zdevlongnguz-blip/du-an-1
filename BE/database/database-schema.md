@@ -176,7 +176,7 @@ UNIQUE `(cart_id, variant_id)`: mỗi biến thể chỉ có 1 dòng trong 1 gi�
 | unit_price | DECIMAL(10,2) | NOT NULL, >= 0 | Snapshot đơn giá thực tế lúc mua |
 | created_at / updated_at | TIMESTAMP | NOT NULL | Thời điểm tạo / sửa |
 
-Khóa ngoại kép `(variant_id, product_id)` → `product_variants(id, product_id)` bảo đảm biến thể thuộc đúng sản phẩm của dòng đơn. Khi sản phẩm hoặc biến thể bị xóa, `variant_id` và `product_id` về NULL nhưng dòng đơn vẫn còn, đọc tên/SKU/giá từ các cột snapshot.
+Khóa ngoại kép `(variant_id, product_id)` → `product_variants(id, product_id)` bảo đảm biến thể thuộc đúng sản phẩm của dòng đơn. Khóa ngoại đơn `variant_id` → `product_variants(id)` (`ON DELETE SET NULL`, migration `20261114_01`) bảo đảm `variant_id` về NULL ngay cả khi `product_id` đã NULL trước (xóa sản phẩm): khóa kép chỉ có hiệu lực khi cả hai cột khác NULL nên một mình nó không đủ. Khi sản phẩm hoặc biến thể bị xóa, `variant_id` và `product_id` về NULL nhưng dòng đơn vẫn còn, đọc tên/SKU/giá từ các cột snapshot.
 
 ### 2.5 View `v_product_catalog` (cho trang danh sách)
 
