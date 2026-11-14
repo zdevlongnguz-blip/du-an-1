@@ -227,10 +227,13 @@ class ProductController{
 
         $input = $this->getAdminInput();
         $data = $this->validateAdminProduct($input, false);
-        $effectivePrice = (float) ($data['price'] ?? $currentProduct['price']);
+        // Giá nằm ở biến thể mặc định, không còn ở bảng products. Lấy giá hiện tại từ đó
+        // để kiểm tra giá giảm < giá gốc khi request chỉ gửi một trong hai trường.
+        $currentPricing = $this->product->getDefaultVariantPricing($productId) ?? ['price' => 0, 'sale_price' => null];
+        $effectivePrice = (float) ($data['price'] ?? $currentPricing['price']);
         $effectiveSalePrice = array_key_exists('sale_price', $data)
             ? $data['sale_price']
-            : $currentProduct['sale_price'];
+            : $currentPricing['sale_price'];
         if ($effectiveSalePrice !== null && (float) $effectiveSalePrice >= $effectivePrice) {
             response_json(['status' => 'error', 'message' => 'Giá khuyến mãi phải thấp hơn giá gốc'], 422);
         }

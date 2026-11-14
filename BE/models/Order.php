@@ -5,7 +5,9 @@ class Order extends BaseModel
     protected $table = 'orders';
 
     /**
-    * Tạo đơn từ giỏ, chụp giá/tên, trừ tồn kho và cộng sales_count đồng thời.
+     * Tạo đơn từ giỏ: chụp snapshot (tên, SKU, tên biến thể, giá), trừ tồn kho của
+     * từng biến thể và cộng sales_count của sản phẩm, tất cả trong một transaction.
+     * Transaction: nhóm nhiều câu SQL thành một khối, lỗi ở đâu thì hoàn tác toàn bộ.
      *
      * @param int $userId ID user lấy từ JWT.
      * @param string $recipientName Tên người nhận.
@@ -37,11 +39,19 @@ class Order extends BaseModel
                 return ['status' => 'empty_cart'];
             }
 
+            // Giá và tồn kho nằm ở product_variants; products chỉ cho tên và id sản phẩm.
+            // FOR UPDATE khóa các dòng này đến hết transaction để hai đơn cùng lúc không đặt trùng hàng.
+            // Sắp xếp theo ID biến thể để mọi giao dịch khóa theo cùng thứ tự, tránh deadlock
+            // (hai giao dịch chờ nhau mãi).
             $itemsStatement = $this->pdo->prepare(
-                'SELECT `cart_items`.`product_id`, `cart_items`.`quantity`, `products`.`name`, '
-                . '`products`.`price`, `products`.`sale_price`, `products`.`stock` '
-                . 'FROM `cart_items` INNER JOIN `products` ON `products`.`id` = `cart_items`.`product_id` '
-                . 'WHERE `cart_items`.`cart_id` = :cart_id ORDER BY `cart_items`.`id` ASC FOR UPDATE'
+                'SELECT `cart_items`.`variant_id`, `cart_items`.`quantity`, '
+                . '`product_variants`.`product_id`, `product_variants`.`sku`, `product_variants`.`variant_name`, '
+                . '`product_variants`.`final_price`, `product_variants`.`stock`, `product_variants`.`is_active`, '
+                . '`products`.`name` '
+                . 'FROM `cart_items` '
+                . 'INNER JOIN `product_variants` ON `product_variants`.`id` = `cart_items`.`variant_id` '
+                . 'INNER JOIN `products` ON `products`.`id` = `product_variants`.`product_id` '
+                . 'WHERE `cart_items`.`cart_id` = :cart_id ORDER BY `cart_items`.`variant_id` ASC FOR UPDATE'
             );
             $itemsStatement->bindValue(':cart_id', (int) $cartId, PDO::PARAM_INT);
             $itemsStatement->execute();
@@ -56,18 +66,14 @@ class Order extends BaseModel
             foreach ($items as &$item) {
                 $quantity = (int) $item['quantity'];
                 $stock = (int) ($item['stock'] ?? 0);
-                if ($quantity < 1 || $stock < $quantity) {
+                // Biến thể ngừng bán hoặc không đủ hàng thì không cho đặt.
+                if ($quantity < 1 || (int) $item['is_active'] !== 1 || $stock < $quantity) {
                     $this->pdo->rollBack();
                     return ['status' => 'stock_unavailable'];
                 }
 
-                $unitPrice = (string) $item['price'];
-                if ($item['sale_price'] !== null
-                    && (float) $item['sale_price'] > 0
-                    && (float) $item['sale_price'] < (float) $item['price']) {
-                    $unitPrice = (string) $item['sale_price'];
-                }
-
+                // final_price là giá thực tế (giá giảm nếu có, không thì giá gốc) do DB tự tính.
+                $unitPrice = (string) $item['final_price'];
                 $item['unit_price'] = $unitPrice;
                 $totalCents += $this->toCents($unitPrice) * $quantity;
             }
@@ -89,34 +95,48 @@ class Order extends BaseModel
 
             $detailStatement = $this->pdo->prepare(
                 'INSERT INTO `order_details` '
-                . '(`order_id`, `product_id`, `product_name`, `quantity`, `unit_price`) '
-                . 'VALUES (:order_id, :product_id, :product_name, :quantity, :unit_price)'
+                . '(`order_id`, `product_id`, `variant_id`, `product_name`, `variant_sku`, `variant_label`, '
+                . '`quantity`, `unit_price`) '
+                . 'VALUES (:order_id, :product_id, :variant_id, :product_name, :variant_sku, :variant_label, '
+                . ':quantity, :unit_price)'
             );
+            // Trừ kho nguyên tử: điều kiện stock >= số lượng nằm ngay trong câu UPDATE,
+            // nên nếu có người mua trước làm hết hàng thì rowCount = 0 và ta hoàn tác đơn.
             $stockStatement = $this->pdo->prepare(
-                'UPDATE `products` SET `stock` = `stock` - :quantity, '
-                . '`sales_count` = COALESCE(`sales_count`, 0) + :sold_quantity '
-                . 'WHERE `id` = :product_id AND `stock` >= :required_quantity'
+                'UPDATE `product_variants` SET `stock` = `stock` - :quantity '
+                . 'WHERE `id` = :variant_id AND `stock` >= :required_quantity AND `is_active` = 1'
+            );
+            // sales_count là tổng lượt bán của sản phẩm (cộng dồn mọi biến thể).
+            $salesStatement = $this->pdo->prepare(
+                'UPDATE `products` SET `sales_count` = `sales_count` + :sold_quantity WHERE `id` = :product_id'
             );
 
             foreach ($items as $item) {
                 $quantity = (int) $item['quantity'];
                 $productId = (int) $item['product_id'];
+                $variantId = (int) $item['variant_id'];
                 $detailStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
                 $detailStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+                $detailStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
                 $detailStatement->bindValue(':product_name', $item['name'], PDO::PARAM_STR);
+                $detailStatement->bindValue(':variant_sku', $item['sku'], PDO::PARAM_STR);
+                $detailStatement->bindValue(':variant_label', $item['variant_name'], PDO::PARAM_STR);
                 $detailStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
                 $detailStatement->bindValue(':unit_price', $item['unit_price'], PDO::PARAM_STR);
                 $detailStatement->execute();
 
                 $stockStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
-                $stockStatement->bindValue(':sold_quantity', $quantity, PDO::PARAM_INT);
-                $stockStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+                $stockStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
                 $stockStatement->bindValue(':required_quantity', $quantity, PDO::PARAM_INT);
                 $stockStatement->execute();
                 if ($stockStatement->rowCount() !== 1) {
                     $this->pdo->rollBack();
                     return ['status' => 'stock_unavailable'];
                 }
+
+                $salesStatement->bindValue(':sold_quantity', $quantity, PDO::PARAM_INT);
+                $salesStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+                $salesStatement->execute();
             }
 
             $clearCartStatement = $this->pdo->prepare(
@@ -186,6 +206,7 @@ class Order extends BaseModel
 
     /**
      * Lấy chi tiết đơn làm dữ liệu hóa đơn; user chỉ xem đơn của mình.
+     * Mỗi dòng hàng gồm snapshot tên sản phẩm, SKU và tên biến thể lúc mua.
      *
      * @param int $orderId ID đơn hàng.
      * @param int $userId ID user lấy từ JWT.
@@ -214,7 +235,10 @@ class Order extends BaseModel
         }
 
         $detailsStatement = $this->pdo->prepare(
-            'SELECT `id`, `product_id`, `product_name`, `quantity`, `unit_price` '
+            // variant_id/variant_sku/variant_label là snapshot lúc mua, vẫn đọc được dù biến thể bị xóa sau này
+            // (variant_id khi đó là NULL). Đơn cũ chưa có biến thể thì variant_label là NULL.
+            'SELECT `id`, `product_id`, `variant_id`, `product_name`, `variant_sku`, `variant_label`, '
+            . '`quantity`, `unit_price` '
             . 'FROM `order_details` WHERE `order_id` = :order_id ORDER BY `id` ASC'
         );
         $detailsStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
@@ -232,7 +256,7 @@ class Order extends BaseModel
     }
 
     /**
-    * Hủy đơn pending chưa thanh toán, hoàn kho và trừ lại sales_count.
+     * Hủy đơn pending chưa thanh toán, hoàn kho theo biến thể và trừ lại sales_count.
      *
      * @param int $orderId ID đơn hàng.
      * @param int $userId ID user lấy từ JWT.
@@ -351,31 +375,46 @@ class Order extends BaseModel
     }
 
     /**
-    * Hoàn tồn kho và trừ sales_count theo chi tiết đơn trong transaction.
+     * Hoàn tồn kho của từng biến thể và trừ lại sales_count của sản phẩm theo chi tiết đơn.
+     * Phải gọi trong transaction đang mở của người gọi.
+     * Dòng đơn có variant_id/product_id NULL (biến thể hoặc sản phẩm đã bị xóa) thì bỏ qua
+     * phần tương ứng vì không còn dòng nào để hoàn.
      *
      * @param int $orderId ID đơn cần hoàn tồn kho.
      * @return void
      */
     private function restoreStock(int $orderId = 0): void
     {
+        // Sắp xếp theo variant_id để khóa theo thứ tự cố định, tránh deadlock giữa các giao dịch.
         $detailsStatement = $this->pdo->prepare(
-            'SELECT `product_id`, `quantity` FROM `order_details` '
-            . 'WHERE `order_id` = :order_id AND `product_id` IS NOT NULL'
+            'SELECT `product_id`, `variant_id`, `quantity` FROM `order_details` '
+            . 'WHERE `order_id` = :order_id ORDER BY `variant_id` ASC, `id` ASC'
         );
         $detailsStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
         $detailsStatement->execute();
         $details = $detailsStatement->fetchAll(PDO::FETCH_ASSOC);
 
+        // Hoàn kho không kiểm tra is_active: biến thể ngừng bán sau khi đặt vẫn phải được trả lại số hàng.
         $stockStatement = $this->pdo->prepare(
-            'UPDATE `products` SET `stock` = COALESCE(`stock`, 0) + :quantity, '
-            . '`sales_count` = GREATEST(COALESCE(`sales_count`, 0) - :sold_quantity, 0) '
+            'UPDATE `product_variants` SET `stock` = `stock` + :quantity WHERE `id` = :variant_id'
+        );
+        // GREATEST(..., 0): sales_count là số không âm (UNSIGNED), không để trừ xuống dưới 0.
+        $salesStatement = $this->pdo->prepare(
+            'UPDATE `products` SET `sales_count` = GREATEST(CAST(`sales_count` AS SIGNED) - :sold_quantity, 0) '
             . 'WHERE `id` = :product_id'
         );
         foreach ($details as $detail) {
-            $stockStatement->bindValue(':quantity', (int) $detail['quantity'], PDO::PARAM_INT);
-            $stockStatement->bindValue(':sold_quantity', (int) $detail['quantity'], PDO::PARAM_INT);
-            $stockStatement->bindValue(':product_id', (int) $detail['product_id'], PDO::PARAM_INT);
-            $stockStatement->execute();
+            $quantity = (int) $detail['quantity'];
+            if ($detail['variant_id'] !== null) {
+                $stockStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
+                $stockStatement->bindValue(':variant_id', (int) $detail['variant_id'], PDO::PARAM_INT);
+                $stockStatement->execute();
+            }
+            if ($detail['product_id'] !== null) {
+                $salesStatement->bindValue(':sold_quantity', $quantity, PDO::PARAM_INT);
+                $salesStatement->bindValue(':product_id', (int) $detail['product_id'], PDO::PARAM_INT);
+                $salesStatement->execute();
+            }
         }
     }
 

@@ -189,29 +189,75 @@ class Product extends BaseModel
     }
 
     /**
-     * Tạo sản phẩm từ dữ liệu đã được controller kiểm tra.
+     * Tạo sản phẩm kèm một biến thể mặc định trong cùng transaction.
+     * Giá, giá giảm và tồn kho không nằm ở bảng products mà ở product_variants,
+     * nên request admin vẫn gửi price/sale_price/stock và ta ghi chúng vào biến thể mặc định.
+     * Nếu bước nào lỗi (ví dụ trùng mã/slug, lỗi 1062) thì hoàn tác cả hai bảng, không để lại sản phẩm không có biến thể.
      *
-     * @param array $data Các cột sản phẩm hợp lệ.
+     * @param array $data Các cột sản phẩm hợp lệ (đã được controller kiểm tra).
      * @return int ID sản phẩm mới.
      */
     public function createAdmin(array $data = []): int
     {
-        $statement = $this->pdo->prepare(
-            'INSERT INTO `products` (`category_id`, `code`, `name`, `slug`, `price`, `sale_price`, `image`, `description`, `stock`) '
-            . 'VALUES (:category_id, :code, :name, :slug, :price, :sale_price, :image, :description, :stock)'
-        );
-        $statement->bindValue(':category_id', $data['category_id'], PDO::PARAM_INT);
-        $statement->bindValue(':code', $data['code'], PDO::PARAM_STR);
-        $statement->bindValue(':name', $data['name'], PDO::PARAM_STR);
-        $statement->bindValue(':slug', $data['slug'], PDO::PARAM_STR);
-        $statement->bindValue(':price', $data['price'], PDO::PARAM_STR);
-        $statement->bindValue(':sale_price', $data['sale_price'], $data['sale_price'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-        $statement->bindValue(':image', $data['image'], $data['image'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-        $statement->bindValue(':description', $data['description'], $data['description'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-        $statement->bindValue(':stock', $data['stock'], PDO::PARAM_INT);
-        $statement->execute();
+        $this->pdo->beginTransaction();
+        try {
+            $statement = $this->pdo->prepare(
+                'INSERT INTO `products` (`category_id`, `code`, `name`, `slug`, `image`, `description`) '
+                . 'VALUES (:category_id, :code, :name, :slug, :image, :description)'
+            );
+            $statement->bindValue(':category_id', $data['category_id'], PDO::PARAM_INT);
+            $statement->bindValue(':code', $data['code'], PDO::PARAM_STR);
+            $statement->bindValue(':name', $data['name'], PDO::PARAM_STR);
+            $statement->bindValue(':slug', $data['slug'], PDO::PARAM_STR);
+            $statement->bindValue(':image', $data['image'], $data['image'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+            $statement->bindValue(':description', $data['description'], $data['description'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+            $statement->execute();
+            $productId = (int) $this->pdo->lastInsertId();
 
-        return (int) $this->pdo->lastInsertId();
+            // SKU của biến thể mặc định lấy bằng mã sản phẩm (cùng quy ước với dữ liệu đã backfill).
+            // SKU phải duy nhất toàn hệ thống nên trùng SKU cũng trả lỗi 1062 như trùng mã.
+            $variantStatement = $this->pdo->prepare(
+                'INSERT INTO `product_variants` '
+                . '(`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`) '
+                . 'VALUES (:product_id, :sku, :variant_name, :attributes, :price, :sale_price, :stock, 1, 1)'
+            );
+            $variantStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $variantStatement->bindValue(':sku', $data['code'], PDO::PARAM_STR);
+            $variantStatement->bindValue(':variant_name', 'Mặc định', PDO::PARAM_STR);
+            $variantStatement->bindValue(':attributes', '{}', PDO::PARAM_STR);
+            $variantStatement->bindValue(':price', $data['price'], PDO::PARAM_STR);
+            $variantStatement->bindValue(':sale_price', $data['sale_price'], $data['sale_price'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+            $variantStatement->bindValue(':stock', $data['stock'], PDO::PARAM_INT);
+            $variantStatement->execute();
+
+            $this->pdo->commit();
+
+            return $productId;
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    /**
+     * Lấy giá và giá giảm hiện tại của biến thể mặc định để controller kiểm tra giá giảm < giá gốc khi sửa một phần.
+     *
+     * @param int $productId ID sản phẩm.
+     * @return array|null ['price' => ..., 'sale_price' => ...] hoặc null nếu sản phẩm không có biến thể mặc định.
+     */
+    public function getDefaultVariantPricing(int $productId = 0): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT `price`, `sale_price` FROM `product_variants` '
+            . 'WHERE `product_id` = :product_id AND `is_default` = 1 LIMIT 1'
+        );
+        $statement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $statement->execute();
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : $row;
     }
 
     /**
@@ -231,47 +277,83 @@ class Product extends BaseModel
 
     /**
      * Cập nhật các trường sản phẩm được controller cho phép.
+     * Thông tin chung (tên, mã, slug, danh mục, ảnh, mô tả) ghi vào bảng products;
+     * price, sale_price, stock ghi vào biến thể mặc định của sản phẩm. Cả hai trong cùng transaction.
+     * Tên cột lấy từ danh sách cố định bên dưới (allowlist) nên không có rủi ro SQL injection qua tên cột.
      *
      * @param int $productId ID sản phẩm cần cập nhật.
      * @param array $data Các trường thay đổi.
-     * @return bool True nếu sản phẩm tồn tại và cập nhật thành công.
+     * @return bool True nếu sản phẩm tồn tại và có trường hợp lệ để cập nhật.
      */
     public function updateAdmin(int $productId = 0, array $data = []): bool
     {
-        $columns = [
+        $productColumns = [
             'category_id' => PDO::PARAM_INT,
             'code' => PDO::PARAM_STR,
             'name' => PDO::PARAM_STR,
             'slug' => PDO::PARAM_STR,
-            'price' => PDO::PARAM_STR,
-            'sale_price' => PDO::PARAM_STR,
             'image' => PDO::PARAM_STR,
             'description' => PDO::PARAM_STR,
+        ];
+        $variantColumns = [
+            'price' => PDO::PARAM_STR,
+            'sale_price' => PDO::PARAM_STR,
             'stock' => PDO::PARAM_INT,
         ];
-        $sets = [];
+
+        $productSets = [];
+        $variantSets = [];
         foreach ($data as $column => $value) {
-            if (isset($columns[$column])) {
-                $sets[] = "`{$column}` = :{$column}";
+            if (isset($productColumns[$column])) {
+                $productSets[] = "`{$column}` = :{$column}";
+            } elseif (isset($variantColumns[$column])) {
+                $variantSets[] = "`{$column}` = :{$column}";
             }
         }
-        if ($sets === []) {
+        if (($productSets === [] && $variantSets === []) || $this->find($productId) === false) {
             return false;
         }
 
-        $statement = $this->pdo->prepare(
-            'UPDATE `products` SET ' . implode(', ', $sets) . ' WHERE `id` = :id'
-        );
-        foreach ($data as $column => $value) {
-            if (isset($columns[$column])) {
-                $type = $value === null ? PDO::PARAM_NULL : $columns[$column];
-                $statement->bindValue(':' . $column, $value, $type);
+        $this->pdo->beginTransaction();
+        try {
+            if ($productSets !== []) {
+                $statement = $this->pdo->prepare(
+                    'UPDATE `products` SET ' . implode(', ', $productSets) . ' WHERE `id` = :id'
+                );
+                foreach ($data as $column => $value) {
+                    if (isset($productColumns[$column])) {
+                        $type = $value === null ? PDO::PARAM_NULL : $productColumns[$column];
+                        $statement->bindValue(':' . $column, $value, $type);
+                    }
+                }
+                $statement->bindValue(':id', $productId, PDO::PARAM_INT);
+                $statement->execute();
             }
-        }
-        $statement->bindValue(':id', $productId, PDO::PARAM_INT);
-        $statement->execute();
 
-        return $statement->rowCount() > 0 || $this->find($productId) !== false;
+            if ($variantSets !== []) {
+                $statement = $this->pdo->prepare(
+                    'UPDATE `product_variants` SET ' . implode(', ', $variantSets)
+                    . ' WHERE `product_id` = :product_id AND `is_default` = 1'
+                );
+                foreach ($data as $column => $value) {
+                    if (isset($variantColumns[$column])) {
+                        $type = $value === null ? PDO::PARAM_NULL : $variantColumns[$column];
+                        $statement->bindValue(':' . $column, $value, $type);
+                    }
+                }
+                $statement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+                $statement->execute();
+            }
+
+            $this->pdo->commit();
+
+            return true;
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
     }
 
     /**
