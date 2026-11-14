@@ -181,8 +181,8 @@ Email xác minh và đặt lại mật khẩu tạo link từ `APP_URL` trong `B
 | `/catalog` | Danh sách sản phẩm, tìm kiếm, lọc, phân trang |
 | `/product-detail/:slug` | Chi tiết sản phẩm và bình luận |
 | `/cart`, `/checkout` | Giỏ hàng, đặt hàng (cần đăng nhập; checkout chọn COD hoặc thanh toán online sandbox) |
-| `/payment` | Trang demo tạo form thanh toán SePay (cần đăng nhập) |
-| `/payment/success`, `/payment/error`, `/payment/cancel` | Trang kết quả thanh toán, chỉ hiển thị kết quả điều hướng, không xác nhận giao dịch |
+| `/orders`, `/orders/:id` | Đơn hàng của tôi: danh sách, chi tiết/hóa đơn, thanh toán lại đơn online, hủy đơn (cần đăng nhập). `/payment` cũ tự chuyển về `/orders` |
+| `/payment/success`, `/payment/error`, `/payment/cancel` | Trang kết quả khi SePay quay về (URL có `?order=<ID đơn>`); trang success hỏi lại BE để hiển thị trạng thái thanh toán thật |
 | `/login`, `/register` | Đăng nhập, đăng ký |
 | `/forgot-password`, `/reset-password` | Quên và đặt lại mật khẩu |
 | `/profile`, `/change-password` | Hồ sơ, đổi mật khẩu (cần đăng nhập) |
@@ -255,7 +255,7 @@ Vì `--host-header` ghi đè Host, BE không biết domain công khai nên link 
 APP_URL=https://ten-cua-ban.ngrok-free.dev
 ```
 
-Với `APP_URL`, `FRONTEND_URL` tự dùng cùng origin. Trong `BE/.env`, các dòng `SEPAY_SUCCESS_URL`, `SEPAY_ERROR_URL`, `SEPAY_CANCEL_URL` nếu đang trỏ `http://localhost:5173` thì cần đổi sang `https://ten-cua-ban.ngrok-free.dev/payment/success` (và `/error`, `/cancel`), hoặc xóa để dùng giá trị mặc định. Xóa `APP_URL` khi không chia sẻ nữa để email về lại link local. Link ngrok miễn phí hiện trang cảnh báo ở lần truy cập đầu tiên; người nhận chỉ cần bấm "Visit Site".
+Với `APP_URL`, `FRONTEND_URL` tự dùng cùng origin. Trong `BE/.env`, các dòng `SEPAY_SUCCESS_URL`, `SEPAY_ERROR_URL`, `SEPAY_CANCEL_URL` nếu đang trỏ `http://localhost:5173` thì cần đổi sang `https://ten-cua-ban.ngrok-free.dev/payment/success` (và `/error`, `/cancel`), hoặc xóa để dùng giá trị mặc định (nên để trống). Thêm URL IPN trong trang quản trị SePay: `https://ten-cua-ban.ngrok-free.dev/BE/?action=api-sepay-ipn`, kiểu xác thực Secret Key và giá trị bằng `SEPAY_IPN_SECRET`. Xóa `APP_URL` khi không chia sẻ nữa để email về lại link local. Link ngrok miễn phí hiện trang cảnh báo ở lần truy cập đầu tiên; người nhận chỉ cần bấm "Visit Site".
 
 ## API backend
 
@@ -276,7 +276,8 @@ Các endpoint đánh dấu "đăng nhập" cần header `Authorization: Bearer <
 | Bình luận | `api-product-comments` | Công khai |
 | Bình luận | `api-comment-create`, `api-comment-update`, `api-comment-delete` | Đăng nhập |
 | Giỏ hàng | `api-cart`, `api-cart-add`, `api-cart-update`, `api-cart-delete` | Đăng nhập |
-| Đơn hàng | `api-order-checkout`, `api-order-payment`, `api-orders`, `api-order-invoice`, `api-order-cancel` | Đăng nhập |
+| Đơn hàng | `api-order-checkout`, `api-order-payment`, `api-order-payment-verify`, `api-orders`, `api-order-invoice`, `api-order-cancel` | Đăng nhập |
+| IPN SePay | `api-sepay-ipn` | Công khai, xác thực bằng header `X-Secret-Key` = `SEPAY_IPN_SECRET` (do SePay gọi, không dùng JWT) |
 | Quản trị đơn | `api-admin-orders`, `api-admin-order-update` | Admin |
 | Quản trị sản phẩm | `api-admin-product-create`, `api-admin-product-update`, `api-admin-product-delete`, `api-admin-product-image-create`, `api-admin-product-image-delete` | Admin |
 | Quản trị danh mục | `api-admin-category-create`, `api-admin-category-update`, `api-admin-category-delete` | Admin |
