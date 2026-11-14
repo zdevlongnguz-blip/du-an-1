@@ -35,7 +35,7 @@ onMounted(() => {
       <header class="site-header">
         <nav class="site-navigation" aria-label="Điều hướng chính">
           <router-link class="site-brand" to="/" aria-label="FuLe BaberShop, trang chủ">
-            FULE BABERSHOP
+            <span class="site-brand-name">FULE BABERSHOP</span>
           </router-link>
 
           <div class="site-nav-primary" aria-label="Điều hướng cửa hàng">
@@ -43,22 +43,22 @@ onMounted(() => {
               class="site-nav-link site-nav-home"
               to="/"
               :aria-current="route.path === '/' ? 'page' : undefined"
-            >Home</router-link>
+            >Trang chủ</router-link>
             <router-link
               class="site-nav-link site-nav-catalog"
               to="/catalog"
               :aria-current="route.path === '/catalog' ? 'page' : undefined"
-            >Catalog</router-link>
-            <span class="site-nav-placeholder">Services</span>
-            <span class="site-nav-placeholder">Barbers</span>
-            <span class="site-nav-placeholder">Book now</span>
+            >Sản phẩm</router-link>
+            <span class="site-nav-placeholder">Dịch vụ</span>
+            <span class="site-nav-placeholder">Barber</span>
+            <span class="site-nav-placeholder">Đặt lịch</span>
           </div>
 
           <div class="site-nav-account">
             <template v-if="!checkAuth">
-              <router-link class="site-nav-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined">Login</router-link>
+              <router-link class="site-nav-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined">Đăng nhập</router-link>
               <span class="site-nav-divider" aria-hidden="true"></span>
-              <router-link class="site-nav-link" to="/register" :aria-current="route.path === '/register' ? 'page' : undefined">Register</router-link>
+              <router-link class="site-nav-link" to="/register" :aria-current="route.path === '/register' ? 'page' : undefined">Đăng ký</router-link>
             </template>
             <router-link
               v-if="checkAuth"
@@ -112,20 +112,20 @@ onMounted(() => {
                 class="site-mobile-link site-mobile-home"
                 to="/"
                 :aria-current="route.path === '/' ? 'page' : undefined"
-              >Home</router-link>
+              >Trang chủ</router-link>
               <router-link
                 class="site-mobile-link site-mobile-catalog"
                 to="/catalog"
                 :aria-current="route.path === '/catalog' ? 'page' : undefined"
-              >Catalog</router-link>
-              <span class="site-mobile-link site-nav-placeholder">Services</span>
-              <span class="site-mobile-link site-nav-placeholder">Barbers</span>
-              <span class="site-mobile-link site-nav-placeholder">Book now</span>
+              >Sản phẩm</router-link>
+              <span class="site-mobile-link site-nav-placeholder">Dịch vụ</span>
+              <span class="site-mobile-link site-nav-placeholder">Barber</span>
+              <span class="site-mobile-link site-nav-placeholder">Đặt lịch</span>
             </div>
             <div class="site-mobile-account">
               <template v-if="!checkAuth">
-                <router-link class="site-mobile-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined">Login</router-link>
-                <router-link class="site-mobile-link" to="/register" :aria-current="route.path === '/register' ? 'page' : undefined">Register</router-link>
+                <router-link class="site-mobile-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined">Đăng nhập</router-link>
+                <router-link class="site-mobile-link" to="/register" :aria-current="route.path === '/register' ? 'page' : undefined">Đăng ký</router-link>
               </template>
               <router-link
                 v-else
@@ -147,7 +147,7 @@ onMounted(() => {
                 class="site-mobile-link"
                 to="/profile"
                 :aria-current="['/profile', '/change-password'].includes(route.path) ? 'page' : undefined"
-              >Profile</router-link>
+              >Hồ sơ</router-link>
             </div>
           </div>
         </div>
@@ -181,7 +181,7 @@ onMounted(() => {
     <footer class="site-footer">
       <p>
         <span>&copy; {{ currentYear }} FuLe BaberShop.</span>
-        <span>All rights reserved.</span>
+        <span>Bảo lưu mọi quyền.</span>
       </p>
     </footer>
   </div>

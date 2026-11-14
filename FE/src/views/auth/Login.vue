@@ -5,7 +5,7 @@ import api from '@/helpers/api/client'
 import { setAuthSession } from '@/helpers/auth/session'
 import { useToast } from '@/helpers/ui/toast'
 import AuthPage from '@/components/AuthPage.vue'
-import { validateEmail, validateRequired } from '@/helpers/auth/validation'
+import { validateEmail, validateNewPassword } from '@/helpers/auth/validation'
 import { pushToReturnUrl } from '@/helpers/auth/returnUrl'
 
 const router = useRouter()
@@ -24,9 +24,9 @@ const validateEmailField = () => {
   return !errors.value.email
 }
 
-// Yêu cầu nhập mật khẩu; tính đúng/sai vẫn do BE xác nhận.
+// Kiểm tra mật khẩu giống form đăng ký (8-72 byte); đúng/sai vẫn do BE xác nhận.
 const validatePasswordField = () => {
-  errors.value.password = validateRequired(form.value.password, 'mật khẩu')
+  errors.value.password = validateNewPassword(form.value.password, 'mật khẩu')
   return !errors.value.password
 }
 
@@ -60,7 +60,7 @@ const fetchApiLogin = async () => {
 </script>
 
 <template>
-  <AuthPage title="Login" description="Đăng nhập vào tài khoản FuLe BaberShop để tiếp tục.">
+  <AuthPage title="Đăng nhập tài khoản" description="Đăng nhập vào tài khoản FuLe BaberShop để tiếp tục.">
     <!-- Form đăng nhập giữ nguyên endpoint và session JWT hiện có. -->
     <form class="auth-form" novalidate @submit.prevent="fetchApiLogin">
       <div class="auth-field">
@@ -83,7 +83,7 @@ const fetchApiLogin = async () => {
       </div>
 
       <div class="auth-field">
-        <label for="password">Password</label>
+        <label for="password">Mật khẩu</label>
         <input
           id="password"
           v-model="form.password"
@@ -100,17 +100,17 @@ const fetchApiLogin = async () => {
           {{ errors.password }}
         </p>
         <div class="auth-forgot-row">
-          <router-link class="auth-inline-link" to="/forgot-password">Forgot password?</router-link>
+          <router-link class="auth-inline-link" to="/forgot-password">Quên mật khẩu?</router-link>
         </div>
       </div>
 
       <button type="submit" class="auth-submit" :disabled="loading">
-        {{ loading ? 'Đang đăng nhập...' : 'LOGIN' }}
+        {{ loading ? 'Đang đăng nhập...' : 'Đăng nhập' }}
       </button>
     </form>
 
     <template #footer>
-      <p>Chưa có tài khoản?<router-link class="auth-inline-link" to="/register">Register</router-link></p>
+      <p>Chưa có tài khoản?<router-link class="auth-inline-link" to="/register">Đăng ký ngay</router-link></p>
     </template>
   </AuthPage>
 </template>

@@ -113,7 +113,7 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
 </script>
 
 <template>
-  <main class="container py-4 py-lg-5 result-page">
+  <section class="result-page">
     <OrderPanel class="result-card">
       <!-- Vòng tròn biểu tượng; màu theo kết quả (vàng = thành công, đỏ = thất bại). -->
       <div class="result-icon" :class="`is-${result.tone}`" aria-hidden="true">{{ result.icon }}</div>
@@ -133,13 +133,13 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
         <button v-if="canRecheck" type="button" class="btn btn-outline-secondary" :disabled="checking" @click="checkPayment">
           {{ checking ? 'Đang kiểm tra...' : 'Kiểm tra lại' }}
         </button>
-        <RouterLink v-if="orderId && loggedIn" class="btn btn-dark" :to="`/orders/${orderId}`">Xem đơn hàng</RouterLink>
-        <RouterLink v-if="!loggedIn" class="btn btn-dark" to="/login">Đăng nhập</RouterLink>
-        <RouterLink v-if="loggedIn && !orderId" class="btn btn-dark" to="/orders">Đơn hàng của tôi</RouterLink>
+        <RouterLink v-if="orderId && loggedIn" class="btn btn-primary" :to="`/orders/${orderId}`">Xem đơn hàng</RouterLink>
+        <RouterLink v-if="!loggedIn" class="btn btn-primary" to="/login">Đăng nhập</RouterLink>
+        <RouterLink v-if="loggedIn && !orderId" class="btn btn-primary" to="/orders">Đơn hàng của tôi</RouterLink>
         <RouterLink class="btn btn-outline-secondary" to="/catalog">Tiếp tục mua sắm</RouterLink>
       </div>
     </OrderPanel>
-  </main>
+  </section>
 </template>
 
 <style scoped>
@@ -158,37 +158,37 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
   width: 72px;
   height: 72px;
   margin: 0 auto 16px;
-  border: 2px solid #4e4639;
+  border: 2px solid #d9d4ca;
   border-radius: 50%;
-  background: #1f1f21;
-  color: #d1c5b4;
+  background: #ffffff;
+  color: #4a5565;
   font-size: 32px;
   font-weight: 700;
   line-height: 1;
 }
 
 .result-icon.is-success {
-  border-color: #c5a059;
-  background: #2a2415;
-  color: #e9c176;
-  box-shadow: 0 0 24px rgb(233 193 118 / 30%);
+  border-color: #b8893e;
+  background: #fff7e6;
+  color: #8c6a32;
+  box-shadow: 0 0 24px rgb(184 137 62 / 30%);
 }
 
 .result-icon.is-danger {
-  border-color: #93000a;
-  background: #2a1516;
-  color: #ffb4ab;
+  border-color: #ba1a1a;
+  background: #fdf1f0;
+  color: #93000a;
 }
 
 .result-icon.is-pending {
-  border-color: #c5a059;
-  background: #1f1f21;
-  color: #e9c176;
+  border-color: #b8893e;
+  background: #ffffff;
+  color: #8c6a32;
 }
 
 .result-eyebrow {
   margin: 0 0 6px;
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -205,7 +205,7 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
 
 /* Thành công: tiêu đề màu vàng đồng như Stitch; các trường hợp khác giữ màu chữ thường. */
 .result-title.is-success {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .result-status {
@@ -218,7 +218,7 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
 }
 
 .result-order {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
@@ -229,7 +229,7 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
 .result-message {
   max-width: 520px;
   margin: 0 auto 28px;
-  color: #d1c5b4;
+  color: #4a5565;
   line-height: 1.6;
 }
 
@@ -253,4 +253,37 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
     flex: 1 1 100%;
   }
 }
+
+/* ===== Bổ sung theo Stitch "Thanh toán thành công / thất bại" ===== */
+.result-page {
+  display: grid;
+  max-width: 880px;
+  gap: 24px;
+  margin: 0 auto;
+}
+
+/* Thẻ kết quả: nền trắng, đầu thẻ chuyển nhẹ từ kem sang trắng, bo 12px. */
+.result-card {
+  border-color: #e6e0d4;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #faf8f5 0%, #ffffff 40%);
+  box-shadow: 0 4px 20px rgba(28, 42, 58, 0.06);
+  text-align: center;
+}
+
+.result-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.result-actions .btn {
+  min-height: 44px;
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 </style>

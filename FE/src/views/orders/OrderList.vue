@@ -91,7 +91,7 @@ onMounted(() => loadOrders())
 </script>
 
 <template>
-  <main class="container py-4 py-lg-5 orders-page">
+  <section class="orders-page">
     <!-- Đường dẫn phụ; ẩn trên điện thoại giống trang chi tiết sản phẩm. -->
     <nav class="orders-breadcrumb" aria-label="Đường dẫn">
       <RouterLink to="/">Trang chủ</RouterLink>
@@ -128,7 +128,7 @@ onMounted(() => loadOrders())
     <!-- Trạng thái rỗng khi user chưa có đơn nào. -->
     <div v-else-if="orders.length === 0" class="text-center py-5">
       <p class="text-secondary mb-3">Bạn chưa có đơn hàng nào.</p>
-      <RouterLink class="btn btn-dark" to="/catalog">Xem sản phẩm</RouterLink>
+      <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
     </div>
 
     <!-- Danh sách đơn: mỗi đơn là một thẻ gồm thanh thông tin, nội dung và khối tóm tắt có hành động. -->
@@ -171,7 +171,7 @@ onMounted(() => loadOrders())
                 <strong>{{ formatPrice(Number(order.total_amount)) }}</strong>
               </p>
               <div class="order-item__actions">
-                <RouterLink class="btn btn-dark btn-sm" :to="`/orders/${order.id}`">Xem chi tiết đơn hàng</RouterLink>
+                <RouterLink class="btn btn-primary btn-sm" :to="`/orders/${order.id}`">Xem chi tiết đơn hàng</RouterLink>
                 <button
                   v-if="canPayOnline(order)"
                   type="button"
@@ -205,7 +205,7 @@ onMounted(() => loadOrders())
       label="Phân trang đơn hàng"
       @change="loadOrders"
     />
-  </main>
+  </section>
 </template>
 
 <style scoped>
@@ -216,18 +216,18 @@ onMounted(() => loadOrders())
   align-items: baseline;
   gap: 8px;
   margin-bottom: 16px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .orders-breadcrumb a:hover {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .orders-breadcrumb .is-current {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .orders-header {
@@ -241,7 +241,7 @@ onMounted(() => loadOrders())
 
 .orders-eyebrow {
   margin: 0 0 4px;
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -258,7 +258,7 @@ onMounted(() => loadOrders())
 
 .orders-subtitle {
   margin: 6px 0 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
@@ -269,13 +269,13 @@ onMounted(() => loadOrders())
   align-items: center;
   margin: 0;
   padding: 8px 20px;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #1b1b1d;
+  background: #ffffff;
 }
 
 .orders-stat__label {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -283,7 +283,7 @@ onMounted(() => loadOrders())
 }
 
 .orders-stat__value {
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 22px;
   line-height: 1.2;
 }
@@ -307,23 +307,23 @@ onMounted(() => loadOrders())
   justify-content: space-between;
   gap: 10px 16px;
   padding: 14px 20px;
-  border-bottom: 1px solid #4e4639;
-  background: #1f1f21;
+  border-bottom: 1px solid #d9d4ca;
+  background: #ffffff;
 }
 
 .order-item__id a {
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 17px;
   font-weight: 700;
 }
 
 .order-item__id a:hover {
-  color: #f5ce72;
+  color: #7a5200;
 }
 
 .order-item__date {
   margin-left: 12px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 13px;
 }
 
@@ -353,7 +353,7 @@ onMounted(() => loadOrders())
 }
 
 .order-item__info dt {
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -380,9 +380,9 @@ onMounted(() => loadOrders())
   align-content: start;
   gap: 14px;
   padding: 16px;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #131315;
+  background: #f7f4ee;
 }
 
 .order-item__total {
@@ -394,7 +394,7 @@ onMounted(() => loadOrders())
 }
 
 .order-item__total span {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -402,7 +402,7 @@ onMounted(() => loadOrders())
 }
 
 .order-item__total strong {
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 22px;
   font-weight: 700;
 }
@@ -441,4 +441,37 @@ onMounted(() => loadOrders())
     padding: 16px;
   }
 }
+
+/* ===== Bổ sung theo Stitch "Lịch sử đơn hàng" ===== */
+.orders-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Thẻ đơn: viền kem, bo 8px, thanh thông tin trên nền kem đậm như Stitch. */
+.order-item {
+  border-color: #e6e0d4;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.order-item__meta {
+  background: #efeae0;
+}
+
+.order-item__total strong {
+  color: #b8893e;
+  font-family: var(--font-display);
+}
+
+.order-item__actions .btn {
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 </style>

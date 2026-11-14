@@ -31,7 +31,7 @@ const handleLogout = async () => {
 </script>
 
 <template>
-	<AuthPage title="Your profile" description="Thông tin tài khoản FuLe BaberShop.">
+	<AuthPage title="Hồ sơ của bạn" description="Thông tin tài khoản FuLe BaberShop.">
 		<!-- Thông tin tài khoản đang có trong session FE. -->
 		<dl class="profile-details">
 			<div class="profile-row">
@@ -43,28 +43,28 @@ const handleLogout = async () => {
 				<dd>{{ user.email || '-' }}</dd>
 			</div>
 			<div class="profile-row">
-				<dt>Role</dt>
+				<dt>Vai trò</dt>
 				<dd>{{ user.role || '-' }}</dd>
 			</div>
 		</dl>
 
 		<!-- Giữ thao tác đổi mật khẩu và đăng xuất hiện có. -->
 		<div class="profile-actions">
-			<router-link to="/change-password" class="auth-submit">CHANGE PASSWORD</router-link>
+			<router-link to="/change-password" class="auth-submit">Đổi mật khẩu</router-link>
 			<!-- Lối tắt tới trang Đơn hàng của tôi (danh sách đơn, thanh toán, hủy đơn). -->
-			<router-link to="/orders" class="auth-secondary-action">MY ORDERS</router-link>
+			<router-link to="/orders" class="auth-secondary-action">Đơn hàng của tôi</router-link>
 			<button
 				type="button"
 				class="auth-secondary-action auth-danger-action"
 				:disabled="loading"
 				@click="handleLogout"
 			>
-				{{ loading ? 'Đang xử lý...' : 'LOG OUT' }}
+				{{ loading ? 'Đang xử lý...' : 'Đăng xuất' }}
 			</button>
 		</div>
 
 		<template #footer>
-			<p><router-link class="auth-inline-link" to="/">Back to home</router-link></p>
+			<p><router-link class="auth-inline-link" to="/">Về trang chủ</router-link></p>
 		</template>
 	</AuthPage>
 </template>

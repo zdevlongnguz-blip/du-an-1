@@ -149,7 +149,7 @@ onUnmounted(() => {
 
 .banner-overlay {
   z-index: 1;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 24, 34, 0.5);
 }
 
 .banner-content {
@@ -182,8 +182,8 @@ onUnmounted(() => {
   justify-content: center;
   padding: 0 20px;
   border-radius: 4px;
-  background: #e9c176;
-  color: #4e3700;
+  background: #d8b06a;
+  color: #131e2a;
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
@@ -191,8 +191,8 @@ onUnmounted(() => {
 }
 
 .banner-cta:hover {
-  background: #f5ce72;
-  color: #4e3700;
+  background: #e4c287;
+  color: #131e2a;
 }
 
 .banner-cta:focus-visible,
@@ -229,7 +229,7 @@ onUnmounted(() => {
 }
 
 .banner-indicator.is-active span {
-  background: #e9c176;
+  background: #d8b06a;
 }
 
 .banner-navigation {
@@ -257,9 +257,9 @@ onUnmounted(() => {
 
 .banner-navigation-button:hover {
   transform: translateY(-1px);
-  border-color: #e9c176;
-  background: #e9c176;
-  color: #4e3700;
+  border-color: #d8b06a;
+  background: #d8b06a;
+  color: #131e2a;
 }
 
 .banner-arrow-icon {
