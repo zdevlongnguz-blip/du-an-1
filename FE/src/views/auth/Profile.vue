@@ -51,6 +51,8 @@ const handleLogout = async () => {
 		<!-- Giữ thao tác đổi mật khẩu và đăng xuất hiện có. -->
 		<div class="profile-actions">
 			<router-link to="/change-password" class="auth-submit">CHANGE PASSWORD</router-link>
+			<!-- Lối tắt tới trang Đơn hàng của tôi (danh sách đơn, thanh toán, hủy đơn). -->
+			<router-link to="/orders" class="auth-secondary-action">MY ORDERS</router-link>
 			<button
 				type="button"
 				class="auth-secondary-action auth-danger-action"

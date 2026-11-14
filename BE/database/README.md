@@ -3,8 +3,8 @@
 ## Cấu trúc
 - `run.php`: chạy migration, `--seed` chạy seed, `--verify` kiểm tra toàn vẹn (thoát mã 2 nếu có vi phạm).
 - `create_database.sql`: khởi tạo DB trống (giữ nguyên bản cũ, các migration sẽ nâng cấp lên schema mới).
-- `migrations/`: các file cũ giữ nguyên + 6 file mới `20261113_01..06` + `20261114_01_order_details_variant_fk_set_null.sql` (sửa `order_details.variant_id` về NULL khi xóa sản phẩm).
-- `seed/`: seed cũ giữ nguyên, trừ `demo_shepay_unpaid_order.sql` (đọc giá từ biến thể) + `catalog_product_variants.sql` (DEMO).
+- `migrations/`: các file cũ giữ nguyên + 6 file mới `20261113_01..06` + `20261114_01_order_details_variant_fk_set_null.sql` (sửa `order_details.variant_id` về NULL khi xóa sản phẩm) + `20261114_02_orders_add_payment_method.sql` (thêm `orders.payment_method` và `orders.payment_invoice_number`).
+- `seed/`: seed cũ giữ nguyên, trừ `catalog_product_variants.sql` (dữ liệu mẫu với giá giả định).
 
 ## Cách chạy
 ```

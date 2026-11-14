@@ -10,7 +10,8 @@ import ProfileView from '../views/auth/Profile.vue'
 import ChangePasswordView from '../views/auth/ChangePassword.vue'
 import ForgotPasswordView from '../views/auth/ForgotPassword.vue'
 import ResetPasswordView from '../views/auth/ResetPassword.vue'
-import PaymentDemoView from '../views/PaymentDemo.vue'
+import OrderListView from '../views/orders/OrderList.vue'
+import OrderDetailView from '../views/orders/OrderDetail.vue'
 import PaymentResultView from '../views/PaymentResult.vue'
 import CheckoutView from '../views/CheckoutView.vue'
 import CartView from '../views/cart/CartView.vue'
@@ -78,12 +79,25 @@ const routes = [
     component: ResetPasswordView,
   },
 
-  // Trang demo tạo form thanh toán cho đơn của user đã đăng nhập.
+  // Danh sách đơn hàng của user đã đăng nhập (xem, thanh toán lại, hủy đơn).
+  {
+    path: "/orders",
+    name: "orders",
+    component: OrderListView,
+    meta: { requiresAuth: true },
+  },
+  // Chi tiết đơn / hóa đơn của một đơn; BE chỉ trả đơn thuộc user đang đăng nhập.
+  {
+    path: "/orders/:id(\\d+)",
+    name: "order-detail",
+    component: OrderDetailView,
+    meta: { requiresAuth: true },
+  },
+  // Đường dẫn cũ /payment (trang thanh toán trước đây) chuyển về danh sách đơn để link cũ vẫn dùng được.
+  // Lưu ý: /payment/success|error|cancel bên dưới là URL SePay quay về, giữ nguyên.
   {
     path: "/payment",
-    name: "payment-demo",
-    component: PaymentDemoView,
-    meta: { requiresAuth: true },
+    redirect: { name: "orders" },
   },
   // Trang giỏ hàng để user xem, đổi số lượng và xóa từng phiên bản sản phẩm.
   {
@@ -92,7 +106,7 @@ const routes = [
     component: CartView,
     meta: { requiresAuth: true },
   },
-  // Checkout đọc giỏ hàng của user và cho chọn COD hoặc thanh toán online sandbox.
+  // Checkout đọc giỏ hàng của user và cho chọn COD hoặc thanh toán online qua SePay.
   {
     path: "/checkout",
     name: "checkout",

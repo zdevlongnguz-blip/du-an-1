@@ -193,7 +193,7 @@ Cột: id, category_id, code, name, slug, image, description, view_count, sales_
 | `product_images` | id INT UNSIGNED PK; product_id FK → products (CASCADE); image_path; sort_order default 0; created_at; updated_at. Index (product_id, sort_order) |
 | `comments` | id BIGINT UNSIGNED PK; product_id FK → products (CASCADE); user_id FK → users (CASCADE); content TEXT; status TINYINT(1) default 0 (0 chờ duyệt, 1 đã duyệt); created_at; updated_at |
 | `carts` | id BIGINT UNSIGNED PK; user_id UNIQUE, FK → users (CASCADE); created_at; updated_at |
-| `orders` | id BIGINT UNSIGNED PK; user_id FK → users; recipient_name VARCHAR(100); recipient_phone VARCHAR(20); shipping_address VARCHAR(500); total_amount DECIMAL(12,2); order_status ENUM('pending','confirmed','shipping','delivered','cancelled') default 'pending'; payment_status ENUM('unpaid','paid') default 'unpaid'; created_at; updated_at |
+| `orders` | id BIGINT UNSIGNED PK; user_id FK → users; recipient_name VARCHAR(100); recipient_phone VARCHAR(20); shipping_address VARCHAR(500); total_amount DECIMAL(12,2); order_status ENUM('pending','confirmed','shipping','delivered','cancelled') default 'pending'; payment_status ENUM('unpaid','paid') default 'unpaid'; payment_method ENUM('cod','sepay') default 'cod' (cod = khi nhận hàng, sepay = online); payment_invoice_number VARCHAR(64) NULL (mã hóa đơn SePay của lần thanh toán online gần nhất); created_at; updated_at. Index `idx_orders_online_pending` cho việc tự hủy đơn online quá hạn |
 | `schema_migrations` | migration VARCHAR(255) PK; applied_at. Do `run.php` quản lý |
 
 ## 4. Hành vi khi xóa dữ liệu

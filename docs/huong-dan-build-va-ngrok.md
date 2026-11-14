@@ -42,6 +42,23 @@ Build xong phải thấy dòng `✓ built in ...` và không có lỗi.
 
 PHP đọc `.env` ở mỗi request, nên sau khi sửa không cần khởi động lại Apache.
 
+### Thanh toán SePay khi chia sẻ qua ngrok
+
+- Điền `SEPAY_MERCHANT_ID`, `SEPAY_SECRET_KEY` (khóa sandbox) trong `BE/.env`. Tuyệt đối không commit file `.env`.
+- **Để trống** `SEPAY_SUCCESS_URL`, `SEPAY_ERROR_URL`, `SEPAY_CANCEL_URL`. Khi trống, BE tự suy ra từ `APP_URL`:
+  `https://<ten-ngrok>.ngrok-free.dev/payment/success` (và `/payment/error`, `/payment/cancel`).
+- Nếu các biến này bị điền cứng `http://localhost:5173/...`, sau khi thanh toán xong SePay chuyển trình duyệt về
+  `localhost` của người đang dùng nên trang bị lỗi. Đây là lỗi thường gặp khi chia sẻ ngrok.
+- **IPN (SePay báo kết quả thanh toán về server):** vào trang quản trị SePay, cấu hình IPN:
+  - URL: `https://<ten-ngrok>.ngrok-free.dev/BE/?action=api-sepay-ipn` (SePay yêu cầu địa chỉ công khai HTTPS, nên cần ngrok).
+  - Kiểu xác thực: Secret Key; giá trị phải bằng `SEPAY_IPN_SECRET` trong `BE/.env` (SePay gửi kèm header `X-Secret-Key`).
+  - Khi nhận IPN `ORDER_PAID` hợp lệ (đúng secret, đúng mã hóa đơn, đúng số tiền), BE chuyển đơn sang "Đã thanh toán".
+- Thanh toán xong, SePay quay về `/payment/success?order=<ID đơn>`. Trang này hỏi lại BE, BE hỏi lại SePay bằng khóa merchant
+  và hiển thị trạng thái thật. Nhờ vậy chạy local không có ngrok vẫn xác nhận được thanh toán (IPN chỉ là đường dự phòng thứ hai).
+- Đơn thanh toán online chưa trả tiền sau 30 phút sẽ tự hủy và hoàn kho (xử lý khi có người xem đơn, đặt đơn hoặc thanh toán).
+- Hãy mở FE bằng URL ngrok ngay từ đầu (đăng nhập, đặt hàng, thanh toán trên cùng một địa chỉ). Token đăng nhập
+  lưu theo từng địa chỉ trang, nên bắt đầu ở `localhost` rồi quay về ngrok sẽ bị yêu cầu đăng nhập lại.
+
 ## 4. Chạy ngrok
 
 Mở terminal và chạy:
