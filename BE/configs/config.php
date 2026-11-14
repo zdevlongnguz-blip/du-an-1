@@ -42,12 +42,19 @@ if ($dbUsername === false || $dbPassword === false || $jwtSecret === false || $j
     throw new RuntimeException('Thiếu DB_USERNAME, DB_PASSWORD hoặc JWT_SECRET trong BE/.env.');
 }
 
+// URL công khai (ví dụ link ngrok hoặc domain deploy) lấy từ APP_URL trong BE/.env.
+// Để trống thì suy ra từ request; không tin header X-Forwarded-* vì client có thể giả mạo.
+$_publicUrl = rtrim(trim((string) getenv('APP_URL')), '/');
+if ($_publicUrl !== '' && !preg_match('#^https?://[^/\s]+$#i', $_publicUrl)) {
+    throw new RuntimeException('APP_URL trong BE/.env phải có dạng https://ten-mien (không có đường dẫn).');
+}
+
 // Tự xác định URL theo request để tạo liên kết tuyệt đối trong email.
 $_protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $_host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $_script = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
 $_base = rtrim(dirname($_script), '/\\') . '/';
-define('BASE_URL', $_protocol . '://' . $_host . $_base);
+define('BASE_URL', ($_publicUrl !== '' ? $_publicUrl : $_protocol . '://' . $_host) . $_base);
 unset($_protocol, $_host, $_script, $_base);
 
 define('PATH_ROOT', __DIR__ . '/../');
@@ -76,7 +83,9 @@ define('JWT_SECRET', $jwtSecret);
 define('JWT_TTL', 3600);
 define('EMAIL_VERIFICATION_TTL', 3600);
 define('PASSWORD_RESET_TTL', 3600);
-define('FRONTEND_URL', 'http://localhost:5173');
+// FRONTEND_URL: ưu tiên biến môi trường; có APP_URL thì FE cùng origin với BE; mặc định là Vite dev.
+define('FRONTEND_URL', rtrim(getenv('FRONTEND_URL') ?: ($_publicUrl !== '' ? $_publicUrl : 'http://localhost:5173'), '/'));
+unset($_publicUrl);
 
 // Mailer và phần tích hợp SePay chỉ đọc cấu hình từ biến môi trường.
 $mailPort = getenv('MAIL_PORT');
