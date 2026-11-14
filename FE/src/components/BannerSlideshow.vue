@@ -182,11 +182,17 @@ onUnmounted(() => {
   justify-content: center;
   padding: 0 20px;
   border-radius: 4px;
-  background: #ffffff;
-  color: #212529;
+  background: #e9c176;
+  color: #4e3700;
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.banner-cta:hover {
+  background: #f5ce72;
+  color: #4e3700;
 }
 
 .banner-cta:focus-visible,
@@ -223,7 +229,7 @@ onUnmounted(() => {
 }
 
 .banner-indicator.is-active span {
-  background: #ffffff;
+  background: #e9c176;
 }
 
 .banner-navigation {
@@ -251,9 +257,9 @@ onUnmounted(() => {
 
 .banner-navigation-button:hover {
   transform: translateY(-1px);
-  border-color: #ffffff;
-  background: #ffffff;
-  color: #212529;
+  border-color: #e9c176;
+  background: #e9c176;
+  color: #4e3700;
 }
 
 .banner-arrow-icon {

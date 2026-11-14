@@ -174,8 +174,8 @@ onMounted(() => {
   display: inline-flex;
   flex: 0 0 auto;
   padding: 3px;
-  border: 1px solid #d7d9db;
-  background: #f3f4f5;
+  border: 1px solid #4e4639;
+  background: #1b1b1d;
 }
 
 .top-products-modes button {
@@ -183,7 +183,7 @@ onMounted(() => {
   padding: 0 14px;
   border: 0;
   background: transparent;
-  color: #575f67;
+  color: #d1c5b4;
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
@@ -191,8 +191,8 @@ onMounted(() => {
 }
 
 .top-products-modes button.is-active {
-  background: #0c1014;
-  color: #ffffff;
+  background: #e9c176;
+  color: #4e3700;
 }
 
 .top-products-modes button:disabled:not(.is-active) {
@@ -202,7 +202,7 @@ onMounted(() => {
 
 .top-products-modes button:focus-visible,
 .top-products-state button:focus-visible {
-  outline: 3px solid #575f67;
+  outline: 3px solid #e9c176;
   outline-offset: 2px;
 }
 
@@ -219,9 +219,9 @@ onMounted(() => {
   justify-items: center;
   gap: 12px;
   padding: 24px;
-  border: 1px solid #dfe1e2;
-  background: #f3f4f5;
-  color: #575f67;
+  border: 1px solid #4e4639;
+  background: #1b1b1d;
+  color: #d1c5b4;
   font-size: 14px;
   text-align: center;
 }
@@ -231,17 +231,17 @@ onMounted(() => {
 }
 
 .top-products-state--error {
-  border-color: #e4b7b7;
-  background: #fff5f5;
-  color: #8c2525;
+  border-color: #93000a;
+  background: #2a1516;
+  color: #ffb4ab;
 }
 
 .top-products-state button {
   min-height: 40px;
   padding: 0 16px;
-  border: 1px solid #0c1014;
-  background: #0c1014;
-  color: #ffffff;
+  border: 1px solid #c5a059;
+  background: #e9c176;
+  color: #4e3700;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
@@ -254,8 +254,8 @@ onMounted(() => {
   gap: 12px;
   padding: 24px;
   border-radius: 4px;
-  background: #212529;
-  color: #ffffff;
+  background: #1f1f21;
+  color: #ede0d4;
   text-align: center;
 }
 
@@ -267,10 +267,10 @@ onMounted(() => {
   justify-self: center;
   min-height: 44px;
   padding: 0 20px;
-  border: 1px solid #ffffff;
+  border: 1px solid #e9c176;
   border-radius: 4px;
-  background: #ffffff;
-  color: #212529;
+  background: #e9c176;
+  color: #4e3700;
   font-weight: 600;
 }
 
@@ -304,7 +304,10 @@ onMounted(() => {
 @media (min-width: 992px) {
   .top-products-grid {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: clamp(280px, 28vw, 340px) clamp(280px, 28vw, 340px) clamp(210px, 22vw, 270px);
+    grid-template-rows:
+      minmax(clamp(280px, 28vw, 340px), auto)
+      minmax(clamp(280px, 28vw, 340px), auto)
+      minmax(clamp(210px, 22vw, 270px), auto);
   }
 
   .top-products-grid > :nth-child(1) {

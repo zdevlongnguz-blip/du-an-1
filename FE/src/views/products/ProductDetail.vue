@@ -648,20 +648,20 @@ watch(
 
 <style scoped>
 .pd-page {
-  color: #212529;
+  color: #ede0d4;
 }
 
 .pd-card {
   padding: 32px 24px;
-  border: 1px solid #dee2e6;
+  border: 1px solid #4e4639;
   border-radius: 4px;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 2%);
+  background: #1b1b1d;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 50%);
 }
 
 .pd-state {
   padding: 56px 24px;
-  color: #6c757d;
+  color: #d1c5b4;
   text-align: center;
 }
 
@@ -670,7 +670,7 @@ watch(
 }
 
 .pd-state--error {
-  color: #a42d2d;
+  color: #ffb4ab;
 }
 
 .pd-breadcrumb {
@@ -679,29 +679,29 @@ watch(
   align-items: baseline;
   gap: 6px;
   margin-bottom: 16px;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 13px;
   line-height: 1.5;
 }
 
 .pd-breadcrumb a:hover {
-  color: #212529;
+  color: #e9c176;
   text-decoration: underline;
 }
 
 .pd-breadcrumb-separator {
-  color: #adb5bd;
+  color: #9a8f80;
 }
 
 .pd-breadcrumb-current {
-  color: #212529;
+  color: #ede0d4;
   font-weight: 500;
 }
 
 .pd-back {
   display: none;
   margin-bottom: 16px;
-  color: #212529;
+  color: #ede0d4;
   font-size: 14px;
 }
 
@@ -717,9 +717,9 @@ watch(
   overflow: hidden;
   aspect-ratio: 1 / 1;
   place-items: center;
-  border: 1px solid #dee2e6;
+  border: 1px solid #4e4639;
   border-radius: 4px;
-  background: #e9ecef;
+  background: #2a2a2c;
 }
 
 .pd-gallery-main img,
@@ -730,7 +730,7 @@ watch(
 }
 
 .pd-image-fallback {
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 32px;
   font-weight: 700;
 }
@@ -753,19 +753,19 @@ watch(
   overflow: hidden;
   place-items: center;
   padding: 0;
-  border: 1px solid #dee2e6;
+  border: 1px solid #4e4639;
   border-radius: 4px;
-  background: #e9ecef;
+  background: #2a2a2c;
   cursor: pointer;
 }
 
 .pd-thumb.is-active {
-  border: 2px solid #212529;
+  border: 2px solid #e9c176;
 }
 
 .pd-category {
   margin: 0 0 4px;
-  color: #6c757d;
+  color: #c5a059;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -774,7 +774,7 @@ watch(
 
 .pd-name {
   margin: 0 0 6px;
-  color: #212529;
+  color: #ede0d4;
   font-size: 28px;
   font-weight: 600;
   line-height: 1.25;
@@ -782,7 +782,7 @@ watch(
 
 .pd-meta {
   margin: 0 0 2px;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 13px;
 }
 
@@ -801,20 +801,20 @@ watch(
 }
 
 .pd-price strong.is-sale {
-  color: #dc3545;
+  color: #ffb4ab;
 }
 
 .pd-price del {
-  color: #6c757d;
+  color: #9a8f80;
   font-size: 15px;
 }
 
 .pd-sale-badge {
   padding: 2px 6px;
-  border: 1px solid #f1aeb5;
+  border: 1px solid #93000a;
   border-radius: 4px;
-  background: #f8d7da;
-  color: #dc3545;
+  background: #2a1516;
+  color: #ffb4ab;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -822,22 +822,22 @@ watch(
 
 .pd-stock {
   margin: 4px 0 12px;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 13px;
   font-weight: 500;
 }
 
 .pd-stock--out {
-  color: #dc3545;
+  color: #ffb4ab;
 }
 
 .pd-stepper {
   display: flex;
   overflow: hidden;
   align-items: stretch;
-  border: 1px solid #dee2e6;
+  border: 1px solid #4e4639;
   border-radius: 4px;
-  background: #ffffff;
+  background: #1b1b1d;
 }
 
 .pd-stepper button {
@@ -846,14 +846,14 @@ watch(
   padding: 0;
   border: 0;
   background: transparent;
-  color: #212529;
+  color: #ede0d4;
   font-size: 18px;
   cursor: pointer;
 }
 
 .pd-stepper button:disabled {
-  background: #e9ecef;
-  color: #adb5bd;
+  background: #2a2a2c;
+  color: #9a8f80;
   cursor: not-allowed;
 }
 
@@ -861,10 +861,11 @@ watch(
   width: 56px;
   padding: 0;
   border: 0;
-  border-right: 1px solid #dee2e6;
-  border-left: 1px solid #dee2e6;
+  background: transparent;
+  border-right: 1px solid #4e4639;
+  border-left: 1px solid #4e4639;
   border-radius: 0;
-  color: #212529;
+  color: #ede0d4;
   font-size: 15px;
   font-weight: 600;
   text-align: center;
@@ -879,12 +880,12 @@ watch(
 
 .pd-stepper-input:focus {
   outline: none;
-  background: #f8f9fa;
+  background: #1f1f21;
 }
 
 .pd-stepper-input:disabled {
-  background: #e9ecef;
-  color: #adb5bd;
+  background: #2a2a2c;
+  color: #9a8f80;
 }
 
 .pd-variants {
@@ -903,7 +904,7 @@ watch(
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #dee2e6;
+  border: 1px solid #4e4639;
   border-radius: 6px;
 }
 
@@ -918,7 +919,7 @@ watch(
 
 .pd-variant-attrs,
 .pd-variant-stock {
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 14px;
 }
 
@@ -930,7 +931,7 @@ watch(
 }
 
 .pd-variant-price del {
-  color: #6c757d;
+  color: #9a8f80;
   font-size: 14px;
 }
 
@@ -943,7 +944,7 @@ watch(
 
 .pd-price-from {
   margin-right: 6px;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 14px;
 }
 
@@ -953,7 +954,7 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 0 20px;
-  border: 1px solid #dee2e6;
+  border: 1px solid #c5a059;
   border-radius: 4px;
   font-size: 15px;
   font-weight: 700;
@@ -967,30 +968,30 @@ watch(
 }
 
 .pd-btn--primary {
-  border-color: #212529;
-  background: #212529;
-  color: #ffffff;
+  border-color: #e9c176;
+  background: #e9c176;
+  color: #4e3700;
 }
 
 .pd-btn--primary:hover:not(:disabled) {
-  border-color: #000000;
-  background: #000000;
+  border-color: #f5ce72;
+  background: #f5ce72;
 }
 
 .pd-btn--outline {
-  background: #ffffff;
-  color: #212529;
+  background: transparent;
+  color: #ede0d4;
 }
 
 .pd-btn--outline:hover:not(:disabled) {
-  border-color: #adb5bd;
-  background: #f8f9fa;
+  border-color: #e9c176;
+  background: #2a2a2c;
 }
 
 .pd-btn:disabled {
-  border-color: #dee2e6;
-  background: #e9ecef;
-  color: #adb5bd;
+  border-color: #4e4639;
+  background: #2a2a2c;
+  color: #9a8f80;
   cursor: not-allowed;
 }
 
@@ -999,24 +1000,24 @@ watch(
 .pd-thumb:focus-visible,
 .pd-textarea:focus-visible,
 .pd-page a:focus-visible {
-  outline: 2px solid #212529;
+  outline: 2px solid #e9c176;
   outline-offset: 2px;
 }
 
 .pd-demo-note {
   margin: 0;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 12px;
 }
 
 .pd-login-hint {
   margin: 20px 0 0;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 14px;
 }
 
 .pd-login-hint a {
-  color: #212529;
+  color: #e9c176;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1024,7 +1025,7 @@ watch(
 .pd-divider {
   margin: 24px 0 20px;
   border: 0;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid #4e4639;
   opacity: 1;
 }
 
@@ -1036,7 +1037,7 @@ watch(
 
 .pd-description {
   margin: 0;
-  color: #495057;
+  color: #d1c5b4;
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-line;
@@ -1044,7 +1045,7 @@ watch(
 
 .pd-comments {
   padding-top: 32px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid #4e4639;
 }
 
 .pd-comments-header {
@@ -1077,8 +1078,8 @@ watch(
   flex: 0 0 40px;
   place-items: center;
   border-radius: 50%;
-  background: #dee2e6;
-  color: #6c757d;
+  background: #2a2a2c;
+  color: #d1c5b4;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1099,15 +1100,16 @@ watch(
   width: 100%;
   min-height: 84px;
   padding: 12px;
-  border: 1px solid #dee2e6;
+  border: 1px solid #4e4639;
   border-radius: 4px;
-  color: #212529;
+  background: #1b1b1d;
+  color: #ede0d4;
   font-size: 14px;
   resize: vertical;
 }
 
 .pd-textarea::placeholder {
-  color: #757575;
+  color: #9a8f80;
 }
 
 .pd-comment-form-footer {
@@ -1120,7 +1122,7 @@ watch(
 
 .pd-field-error {
   margin: 6px 0 0;
-  color: #a42d2d;
+  color: #ffb4ab;
   font-size: 13px;
 }
 
@@ -1141,12 +1143,12 @@ watch(
   align-items: center;
   gap: 12px;
   margin: 0;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 14px;
 }
 
 .pd-comments-state--error {
-  color: #a42d2d;
+  color: #ffb4ab;
 }
 
 .pd-comment-list {
@@ -1159,11 +1161,11 @@ watch(
   display: flex;
   gap: 16px;
   padding: 16px 0;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid #4e4639;
 }
 
 .pd-comment:last-child {
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid #4e4639;
 }
 
 .pd-comment-body {
@@ -1185,13 +1187,13 @@ watch(
 }
 
 .pd-comment-meta time {
-  color: #6c757d;
+  color: #9a8f80;
   font-size: 12px;
 }
 
 .pd-comment-content {
   margin: 0;
-  color: #343a40;
+  color: #d1c5b4;
   font-size: 14px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -1208,7 +1210,7 @@ watch(
 
 .pd-pagination-indicator {
   min-width: 48px;
-  color: #6c757d;
+  color: #d1c5b4;
   font-size: 14px;
   font-weight: 600;
   text-align: center;

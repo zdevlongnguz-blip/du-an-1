@@ -4,6 +4,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/helpers/api/client'
 import ProductCardCatalog from '@/components/ProductCardCatalog.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -200,26 +201,13 @@ onMounted(() => fetchCategories())
                 <ProductCardCatalog v-for="product in products" :key="product.id" :product="product" />
             </div>
 
-            <!-- Pagination dùng chung; ở mobile hai nút chia đều hai bên chỉ báo trang. -->
-            <nav class="catalog-pagination" aria-label="Phân trang sản phẩm">
-                <button
-                    class="catalog-outline-button catalog-page-button"
-                    type="button"
-                    :disabled="pagination.current_page <= 1"
-                    @click="changePage(Number(pagination.current_page) - 1)"
-                >
-                    Trang trước
-                </button>
-                <span class="catalog-page-indicator">{{ pagination.current_page }} / {{ pagination.total_pages }}</span>
-                <button
-                    class="catalog-outline-button catalog-page-button"
-                    type="button"
-                    :disabled="pagination.current_page >= pagination.total_pages"
-                    @click="changePage(Number(pagination.current_page) + 1)"
-                >
-                    Trang sau
-                </button>
-            </nav>
+            <!-- Phân trang dùng chung; đổi trang vẫn giữ nguyên bộ lọc trên URL. -->
+            <PaginationBar
+                label="Phân trang sản phẩm"
+                :current-page="Number(pagination.current_page)"
+                :total-pages="Number(pagination.total_pages)"
+                @change="changePage"
+            />
         </template>
     </section>
 </template>
@@ -228,7 +216,7 @@ onMounted(() => fetchCategories())
 .catalog-page {
     width: 100%;
     padding: 40px 24px 60px;
-    background: #ffffff;
+    background: #131315;
 }
 
 .catalog-heading {
@@ -237,7 +225,7 @@ onMounted(() => fetchCategories())
 
 .catalog-eyebrow {
     margin: 0 0 6px;
-    color: #6c757d;
+    color: #c5a059;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.06em;
@@ -246,7 +234,7 @@ onMounted(() => fetchCategories())
 
 .catalog-heading h1 {
     margin: 0;
-    color: #212529;
+    color: #ede0d4;
     font-size: 24px;
     font-weight: 700;
     line-height: 1.25;
@@ -263,28 +251,28 @@ onMounted(() => fetchCategories())
     width: 100%;
     height: 44px;
     padding: 0 12px;
-    border: 1px solid #dee2e6;
+    border: 1px solid #4e4639;
     border-radius: 4px;
-    background: #ffffff;
-    color: #212529;
+    background: #1b1b1d;
+    color: #ede0d4;
     font: inherit;
     font-size: 14px;
 }
 
 .catalog-control::placeholder {
-    color: #6c757d;
-    opacity: 1;
+    color: #d1c5b4;
+    opacity: 0.7;
 }
 
 .catalog-control:focus-visible {
-    border-color: #212529;
-    outline: 2px solid rgb(33 37 41 / 14%);
+    border-color: #e9c176;
+    outline: 2px solid rgb(233 193 118 / 30%);
     outline-offset: 1px;
 }
 
 .catalog-control:disabled {
-    background: #f8f9fa;
-    color: #6c757d;
+    background: #1f1f21;
+    color: #9a8f80;
 }
 
 .catalog-toolbar-actions {
@@ -300,7 +288,7 @@ onMounted(() => fetchCategories())
 .catalog-outline-button {
     min-height: 44px;
     padding: 0 16px;
-    border: 1px solid #212529;
+    border: 1px solid #c5a059;
     border-radius: 4px;
     cursor: pointer;
     font: inherit;
@@ -310,40 +298,40 @@ onMounted(() => fetchCategories())
 }
 
 .catalog-submit {
-    background: #212529;
-    color: #ffffff;
+    background: #e9c176;
+    color: #4e3700;
 }
 
 .catalog-submit:hover {
-    border-color: #44474a;
-    background: #44474a;
+    border-color: #f5ce72;
+    background: #f5ce72;
 }
 
 .catalog-outline-button {
     background: transparent;
-    color: #212529;
+    color: #ede0d4;
 }
 
 .catalog-outline-button:hover:not(:disabled) {
-    background: #f3f4f5;
+    background: #2a2a2c;
 }
 
 .catalog-submit:focus-visible,
 .catalog-outline-button:focus-visible {
-    outline: 3px solid rgb(33 37 41 / 20%);
+    outline: 3px solid rgb(233 193 118 / 35%);
     outline-offset: 2px;
 }
 
 .catalog-outline-button:disabled {
-    border-color: #e9ecef;
-    background: #f8f9fa;
-    color: #adb5bd;
+    border-color: #4e4639;
+    background: #1f1f21;
+    color: #9a8f80;
     cursor: not-allowed;
 }
 
 .catalog-category-error {
     margin: -12px 0 16px;
-    color: #6c757d;
+    color: #d1c5b4;
     font-size: 12px;
 }
 
@@ -355,9 +343,9 @@ onMounted(() => fetchCategories())
 
 .catalog-skeleton {
     aspect-ratio: 3 / 4;
-    border: 1px solid #dee2e6;
+    border: 1px solid #4e4639;
     border-radius: 4px;
-    background: linear-gradient(100deg, #f8f9fa 30%, #e9ecef 45%, #f8f9fa 60%);
+    background: linear-gradient(100deg, #1f1f21 30%, #2a2a2c 45%, #1f1f21 60%);
     background-size: 220% 100%;
     animation: catalog-skeleton-shimmer 1.4s ease-in-out infinite;
 }
@@ -370,7 +358,7 @@ onMounted(() => fetchCategories())
     justify-content: center;
     gap: 16px;
     margin: 64px 0;
-    color: #6c757d;
+    color: #d1c5b4;
     text-align: center;
 }
 
@@ -380,22 +368,7 @@ onMounted(() => fetchCategories())
 }
 
 .catalog-state--error {
-    color: #a42d2d;
-}
-
-.catalog-pagination {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    margin-top: 40px;
-}
-
-.catalog-page-indicator {
-    flex-shrink: 0;
-    color: #212529;
-    font-size: 14px;
-    font-weight: 500;
+    color: #ffb4ab;
 }
 
 @keyframes catalog-skeleton-shimmer {
@@ -467,21 +440,6 @@ onMounted(() => fetchCategories())
 
     .catalog-heading h1 {
         font-size: 22px;
-    }
-
-    .catalog-pagination {
-        width: 100%;
-        justify-content: space-between;
-        gap: 8px;
-    }
-
-    .catalog-page-button {
-        flex: 1;
-        padding: 0 8px;
-    }
-
-    .catalog-page-indicator {
-        padding: 0 8px;
     }
 }
 
