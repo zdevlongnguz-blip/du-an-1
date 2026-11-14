@@ -47,6 +47,7 @@ FE/.env
 FE/.env.*
 !FE/.env.example
 !FE/.env.production
+!FE/.env.development
 FE/.env.local
 BE/configs/.env
 

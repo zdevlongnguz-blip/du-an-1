@@ -3,6 +3,12 @@ import { getToken, clearAuthSession } from '../auth/session'
 
 const getApiBaseUrl = () => {
   const { origin, hostname, pathname, port } = window.location
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+
+  // Ưu tiên VITE_API_BASE_URL; chấp nhận cả đường dẫn tương đối như /du-an-1/BE.
+  if (configuredBaseUrl) {
+    return new URL(configuredBaseUrl, origin).toString().replace(/\/+$/, '')
+  }
 
   if (pathname.includes('/du-an-1')) {
     return `${origin}/du-an-1/BE`
