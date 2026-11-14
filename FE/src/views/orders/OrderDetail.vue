@@ -128,7 +128,7 @@ watch(() => route.params.id, loadInvoice)
 </script>
 
 <template>
-  <main class="container py-4 py-lg-5 detail-page">
+  <section class="detail-page">
     <!-- Đường dẫn phụ và nút quay lại; breadcrumb ẩn trên điện thoại. -->
     <nav class="detail-nav" aria-label="Đường dẫn">
       <div class="detail-breadcrumb">
@@ -166,7 +166,7 @@ watch(() => route.params.id, loadInvoice)
 
           <!-- Hành động: chỉ hiện khi trạng thái đơn cho phép (BE vẫn kiểm tra lại). -->
           <div class="detail-actions">
-            <button v-if="canPayOnline(order)" type="button" class="btn btn-dark" :disabled="acting" @click="pay">
+            <button v-if="canPayOnline(order)" type="button" class="btn btn-primary" :disabled="acting" @click="pay">
               {{ acting ? 'Đang xử lý...' : 'Thanh toán online' }}
             </button>
             <button v-if="canPayOnline(order)" type="button" class="btn btn-outline-secondary" :disabled="acting" @click="checkPayment">
@@ -262,7 +262,7 @@ watch(() => route.params.id, loadInvoice)
         </aside>
       </div>
     </template>
-  </main>
+  </section>
 </template>
 
 <style scoped>
@@ -283,20 +283,20 @@ watch(() => route.params.id, loadInvoice)
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
-  color: #d1c5b4;
+  color: #4a5565;
 }
 
 .detail-breadcrumb a:hover,
 .detail-back:hover {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .detail-breadcrumb .is-current {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .detail-back {
-  color: #d1c5b4;
+  color: #4a5565;
 }
 
 /* Khối đầu trang */
@@ -310,7 +310,7 @@ watch(() => route.params.id, loadInvoice)
 
 .detail-eyebrow {
   margin: 0 0 4px;
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -327,7 +327,7 @@ watch(() => route.params.id, loadInvoice)
 
 .detail-date {
   margin: 6px 0 12px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
@@ -351,7 +351,7 @@ watch(() => route.params.id, loadInvoice)
   margin: 24px 0 0;
   padding: 20px;
   border-radius: 4px;
-  background: #131315;
+  background: #f7f4ee;
   list-style: none;
 }
 
@@ -369,10 +369,10 @@ watch(() => route.params.id, loadInvoice)
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 2px solid #4e4639;
+  border: 2px solid #d9d4ca;
   border-radius: 50%;
-  background: #1f1f21;
-  color: #4e3700;
+  background: #ffffff;
+  color: #7a5200;
   font-size: 14px;
   font-weight: 700;
 }
@@ -385,12 +385,12 @@ watch(() => route.params.id, loadInvoice)
   left: 44px;
   right: -12px;
   height: 2px;
-  background: #4e4639;
+  background: #d9d4ca;
 }
 
 .detail-steps__label {
   margin: 0 0 4px;
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -399,31 +399,31 @@ watch(() => route.params.id, loadInvoice)
 
 .detail-steps__note {
   margin: 0;
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 13px;
   line-height: 1.5;
 }
 
 /* Bước đã qua: vòng tròn vàng đặc, đường nối vàng. */
 .detail-steps__item.is-done .detail-steps__marker {
-  border-color: #c5a059;
-  background: #c5a059;
+  border-color: #b8893e;
+  background: #b8893e;
 }
 
 .detail-steps__item.is-done:not(:last-child)::after {
-  background: #c5a059;
+  background: #b8893e;
 }
 
 .detail-steps__item.is-done .detail-steps__label,
 .detail-steps__item.is-done .detail-steps__note {
-  color: #d1c5b4;
+  color: #4a5565;
 }
 
 /* Bước hiện tại: vòng tròn vàng có chấm giữa và chữ sáng. */
 .detail-steps__item.is-current .detail-steps__marker {
-  border-color: #e9c176;
-  background: #2a2415;
-  box-shadow: 0 0 0 4px rgb(233 193 118 / 20%);
+  border-color: #b8893e;
+  background: #fff7e6;
+  box-shadow: 0 0 0 4px rgb(184 137 62 / 20%);
 }
 
 .detail-steps__item.is-current .detail-steps__marker::before {
@@ -431,22 +431,22 @@ watch(() => route.params.id, loadInvoice)
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #e9c176;
+  background: #b8893e;
 }
 
 .detail-steps__item.is-current .detail-steps__label {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .detail-steps__item.is-current .detail-steps__note {
-  color: #ede0d4;
+  color: #131e2a;
 }
 
 /* Tiêu đề từng khối */
 .detail-heading {
   margin: 0 0 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #4e4639;
+  border-bottom: 1px solid #d9d4ca;
   color: var(--color-ink);
   font-size: 22px;
   font-weight: 700;
@@ -459,7 +459,7 @@ watch(() => route.params.id, loadInvoice)
   justify-content: space-between;
   gap: 16px;
   padding: 12px 0;
-  border-bottom: 1px solid #4e4639;
+  border-bottom: 1px solid #d9d4ca;
 }
 
 .detail-item:last-child {
@@ -481,7 +481,7 @@ watch(() => route.params.id, loadInvoice)
 .detail-item__variant,
 .detail-item__price {
   margin: 2px 0 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 13px;
 }
 
@@ -506,7 +506,7 @@ watch(() => route.params.id, loadInvoice)
 }
 
 .detail-fields dt {
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -526,11 +526,11 @@ watch(() => route.params.id, loadInvoice)
   gap: 12px;
   margin: 16px 0 0;
   padding-top: 16px;
-  border-top: 1px solid #4e4639;
+  border-top: 1px solid #d9d4ca;
 }
 
 .detail-total span {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -538,7 +538,7 @@ watch(() => route.params.id, loadInvoice)
 }
 
 .detail-total strong {
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 24px;
   font-weight: 700;
 }
@@ -595,5 +595,22 @@ watch(() => route.params.id, loadInvoice)
   .detail-steps {
     padding: 16px;
   }
+}
+
+/* ===== Bổ sung theo Stitch "Chi tiết đơn hàng" ===== */
+.detail-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Nút hành động ở đầu biên nhận: bo 6px, chữ in hoa nhỏ giãn như Stitch. */
+.detail-page .btn {
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 </style>

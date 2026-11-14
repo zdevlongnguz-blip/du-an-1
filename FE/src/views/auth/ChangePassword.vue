@@ -67,11 +67,11 @@ const changePassword = async () => {
 </script>
 
 <template>
-  <AuthPage title="Change password" description="Xác nhận mật khẩu hiện tại trước khi cập nhật.">
+  <AuthPage title="Đổi mật khẩu" description="Xác nhận mật khẩu hiện tại trước khi cập nhật.">
     <!-- Form đổi mật khẩu giữ nguyên Bearer auth và payload API. -->
     <form class="auth-form" novalidate @submit.prevent="changePassword">
       <div class="auth-field">
-        <label for="current-password">Current password</label>
+        <label for="current-password">Mật khẩu hiện tại</label>
         <input
           id="current-password"
           v-model="form.currentPassword"
@@ -90,7 +90,7 @@ const changePassword = async () => {
       </div>
 
       <div class="auth-field">
-        <label for="new-password">New password</label>
+        <label for="new-password">Mật khẩu mới</label>
         <input
           id="new-password"
           v-model="form.newPassword"
@@ -109,7 +109,7 @@ const changePassword = async () => {
       </div>
 
       <div class="auth-field">
-        <label for="password-confirmation">Confirm new password</label>
+        <label for="password-confirmation">Xác nhận mật khẩu mới</label>
         <input
           id="password-confirmation"
           v-model="form.passwordConfirmation"
@@ -128,12 +128,12 @@ const changePassword = async () => {
       </div>
 
       <button type="submit" class="auth-submit" :disabled="loading">
-        {{ loading ? 'Đang cập nhật...' : 'UPDATE PASSWORD' }}
+        {{ loading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu' }}
       </button>
     </form>
 
     <template #footer>
-      <p><router-link class="auth-inline-link" to="/profile">Back to profile</router-link></p>
+      <p><router-link class="auth-inline-link" to="/profile">Quay lại hồ sơ</router-link></p>
     </template>
   </AuthPage>
 </template>

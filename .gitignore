@@ -72,3 +72,6 @@ BE/assets/uploads/*
 # Documentation files should stay tracked
 # README.md
 # AUTH_README.md
+
+# MCP config chứa API key cá nhân (Stitch), không commit
+.mcp.json

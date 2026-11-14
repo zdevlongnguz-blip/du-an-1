@@ -129,17 +129,17 @@ const isOutOfStock = computed(() => {
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgb(197 160 89 / 35%);
+  border: 1px solid rgb(184 137 62 / 35%);
   border-radius: 2px;
-  background: #1f1f21;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 50%);
-  color: #ede0d4;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgb(28 42 58 / 10%);
+  color: #131e2a;
   transition: transform 350ms ease, border-color 350ms ease, box-shadow 350ms ease;
 }
 
 .top5-card:hover {
-  border-color: rgb(245 206 114 / 80%);
-  box-shadow: 0 12px 32px -8px rgb(0 0 0 / 85%), 0 0 24px rgb(223 183 108 / 30%);
+  border-color: rgb(184 137 62 / 80%);
+  box-shadow: 0 12px 32px -8px rgb(28 42 58 / 10%), 0 0 24px rgb(184 137 62 / 30%);
   transform: translateY(-4px);
 }
 
@@ -148,7 +148,7 @@ const isOutOfStock = computed(() => {
   display: block;
   aspect-ratio: 4 / 5;
   overflow: hidden;
-  background: #0e0e10;
+  background: #ffffff;
 }
 
 .top5-card-image,
@@ -166,7 +166,7 @@ const isOutOfStock = computed(() => {
 .top5-card-image-fallback {
   display: grid;
   place-items: center;
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 32px;
   font-weight: 700;
 }
@@ -177,8 +177,8 @@ const isOutOfStock = computed(() => {
   left: 12px;
   padding: 4px 10px;
   border-radius: 2px;
-  background: #c5a059;
-  color: #4e3700;
+  background: #b8893e;
+  color: #ffffff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -197,7 +197,7 @@ const isOutOfStock = computed(() => {
 
 .top5-card-category {
   margin: 0;
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -209,7 +209,7 @@ const isOutOfStock = computed(() => {
   min-height: 2.8em;
   margin: 0;
   overflow: hidden;
-  color: #ede0d4;
+  color: #131e2a;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.4;
@@ -221,7 +221,7 @@ const isOutOfStock = computed(() => {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   line-height: 1.5;
   -webkit-box-orient: vertical;
@@ -230,18 +230,18 @@ const isOutOfStock = computed(() => {
 
 .top5-card-price {
   margin-top: 4px;
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 18px;
 }
 
 .top5-card-availability {
   margin: 0;
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 11px;
 }
 
 .top5-card-availability--out {
-  color: #ffb4ab;
+  color: #93000a;
   font-weight: 700;
 }
 
@@ -251,7 +251,7 @@ const isOutOfStock = computed(() => {
   gap: 8px;
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid rgb(78 70 57 / 60%);
+  border-top: 1px solid rgb(217 212 202 / 60%);
 }
 
 .top5-card-stat {
@@ -260,27 +260,27 @@ const isOutOfStock = computed(() => {
   margin: 0;
   padding: 6px 8px;
   border-radius: 2px;
-  background: #1b1b1d;
+  background: #ffffff;
 }
 
 .top5-card-stat strong {
-  color: #ede0d4;
+  color: #131e2a;
   font-size: 14px;
 }
 
 .top5-card-stat span {
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .top5-card-stat.is-ranked {
-  background: rgb(197 160 89 / 18%);
+  background: rgb(184 137 62 / 18%);
 }
 
 .top5-card-stat.is-ranked strong {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .top5-card-actions {
@@ -321,29 +321,29 @@ const isOutOfStock = computed(() => {
 }
 
 .top5-card-view {
-  border-color: rgb(78 70 57 / 40%);
-  background: #2a2a2c;
-  color: #ede0d4;
+  border-color: rgb(217 212 202 / 40%);
+  background: #efeae0;
+  color: #131e2a;
 }
 
 .top5-card-view:hover {
-  border-color: #dfb76c;
-  color: #fce08e;
+  border-color: #b8893e;
+  color: #7a5200;
 }
 
 .top5-card-cart {
-  background: #c5a059;
-  color: #4e3700;
+  background: #b8893e;
+  color: #ffffff;
 }
 
 .top5-card-cart:hover {
-  background: #e9c176;
+  background: #b8893e;
 }
 
 .top5-card-action:focus-visible,
 .top5-card-content:focus-visible,
 .top5-card-media:focus-visible {
-  outline: 2px solid #e9c176;
+  outline: 2px solid #b8893e;
   outline-offset: 2px;
 }
 
@@ -391,5 +391,45 @@ const isOutOfStock = computed(() => {
   .top5-card:hover .top5-card-image {
     transform: none;
   }
+}
+
+/* ===== Bổ sung theo Stitch "Trang chủ - Sản phẩm bán chạy" ===== */
+.top5-card {
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(28, 42, 58, 0.08);
+}
+
+.top5-card:hover {
+  box-shadow: 0 4px 12px rgba(28, 42, 58, 0.12);
+}
+
+/* Số hạng: nhãn đồng chữ trắng ở góc ảnh. */
+.top5-card-rank {
+  border-radius: 4px;
+  background: #b8893e;
+  color: #ffffff;
+}
+
+.top5-card-category {
+  color: #b8893e;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.top5-card-name {
+  color: #1f1f1f;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.top5-card-price strong {
+  color: #b8893e;
+}
+
+.top5-card-action {
+  border-radius: 6px;
 }
 </style>

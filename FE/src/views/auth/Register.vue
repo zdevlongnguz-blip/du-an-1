@@ -68,7 +68,7 @@ const register = async () => {
 
 <template>
 	<AuthPage
-		title="Create account"
+		title="Tạo tài khoản"
 		description="Tạo tài khoản FuLe BaberShop bằng email và mật khẩu."
 		variant="framed"
 	>
@@ -94,7 +94,7 @@ const register = async () => {
 			</div>
 
 			<div class="auth-field">
-				<label for="password">Password</label>
+				<label for="password">Mật khẩu</label>
 				<input
 					id="password"
 					v-model="form.password"
@@ -113,7 +113,7 @@ const register = async () => {
 			</div>
 
 			<div class="auth-field">
-				<label for="password-confirmation">Confirm password</label>
+				<label for="password-confirmation">Xác nhận mật khẩu</label>
 				<input
 					id="password-confirmation"
 					v-model="form.passwordConfirmation"
@@ -132,12 +132,12 @@ const register = async () => {
 			</div>
 
 			<button type="submit" class="auth-submit" :disabled="loading">
-				{{ loading ? 'Đang đăng ký...' : 'CREATE ACCOUNT' }}
+				{{ loading ? 'Đang đăng ký...' : 'Tạo tài khoản' }}
 			</button>
 		</form>
 
 		<template #footer>
-			<p>Đã có tài khoản?<router-link class="auth-inline-link" to="/login">Login</router-link></p>
+			<p>Đã có tài khoản?<router-link class="auth-inline-link" to="/login">Đăng nhập</router-link></p>
 		</template>
 	</AuthPage>
 </template>

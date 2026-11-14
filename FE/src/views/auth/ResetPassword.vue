@@ -78,7 +78,7 @@ const resetPassword = async () => {
 
 <template>
   <AuthPage
-    title="Reset password"
+    title="Đặt lại mật khẩu"
     description="Tạo mật khẩu mới để tiếp tục sử dụng tài khoản FuLe BaberShop."
   >
     <!-- Trạng thái kiểm tra link và form đặt lại mật khẩu. -->
@@ -88,7 +88,7 @@ const resetPassword = async () => {
 
     <form v-else-if="tokenValid" class="auth-form" novalidate @submit.prevent="resetPassword">
       <div class="auth-field">
-        <label for="new-password">New password</label>
+        <label for="new-password">Mật khẩu mới</label>
         <input
           id="new-password"
           v-model="form.newPassword"
@@ -107,7 +107,7 @@ const resetPassword = async () => {
       </div>
 
       <div class="auth-field">
-        <label for="password-confirmation">Confirm password</label>
+        <label for="password-confirmation">Xác nhận mật khẩu</label>
         <input
           id="password-confirmation"
           v-model="form.passwordConfirmation"
@@ -126,7 +126,7 @@ const resetPassword = async () => {
       </div>
 
       <button type="submit" class="auth-submit" :disabled="loading">
-        {{ loading ? 'Đang cập nhật...' : 'RESET PASSWORD' }}
+        {{ loading ? 'Đang cập nhật...' : 'Đặt lại mật khẩu' }}
       </button>
     </form>
 
@@ -136,7 +136,7 @@ const resetPassword = async () => {
     </div>
 
     <template #footer>
-      <p><router-link class="auth-inline-link" to="/login">Back to login</router-link></p>
+      <p><router-link class="auth-inline-link" to="/login">Quay lại đăng nhập</router-link></p>
     </template>
   </AuthPage>
 </template>

@@ -303,6 +303,15 @@ class AuthController
             return;
         }
 
+        // Cùng quy tắc độ dài với đăng ký: mật khẩu 8-72 byte (FE cũng kiểm tra giống hệt).
+        if (strlen($password) < 8 || strlen($password) > 72) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Email không hợp lệ hoặc mật khẩu phải dài từ 8 đến 72 byte'
+            ], 422);
+            return;
+        }
+
         $user = $this->userModel->authenticate($email, $password);
 
         if ($user === false) {

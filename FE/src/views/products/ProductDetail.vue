@@ -56,6 +56,8 @@ const commentDeletingId = ref(null)
 const variantQuantities = ref({})
 // Các biến thể đang gửi thêm giỏ; mỗi nút chỉ khóa theo đúng biến thể của nó.
 const cartAddingVariantIds = ref(new Set())
+// Số lượng mỗi biến thể đang nằm trong giỏ của người dùng, key là id biến thể (chỉ có khi đã đăng nhập).
+const cartQuantities = ref({})
 
 // Chỉ dùng để chọn giao diện; BE vẫn xác minh JWT và quyền sở hữu.
 const loggedIn = isAuthenticated()
@@ -91,9 +93,15 @@ const priceRange = computed(() => {
 // Hết hàng khi tổng tồn kho của mọi biến thể bằng 0.
 const isOutOfStock = computed(() => product.value != null && Number(product.value.stock ?? 0) <= 0)
 
-// Số lượng tối đa của một biến thể là tồn kho riêng của biến thể đó.
+// Số đã nằm trong giỏ của biến thể này (0 nếu chưa có hoặc chưa đăng nhập).
+function variantInCart(variant) {
+  return Math.max(0, Math.floor(Number(cartQuantities.value[variant.id]) || 0))
+}
+
+// Số còn có thể thêm = tồn kho trừ số đã có trong giỏ. Giỏ không giữ kho nên BE vẫn kiểm tra lại khi thêm.
 function variantMaxQuantity(variant) {
-  return Math.max(0, Math.floor(Number(variant.stock) || 0))
+  const stock = Math.max(0, Math.floor(Number(variant.stock) || 0))
+  return Math.max(0, stock - variantInCart(variant))
 }
 
 // Có giá giảm khi sale_price của biến thể hợp lệ và nhỏ hơn giá gốc.
@@ -102,9 +110,11 @@ function variantIsOnSale(variant) {
   return variant.sale_price != null && salePrice > 0 && salePrice < Number(variant.price)
 }
 
+// Số lượng đang chọn, luôn kẹp không vượt số còn có thể thêm (phòng khi giỏ vừa thay đổi).
 function getVariantQuantity(variant) {
-  if (variantMaxQuantity(variant) <= 0) return 0
-  return variantQuantities.value[variant.id] ?? 1
+  const max = variantMaxQuantity(variant)
+  if (max <= 0) return 0
+  return Math.min(variantQuantities.value[variant.id] ?? 1, max)
 }
 
 function setVariantQuantity(variant, value) {
@@ -179,6 +189,7 @@ async function fetchProduct(slug) {
     if (slug !== route.params.slug) return
     product.value = res.data.product
     variantQuantities.value = {}
+    fetchCartQuantities()
   } catch (err) {
     if (slug !== route.params.slug) return
     productError.value = err.response?.data?.message || 'Không tải được thông tin sản phẩm.'
@@ -312,6 +323,22 @@ function setVariantAdding(variant, adding) {
   cartAddingVariantIds.value = next
 }
 
+// Đọc giỏ hiện tại để biết mỗi biến thể đã có bao nhiêu trong giỏ. Lỗi thì coi như chưa có gì; BE vẫn chặn khi thêm.
+async function fetchCartQuantities() {
+  if (!loggedIn) return
+  try {
+    const res = await api.get('/?action=api-cart')
+    const items = Array.isArray(res.data?.cart?.items) ? res.data.cart.items : []
+    const map = {}
+    for (const item of items) {
+      map[item.variant_id] = (map[item.variant_id] || 0) + Number(item.quantity || 0)
+    }
+    cartQuantities.value = map
+  } catch {
+    cartQuantities.value = {}
+  }
+}
+
 // Thêm đúng biến thể và số lượng đã chọn của biến thể đó vào giỏ.
 async function addVariantToCart(variant) {
   if (!loggedIn || isVariantAdding(variant)) return
@@ -330,6 +357,8 @@ async function addVariantToCart(variant) {
     })
     showToast(response.data?.message || 'Đã thêm sản phẩm vào giỏ hàng.', 'success')
     refreshCartCount()
+    // Cập nhật số đã có trong giỏ để nút và số còn lại đổi ngay, không cần tải lại trang.
+    fetchCartQuantities()
   } catch (error) {
     showToast(error.response?.data?.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'danger')
   } finally {
@@ -464,7 +493,8 @@ watch(
                     <del v-if="variantIsOnSale(variant)">{{ formatPrice(variant.price) }}</del>
                   </div>
                   <span class="pd-variant-stock">
-                    {{ variantMaxQuantity(variant) > 0 ? `Còn ${variantMaxQuantity(variant)} sản phẩm` : 'Hết hàng' }}
+                    {{ variantMaxQuantity(variant) > 0 ? `Còn ${variantMaxQuantity(variant)} sản phẩm` : (variantInCart(variant) > 0 ? 'Đã đủ số lượng trong giỏ' : 'Hết hàng') }}
+                    <template v-if="variantInCart(variant) > 0"> · Trong giỏ: {{ variantInCart(variant) }}</template>
                   </span>
                 </div>
 
@@ -659,20 +689,20 @@ watch(
 
 <style scoped>
 .pd-page {
-  color: #ede0d4;
+  color: #131e2a;
 }
 
 .pd-card {
   padding: 32px 24px;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #1b1b1d;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 50%);
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgb(28 42 58 / 10%);
 }
 
 .pd-state {
   padding: 56px 24px;
-  color: #d1c5b4;
+  color: #4a5565;
   text-align: center;
 }
 
@@ -681,7 +711,7 @@ watch(
 }
 
 .pd-state--error {
-  color: #ffb4ab;
+  color: #93000a;
 }
 
 .pd-breadcrumb {
@@ -690,29 +720,29 @@ watch(
   align-items: baseline;
   gap: 6px;
   margin-bottom: 16px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 13px;
   line-height: 1.5;
 }
 
 .pd-breadcrumb a:hover {
-  color: #e9c176;
+  color: #8c6a32;
   text-decoration: underline;
 }
 
 .pd-breadcrumb-separator {
-  color: #9a8f80;
+  color: #6b7280;
 }
 
 .pd-breadcrumb-current {
-  color: #ede0d4;
+  color: #131e2a;
   font-weight: 500;
 }
 
 .pd-back {
   display: none;
   margin-bottom: 16px;
-  color: #ede0d4;
+  color: #131e2a;
   font-size: 14px;
 }
 
@@ -728,9 +758,9 @@ watch(
   overflow: hidden;
   aspect-ratio: 1 / 1;
   place-items: center;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #2a2a2c;
+  background: #efeae0;
 }
 
 .pd-gallery-main img,
@@ -741,7 +771,7 @@ watch(
 }
 
 .pd-image-fallback {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 32px;
   font-weight: 700;
 }
@@ -764,19 +794,19 @@ watch(
   overflow: hidden;
   place-items: center;
   padding: 0;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #2a2a2c;
+  background: #efeae0;
   cursor: pointer;
 }
 
 .pd-thumb.is-active {
-  border: 2px solid #e9c176;
+  border: 2px solid #b8893e;
 }
 
 .pd-category {
   margin: 0 0 4px;
-  color: #c5a059;
+  color: #8c6a32;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -785,7 +815,7 @@ watch(
 
 .pd-name {
   margin: 0 0 6px;
-  color: #ede0d4;
+  color: #131e2a;
   font-size: 28px;
   font-weight: 600;
   line-height: 1.25;
@@ -793,7 +823,7 @@ watch(
 
 .pd-meta {
   margin: 0 0 2px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 13px;
 }
 
@@ -812,20 +842,20 @@ watch(
 }
 
 .pd-price strong.is-sale {
-  color: #ffb4ab;
+  color: #93000a;
 }
 
 .pd-price del {
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 15px;
 }
 
 .pd-sale-badge {
   padding: 2px 6px;
-  border: 1px solid #93000a;
+  border: 1px solid #ba1a1a;
   border-radius: 4px;
-  background: #2a1516;
-  color: #ffb4ab;
+  background: #fdf1f0;
+  color: #93000a;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -833,22 +863,22 @@ watch(
 
 .pd-stock {
   margin: 4px 0 12px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 13px;
   font-weight: 500;
 }
 
 .pd-stock--out {
-  color: #ffb4ab;
+  color: #93000a;
 }
 
 .pd-stepper {
   display: flex;
   overflow: hidden;
   align-items: stretch;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #1b1b1d;
+  background: #ffffff;
 }
 
 .pd-stepper button {
@@ -857,14 +887,14 @@ watch(
   padding: 0;
   border: 0;
   background: transparent;
-  color: #ede0d4;
+  color: #131e2a;
   font-size: 18px;
   cursor: pointer;
 }
 
 .pd-stepper button:disabled {
-  background: #2a2a2c;
-  color: #9a8f80;
+  background: #efeae0;
+  color: #6b7280;
   cursor: not-allowed;
 }
 
@@ -873,10 +903,10 @@ watch(
   padding: 0;
   border: 0;
   background: transparent;
-  border-right: 1px solid #4e4639;
-  border-left: 1px solid #4e4639;
+  border-right: 1px solid #d9d4ca;
+  border-left: 1px solid #d9d4ca;
   border-radius: 0;
-  color: #ede0d4;
+  color: #131e2a;
   font-size: 15px;
   font-weight: 600;
   text-align: center;
@@ -891,12 +921,12 @@ watch(
 
 .pd-stepper-input:focus {
   outline: none;
-  background: #1f1f21;
+  background: #ffffff;
 }
 
 .pd-stepper-input:disabled {
-  background: #2a2a2c;
-  color: #9a8f80;
+  background: #efeae0;
+  color: #6b7280;
 }
 
 .pd-variants {
@@ -915,7 +945,7 @@ watch(
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 6px;
 }
 
@@ -930,7 +960,7 @@ watch(
 
 .pd-variant-attrs,
 .pd-variant-stock {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
@@ -942,7 +972,7 @@ watch(
 }
 
 .pd-variant-price del {
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 14px;
 }
 
@@ -955,7 +985,7 @@ watch(
 
 .pd-price-from {
   margin-right: 6px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
@@ -965,7 +995,7 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 0 20px;
-  border: 1px solid #c5a059;
+  border: 1px solid #b8893e;
   border-radius: 4px;
   font-size: 15px;
   font-weight: 700;
@@ -979,30 +1009,30 @@ watch(
 }
 
 .pd-btn--primary {
-  border-color: #e9c176;
-  background: #e9c176;
-  color: #4e3700;
+  border-color: #b8893e;
+  background: #b8893e;
+  color: #ffffff;
 }
 
 .pd-btn--primary:hover:not(:disabled) {
-  border-color: #f5ce72;
-  background: #f5ce72;
+  border-color: #b8893e;
+  background: #9e7432;
 }
 
 .pd-btn--outline {
   background: transparent;
-  color: #ede0d4;
+  color: #131e2a;
 }
 
 .pd-btn--outline:hover:not(:disabled) {
-  border-color: #e9c176;
-  background: #2a2a2c;
+  border-color: #b8893e;
+  background: #efeae0;
 }
 
 .pd-btn:disabled {
-  border-color: #4e4639;
-  background: #2a2a2c;
-  color: #9a8f80;
+  border-color: #d9d4ca;
+  background: #efeae0;
+  color: #6b7280;
   cursor: not-allowed;
 }
 
@@ -1011,24 +1041,24 @@ watch(
 .pd-thumb:focus-visible,
 .pd-textarea:focus-visible,
 .pd-page a:focus-visible {
-  outline: 2px solid #e9c176;
+  outline: 2px solid #b8893e;
   outline-offset: 2px;
 }
 
 .pd-demo-note {
   margin: 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
 }
 
 .pd-login-hint {
   margin: 20px 0 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
 .pd-login-hint a {
-  color: #e9c176;
+  color: #8c6a32;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1036,7 +1066,7 @@ watch(
 .pd-divider {
   margin: 24px 0 20px;
   border: 0;
-  border-top: 1px solid #4e4639;
+  border-top: 1px solid #d9d4ca;
   opacity: 1;
 }
 
@@ -1048,7 +1078,7 @@ watch(
 
 .pd-description {
   margin: 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-line;
@@ -1056,7 +1086,7 @@ watch(
 
 .pd-comments {
   padding-top: 32px;
-  border-top: 1px solid #4e4639;
+  border-top: 1px solid #d9d4ca;
 }
 
 .pd-comments-header {
@@ -1089,8 +1119,8 @@ watch(
   flex: 0 0 40px;
   place-items: center;
   border-radius: 50%;
-  background: #2a2a2c;
-  color: #d1c5b4;
+  background: #efeae0;
+  color: #4a5565;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1111,16 +1141,16 @@ watch(
   width: 100%;
   min-height: 84px;
   padding: 12px;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #1b1b1d;
-  color: #ede0d4;
+  background: #ffffff;
+  color: #131e2a;
   font-size: 14px;
   resize: vertical;
 }
 
 .pd-textarea::placeholder {
-  color: #9a8f80;
+  color: #6b7280;
 }
 
 .pd-comment-form-footer {
@@ -1133,7 +1163,7 @@ watch(
 
 .pd-field-error {
   margin: 6px 0 0;
-  color: #ffb4ab;
+  color: #93000a;
   font-size: 13px;
 }
 
@@ -1154,12 +1184,12 @@ watch(
   align-items: center;
   gap: 12px;
   margin: 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
 .pd-comments-state--error {
-  color: #ffb4ab;
+  color: #93000a;
 }
 
 .pd-comment-list {
@@ -1172,11 +1202,11 @@ watch(
   display: flex;
   gap: 16px;
   padding: 16px 0;
-  border-top: 1px solid #4e4639;
+  border-top: 1px solid #d9d4ca;
 }
 
 .pd-comment:last-child {
-  border-bottom: 1px solid #4e4639;
+  border-bottom: 1px solid #d9d4ca;
 }
 
 .pd-comment-body {
@@ -1198,13 +1228,13 @@ watch(
 }
 
 .pd-comment-meta time {
-  color: #9a8f80;
+  color: #6b7280;
   font-size: 12px;
 }
 
 .pd-comment-content {
   margin: 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -1221,7 +1251,7 @@ watch(
 
 .pd-pagination-indicator {
   min-width: 48px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
   font-weight: 600;
   text-align: center;
@@ -1264,5 +1294,177 @@ watch(
   .pd-btn {
     transition: none;
   }
+}
+/* ===== Bố cục theo Stitch "Chi tiết sản phẩm" (ghi đè các rule ở trên) ===== */
+.pd-card {
+  padding: 28px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(28, 42, 58, 0.08);
+}
+
+/* Breadcrumb in hoa nhỏ, phân cách bằng viền dưới. */
+.pd-breadcrumb {
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e6e0d4;
+  color: #6b6560;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pd-main {
+  gap: 32px;
+}
+
+/* Ảnh lớn: khung trắng viền kem, có lề trong như thẻ ảnh trong Stitch. */
+.pd-gallery-main {
+  padding: 8px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(28, 42, 58, 0.08);
+}
+
+.pd-gallery-main img {
+  border-radius: 6px;
+}
+
+.pd-thumb {
+  border-radius: 8px;
+}
+
+.pd-thumb.is-active {
+  border: 2px solid #b8893e;
+}
+
+/* Dòng danh mục màu đồng, tên sản phẩm serif in hoa. */
+.pd-category {
+  color: #b8893e;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pd-name {
+  color: #1f1f1f;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+/* Khối giá: thẻ trắng viền kem, giá to màu đồng. */
+.pd-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 16px 0 8px;
+  padding: 14px 16px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(28, 42, 58, 0.06);
+}
+
+.pd-price strong {
+  color: #b8893e;
+}
+
+.pd-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #cde5d2;
+  border-radius: 4px;
+  background: #ebf5ed;
+  color: #246a38;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pd-stock--out {
+  border-color: #f8b4b4;
+  background: #fde8e8;
+  color: #9b1c1c;
+}
+
+/* Mỗi phiên bản là một thẻ nhỏ nền kem, viền đồng khi hover. */
+.pd-variant {
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #fbf7ef;
+  transition: border-color 140ms ease;
+}
+
+.pd-variant:hover {
+  border-color: rgb(184 137 62 / 45%);
+}
+
+.pd-variant-price strong.is-sale,
+.pd-variant-price strong {
+  color: #b8893e;
+}
+
+.pd-subheading {
+  color: #1f1f1f;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pd-btn {
+  border-radius: 6px;
+  letter-spacing: 0.06em;
+}
+
+/* Khu bình luận: tách thành khối riêng có viền trên, tiêu đề serif. */
+.pd-comments {
+  margin-top: 8px;
+  padding-top: 28px;
+  border-top: 1px solid #e6e0d4;
+}
+
+.pd-comments-title {
+  color: #1f1f1f;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pd-comment {
+  padding: 16px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.pd-avatar {
+  border: 1px solid #e6e0d4;
+  background: #efeae0;
+  color: #b8893e;
+}
+
+.pd-textarea {
+  border-color: #e6e0d4;
+  border-radius: 6px;
+  background: #f7f4ee;
+}
+
+.pd-textarea:focus {
+  border-color: #b8893e;
+}
+
+@media (max-width: 767.98px) {
+  .pd-card {
+    padding: 18px 14px;
+  }
+
 }
 </style>

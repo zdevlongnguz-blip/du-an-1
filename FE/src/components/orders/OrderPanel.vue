@@ -16,10 +16,10 @@ defineProps({
 <style scoped>
 .order-panel {
   padding: 24px;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #1b1b1d;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 50%);
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgb(28 42 58 / 10%);
 }
 
 /* Điện thoại: thu padding như .pd-card. */

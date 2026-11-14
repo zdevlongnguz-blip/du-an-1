@@ -36,7 +36,7 @@ const requestReset = async () => {
 
 <template>
   <AuthPage
-    title="Forgot password?"
+    title="Quên mật khẩu?"
     description="Nhập email đã đăng ký. Nếu tài khoản phù hợp, hướng dẫn đặt lại mật khẩu sẽ được gửi."
   >
     <!-- Form yêu cầu reset giữ nguyên API và phản hồi chung từ BE. -->
@@ -61,12 +61,12 @@ const requestReset = async () => {
       </div>
 
       <button type="submit" class="auth-submit" :disabled="loading">
-        {{ loading ? 'Đang gửi...' : 'SEND RESET LINK' }}
+        {{ loading ? 'Đang gửi...' : 'Gửi liên kết đặt lại' }}
       </button>
     </form>
 
     <template #footer>
-      <p><router-link class="auth-inline-link" to="/login">Back to login</router-link></p>
+      <p><router-link class="auth-inline-link" to="/login">Quay lại đăng nhập</router-link></p>
     </template>
   </AuthPage>
 </template>

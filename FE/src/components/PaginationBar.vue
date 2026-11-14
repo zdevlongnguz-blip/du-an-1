@@ -89,10 +89,10 @@ function submitPage() {
     max-width: 100%;
     margin: 40px auto 0;
     padding: 8px 10px;
-    border: 1px solid #c5a059;
+    border: 1px solid #b8893e;
     border-radius: 10px;
-    background: linear-gradient(180deg, #2f2f32 0%, #232325 100%);
-    box-shadow: 0 0 0 1px rgb(233 193 118 / 15%), 0 10px 28px rgb(0 0 0 / 45%);
+    background: linear-gradient(180deg, #e6e0d4 0%, #efeae0 100%);
+    box-shadow: 0 0 0 1px rgb(184 137 62 / 15%), 0 10px 28px rgb(28 42 58 / 10%);
 }
 
 .pagination-nav {
@@ -102,30 +102,30 @@ function submitPage() {
     width: 40px;
     height: 40px;
     padding: 0;
-    border: 1px solid #e9c176;
+    border: 1px solid #b8893e;
     border-radius: 8px;
-    background: linear-gradient(180deg, #3a3a3d 0%, #2a2a2c 100%);
-    color: #f5ce72;
+    background: linear-gradient(180deg, #e6e0d4 0%, #efeae0 100%);
+    color: #7a5200;
     cursor: pointer;
     transition: background-color 160ms ease, color 160ms ease;
 }
 
 .pagination-nav:hover:not(:disabled) {
-    background: #e9c176;
-    color: #4e3700;
+    background: #b8893e;
+    color: #ffffff;
 }
 
 .pagination-nav:disabled {
-    border-color: #5a5042;
-    color: #7d7265;
-    background: #232325;
+    border-color: #cfc8b8;
+    color: #6b7280;
+    background: #efeae0;
     cursor: not-allowed;
 }
 
 .pagination-nav:focus-visible,
 .pagination-go:focus-visible,
 .pagination-input:focus-visible {
-    outline: 3px solid rgb(233 193 118 / 35%);
+    outline: 3px solid rgb(184 137 62 / 35%);
     outline-offset: 2px;
 }
 
@@ -139,10 +139,10 @@ function submitPage() {
     width: 72px;
     height: 40px;
     padding: 0 6px;
-    border: 1px solid #c5a059;
+    border: 1px solid #b8893e;
     border-radius: 8px;
-    background: #131315;
-    color: #fff4e0;
+    background: #f7f4ee;
+    color: #7a5200;
     font-size: 15px;
     font-weight: 600;
     text-align: center;
@@ -150,12 +150,12 @@ function submitPage() {
 
 .pagination-input:focus {
     outline: none;
-    border-color: #e9c176;
+    border-color: #b8893e;
 }
 
 .pagination-total {
     flex-shrink: 0;
-    color: #ede0d4;
+    color: #131e2a;
     font-size: 14px;
     white-space: nowrap;
 }
@@ -163,14 +163,14 @@ function submitPage() {
 .pagination-go {
     height: 40px;
     padding: 0 18px;
-    border: 1px solid #f5ce72;
+    border: 1px solid #b8893e;
     border-radius: 8px;
-    background: linear-gradient(180deg, #f5ce72 0%, #c5a059 100%);
-    color: #3a2800;
+    background: linear-gradient(180deg, #9e7432 0%, #b8893e 100%);
+    color: #ffffff;
     cursor: pointer;
     font-size: 14px;
     font-weight: 700;
-    box-shadow: 0 2px 10px rgb(233 193 118 / 25%);
+    box-shadow: 0 2px 10px rgb(184 137 62 / 25%);
     transition: filter 160ms ease;
 }
 

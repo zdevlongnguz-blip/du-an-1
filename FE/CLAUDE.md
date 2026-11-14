@@ -138,3 +138,14 @@ Phát hiện thêm vấn đề tương tự: báo lại cho người dùng trong
 - Chạy thử màn hình bằng `npm run dev` với các trường hợp: có dữ liệu, rỗng, lỗi API, chưa đăng nhập (với route bảo vệ). Nếu không tự chạy/xem được giao diện, ghi rõ trong phần tổng kết để người dùng tự kiểm tra.
 - Xem diff (`git diff`): không có file ngoài phạm vi, không sửa `client.js`, không có URL cứng mới, không đổi contract ngoài ý muốn.
 - Mọi hàm, API call, route, `ref/computed/watch` mới đều có comment tiếng Việt theo mục 8; chỗ khó hiểu có giải thích lý do.
+
+## 12. Thiết kế UI/UX theo Stitch (tham khảo)
+- Stitch project "Fule BarberShop Online Store" (id `8760040047758233303`) là nguồn tham khảo màu, bố cục, khoảng cách, font cho mọi task UI/UX FE. Giao diện hiện tại đã theo thiết kế này, nên task mới phải giữ đúng bảng màu và font dưới đây.
+- Bảng màu: navy `#131e2a` / `#1c2a3a` / `#25364a` (header, footer, chữ nhấn); kem `#f7f4ee` (nền trang), `#efeae0` (nền phụ); trắng `#ffffff` (thẻ); viền `#d9d4ca` / `#e6e0d4`; đồng `#b8893e` (nhấn, nút chính), đồng đậm `#9e7432` (hover); chữ phụ `#6b6560` / `#4a5565`. Lỗi `#ba1a1a` / `#93000a`, thành công `#2f7d4f`.
+- Font: Playfair Display cho tiêu đề (`var(--font-display)`), Inter cho chữ thường. Cả hai có bộ ký tự tiếng Việt. Không dùng font không có tiếng Việt như Bebas Neue, DM Sans, DM Serif Display.
+- Bo góc 6–8px; nút chính nền đồng chữ trắng, nút phụ viền navy. Giá tiền đi qua `formatPrice`.
+- Không copy HTML/Tailwind từ Stitch; viết lại bằng Bootstrap 5 + `<style scoped>`.
+- Phạm vi UI/UX: được sửa `<template>` (cấu trúc, class) và `<style>`. Giữ nguyên mọi binding (`v-model`, `v-if`, `v-for` + `:key`, `@event`, `:prop`, `router-link :to`, slot, emit) và logic trong `<script setup>` trừ khi task yêu cầu đổi logic.
+- Sửa file dùng chung (`style.css`, `App.vue`, `router/index.js`) cần xác nhận của người phụ trách trước.
+- Thiết kế cần logic/API mới (ví dụ bộ lọc giá, mã giảm giá, theo dõi hành trình): liệt kê để người dùng quyết định, không tự thêm.
+- Giữ đủ trạng thái loading / rỗng / lỗi và nút thử lại. Chữ hiển thị giữ theo ngôn ngữ hiện có của trang.

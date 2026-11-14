@@ -135,311 +135,348 @@ onMounted(() => fetchCategories())
 
 <template>
     <section class="catalog-page" aria-labelledby="catalog-title">
+        <!-- Tiêu đề trang: dòng phụ màu đồng + tiêu đề serif theo Stitch. -->
         <header class="catalog-heading">
-            <p class="catalog-eyebrow">FuLe BaberShop</p>
-            <h1 id="catalog-title">Danh sách sản phẩm</h1>
+            <div class="catalog-heading-copy">
+                <p class="catalog-eyebrow">FuLe BaberShop</p>
+                <h1 id="catalog-title">Danh sách sản phẩm</h1>
+            </div>
         </header>
 
-        <!-- Toolbar tìm kiếm, chọn danh mục và xóa bộ lọc đang dùng. -->
-        <form class="catalog-toolbar" @submit.prevent="applyFilters">
-            <div class="catalog-toolbar-search">
-                <label class="visually-hidden" for="catalog-search">Tìm kiếm sản phẩm</label>
-                <input
-                    id="catalog-search"
-                    v-model="searchInput"
-                    class="catalog-control"
-                    type="search"
-                    placeholder="Tìm kiếm sản phẩm..."
-                >
+        <!-- Bố cục 2 cột: sidebar bộ lọc bên trái, danh sách sản phẩm bên phải. -->
+        <div class="catalog-layout">
+            <!-- Sidebar bộ lọc: tìm kiếm + danh mục; bấm "Tìm kiếm" mới gửi lên URL. -->
+            <aside class="catalog-sidebar">
+                <form class="catalog-filter" @submit.prevent="applyFilters">
+                    <div class="catalog-filter-head">
+                        <h2>Bộ lọc</h2>
+                    </div>
+
+                    <div class="catalog-filter-group">
+                        <label class="catalog-filter-label" for="catalog-search">Tìm kiếm sản phẩm</label>
+                        <input
+                            id="catalog-search"
+                            v-model="searchInput"
+                            class="catalog-control"
+                            type="search"
+                            placeholder="Tìm kiếm sản phẩm..."
+                        >
+                    </div>
+
+                    <div class="catalog-filter-group">
+                        <label class="catalog-filter-label" for="catalog-category">Lọc theo danh mục</label>
+                        <select id="catalog-category" v-model="categorySlug" class="catalog-control" :disabled="categories.length === 0">
+                            <option value="">Tất cả danh mục</option>
+                            <option v-for="category in categories" :key="category.id" :value="category.slug">
+                                {{ category.name }}
+                            </option>
+                        </select>
+                        <p v-if="categoryError" class="catalog-category-error" role="status">{{ categoryError }}</p>
+                    </div>
+
+                    <div class="catalog-filter-actions">
+                        <button class="catalog-submit" type="submit">Tìm kiếm</button>
+                        <button
+                            v-if="searchInput || categorySlug"
+                            class="catalog-outline-button"
+                            type="button"
+                            @click="clearFilters"
+                        >
+                            Xóa bộ lọc
+                        </button>
+                    </div>
+                </form>
+
+            </aside>
+
+            <!-- Cột phải: lưới sản phẩm + phân trang. -->
+            <div class="catalog-results">
+
+                <!-- Khi đang tải, placeholder giữ nguyên tỷ lệ của card trong thiết kế. -->
+                <div v-if="loading" class="catalog-grid" role="status" aria-label="Đang tải sản phẩm" aria-busy="true">
+                    <div v-for="placeholderIndex in 8" :key="placeholderIndex" class="catalog-skeleton" aria-hidden="true"></div>
+                </div>
+
+                <!-- Lỗi API được tách khỏi trạng thái không có sản phẩm và có thể thử lại. -->
+                <div v-else-if="errorMessage" class="catalog-state catalog-state--error" role="alert">
+                    <p>{{ errorMessage }}</p>
+                    <button class="catalog-outline-button" type="button" @click="fetchProducts">Thử lại</button>
+                </div>
+
+                <!-- Empty state thay grid/pagination và cho phép xóa bộ lọc. -->
+                <div v-else-if="products.length === 0" class="catalog-state" role="status">
+                    <p>Không tìm thấy sản phẩm phù hợp.</p>
+                    <button class="catalog-outline-button" type="button" @click="clearFilters">Xóa bộ lọc</button>
+                </div>
+
+                <template v-else>
+                    <!-- Grid responsive: 3 cột desktop, 2 cột tablet và mobile. -->
+                    <div class="catalog-grid" :aria-busy="loading">
+                        <ProductCardCatalog v-for="product in products" :key="product.id" :product="product" />
+                    </div>
+
+                    <!-- Phân trang dùng chung; đổi trang vẫn giữ nguyên bộ lọc trên URL. -->
+                    <PaginationBar
+                        label="Phân trang sản phẩm"
+                        :current-page="Number(pagination.current_page)"
+                        :total-pages="Number(pagination.total_pages)"
+                        @change="changePage"
+                    />
+                </template>
             </div>
-
-            <div class="catalog-toolbar-category">
-                <label class="visually-hidden" for="catalog-category">Lọc theo danh mục</label>
-                <select id="catalog-category" v-model="categorySlug" class="catalog-control" :disabled="categories.length === 0">
-                    <option value="">Tất cả danh mục</option>
-                    <option v-for="category in categories" :key="category.id" :value="category.slug">
-                        {{ category.name }}
-                    </option>
-                </select>
-            </div>
-
-            <div class="catalog-toolbar-actions">
-                <button class="catalog-submit" type="submit">Tìm kiếm</button>
-                <button
-                    v-if="searchInput || categorySlug"
-                    class="catalog-outline-button catalog-clear-button"
-                    type="button"
-                    @click="clearFilters"
-                >
-                    Xóa bộ lọc
-                </button>
-            </div>
-        </form>
-
-        <p v-if="categoryError" class="catalog-category-error" role="status">{{ categoryError }}</p>
-
-        <!-- Khi đang tải, placeholder giữ nguyên tỷ lệ 3:4 của card trong thiết kế. -->
-        <div v-if="loading" class="catalog-grid" role="status" aria-label="Đang tải sản phẩm" aria-busy="true">
-            <div v-for="placeholderIndex in 8" :key="placeholderIndex" class="catalog-skeleton" aria-hidden="true"></div>
         </div>
-
-        <!-- Lỗi API được tách khỏi trạng thái không có sản phẩm và có thể thử lại. -->
-        <div v-else-if="errorMessage" class="catalog-state catalog-state--error" role="alert">
-            <p>{{ errorMessage }}</p>
-            <button class="catalog-outline-button" type="button" @click="fetchProducts">Thử lại</button>
-        </div>
-
-        <!-- Empty state thay grid/pagination và cho phép xóa bộ lọc. -->
-        <div v-else-if="products.length === 0" class="catalog-state" role="status">
-            <p>Không tìm thấy sản phẩm phù hợp.</p>
-            <button class="catalog-outline-button" type="button" @click="clearFilters">Xóa bộ lọc</button>
-        </div>
-
-        <template v-else>
-            <!-- Grid responsive: 4 cột desktop, 3 tablet, 2 mobile. -->
-            <div class="catalog-grid" :aria-busy="loading">
-                <ProductCardCatalog v-for="product in products" :key="product.id" :product="product" />
-            </div>
-
-            <!-- Phân trang dùng chung; đổi trang vẫn giữ nguyên bộ lọc trên URL. -->
-            <PaginationBar
-                label="Phân trang sản phẩm"
-                :current-page="Number(pagination.current_page)"
-                :total-pages="Number(pagination.total_pages)"
-                @change="changePage"
-            />
-        </template>
     </section>
 </template>
 
 <style scoped>
+/* Trang danh sách sản phẩm theo Stitch: nền kem, sidebar trắng, lưới card trắng, nhấn đồng. */
 .catalog-page {
-    width: 100%;
-    padding: 40px 24px 60px;
-    background: #131315;
+    display: grid;
+    gap: 24px;
 }
 
 .catalog-heading {
-    margin-bottom: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #e6e0d4;
+}
+
+.catalog-heading-copy {
+    max-width: 640px;
 }
 
 .catalog-eyebrow {
     margin: 0 0 6px;
-    color: #c5a059;
-    font-size: 11px;
+    color: #b8893e;
+    font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
 }
 
 .catalog-heading h1 {
-    margin: 0;
-    color: #ede0d4;
-    font-size: 24px;
-    font-weight: 700;
-    line-height: 1.25;
+    margin: 0 0 10px;
+    color: #131e2a;
+    font-family: var(--font-display);
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 600;
+    line-height: 1.15;
+    text-transform: uppercase;
 }
 
-.catalog-toolbar {
+/* Lưới 2 cột: sidebar cố định 280px, cột phải co giãn. */
+.catalog-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 280px minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+}
+
+.catalog-sidebar {
+    position: sticky;
+    top: 96px;
+    display: grid;
+    gap: 16px;
+}
+
+.catalog-filter {
+    display: grid;
+    gap: 18px;
+    padding: 20px;
+    border: 1px solid #e6e0d4;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(28, 42, 58, 0.06);
+}
+
+.catalog-filter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e6e0d4;
+}
+
+.catalog-filter-head h2 {
+    margin: 0;
+    color: #131e2a;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.catalog-filter-group {
+    display: grid;
     gap: 8px;
-    margin-bottom: 24px;
+}
+
+.catalog-filter-label {
+    color: #6b6560;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
 }
 
 .catalog-control {
     width: 100%;
-    height: 44px;
-    padding: 0 12px;
-    border: 1px solid #4e4639;
-    border-radius: 4px;
-    background: #1b1b1d;
-    color: #ede0d4;
-    font: inherit;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid #e6e0d4;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #131e2a;
     font-size: 14px;
+    outline: none;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.catalog-control::placeholder {
-    color: #d1c5b4;
-    opacity: 0.7;
-}
-
-.catalog-control:focus-visible {
-    border-color: #e9c176;
-    outline: 2px solid rgb(233 193 118 / 30%);
-    outline-offset: 1px;
+.catalog-control:focus {
+    border-color: #b8893e;
+    box-shadow: 0 0 0 3px rgb(184 137 62 / 18%);
 }
 
 .catalog-control:disabled {
-    background: #1f1f21;
-    color: #9a8f80;
+    background: #f7f4ee;
+    color: #8a8f98;
 }
 
-.catalog-toolbar-actions {
-    display: flex;
+.catalog-category-error {
+    margin: 0;
+    color: #93000a;
+    font-size: 12px;
+}
+
+.catalog-filter-actions {
+    display: grid;
     gap: 8px;
-}
-
-.catalog-toolbar-actions > button {
-    flex: 1;
 }
 
 .catalog-submit,
 .catalog-outline-button {
     min-height: 44px;
     padding: 0 16px;
-    border: 1px solid #c5a059;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: background-color 140ms ease, color 140ms ease;
 }
 
+/* Nút chính màu đồng, nút phụ viền navy như Stitch. */
 .catalog-submit {
-    background: #e9c176;
-    color: #4e3700;
+    border: 1px solid #b8893e;
+    background: #b8893e;
+    color: #ffffff;
 }
 
 .catalog-submit:hover {
-    border-color: #f5ce72;
-    background: #f5ce72;
+    border-color: #9e7432;
+    background: #9e7432;
 }
 
 .catalog-outline-button {
+    border: 1px solid #1c2a3a;
     background: transparent;
-    color: #ede0d4;
+    color: #1c2a3a;
 }
 
-.catalog-outline-button:hover:not(:disabled) {
-    background: #2a2a2c;
+.catalog-outline-button:hover {
+    background: #1c2a3a;
+    color: #ffffff;
 }
 
 .catalog-submit:focus-visible,
 .catalog-outline-button:focus-visible {
-    outline: 3px solid rgb(233 193 118 / 35%);
+    outline: 3px solid #b8893e;
     outline-offset: 2px;
 }
 
-.catalog-outline-button:disabled {
-    border-color: #4e4639;
-    background: #1f1f21;
-    color: #9a8f80;
-    cursor: not-allowed;
-}
-
-.catalog-category-error {
-    margin: -12px 0 16px;
-    color: #d1c5b4;
-    font-size: 12px;
+.catalog-results {
+    display: grid;
+    min-width: 0;
+    gap: 16px;
 }
 
 .catalog-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
 }
 
+/* Skeleton: khối nhấp nháy nhẹ giữ chỗ cho card khi đang tải. */
 .catalog-skeleton {
-    aspect-ratio: 3 / 4;
-    border: 1px solid #4e4639;
-    border-radius: 4px;
-    background: linear-gradient(100deg, #1f1f21 30%, #2a2a2c 45%, #1f1f21 60%);
-    background-size: 220% 100%;
-    animation: catalog-skeleton-shimmer 1.4s ease-in-out infinite;
+    aspect-ratio: 4 / 6;
+    border: 1px solid #e6e0d4;
+    border-radius: 8px;
+    background: linear-gradient(100deg, #ffffff 30%, #efeae0 45%, #ffffff 60%);
+    background-size: 200% 100%;
+    animation: catalog-shimmer 1.4s linear infinite;
+}
+
+@keyframes catalog-shimmer {
+    to {
+        background-position: -200% 0;
+    }
 }
 
 .catalog-state {
-    display: flex;
+    display: grid;
     min-height: 260px;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    margin: 64px 0;
-    color: #d1c5b4;
+    place-content: center;
+    justify-items: center;
+    gap: 12px;
+    padding: 32px;
+    border: 1px solid #e6e0d4;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #6b6560;
     text-align: center;
 }
 
 .catalog-state p {
     margin: 0;
-    font-size: 15px;
 }
 
 .catalog-state--error {
-    color: #ffb4ab;
+    border-color: #ba1a1a;
+    background: #fdf1f0;
+    color: #93000a;
 }
 
-@keyframes catalog-skeleton-shimmer {
-    to {
-        background-position-x: -220%;
-    }
-}
-
-@media (min-width: 768px) {
-    .catalog-page {
-        padding: 32px 24px 48px;
-    }
-
-    .catalog-toolbar {
-        grid-template-columns: repeat(12, minmax(0, 1fr));
-        column-gap: 16px;
-        row-gap: 16px;
-    }
-
-    .catalog-toolbar-search {
-        grid-column: 1 / -1;
-    }
-
-    .catalog-toolbar-category {
-        grid-column: span 8;
-    }
-
-    .catalog-toolbar-actions {
-        grid-column: span 4;
-    }
-
+@media (max-width: 1199.98px) {
     .catalog-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
-@media (min-width: 1200px) {
-    .catalog-page {
-        padding: 40px 24px 60px;
+/* Tablet/mobile: sidebar lên trên, không dính khi cuộn. */
+@media (max-width: 991.98px) {
+    .catalog-layout {
+        grid-template-columns: minmax(0, 1fr);
     }
 
-    .catalog-toolbar {
-        column-gap: 24px;
-        row-gap: 0;
+    .catalog-sidebar {
+        position: static;
     }
 
-    .catalog-toolbar-search {
-        grid-column: span 5;
-    }
+}
 
-    .catalog-toolbar-category {
-        grid-column: span 3;
-    }
-
-    .catalog-toolbar-actions {
-        grid-column: span 2;
-    }
-
+@media (max-width: 575.98px) {
     .catalog-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 24px;
-    }
-}
-
-@media (max-width: 767.98px) {
-    .catalog-page {
-        padding: 24px 16px 40px;
+        gap: 12px;
     }
 
-    .catalog-heading h1 {
-        font-size: 22px;
+    .catalog-heading {
+        padding-bottom: 16px;
     }
 }
 

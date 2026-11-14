@@ -139,7 +139,7 @@ onMounted(loadCart)
 </script>
 
 <template>
-  <main class="container py-4 py-lg-5 checkout-page">
+  <section class="checkout-page">
     <!-- Đường dẫn phụ; ẩn trên điện thoại giống trang chi tiết sản phẩm. -->
     <nav class="checkout-breadcrumb" aria-label="Đường dẫn">
       <RouterLink to="/">Trang chủ</RouterLink>
@@ -167,7 +167,7 @@ onMounted(loadCart)
     <!-- Giỏ trống có liên kết quay lại danh sách sản phẩm. -->
     <div v-else-if="cartItems.length === 0 && !createdOrder" class="text-center py-5">
       <p class="text-secondary mb-3">Giỏ hàng của bạn đang trống.</p>
-      <RouterLink class="btn btn-dark" to="/catalog">Xem sản phẩm</RouterLink>
+      <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
     </div>
 
     <!-- Lỗi chung. Với đơn online đã tạo nhưng chưa chuyển được sang SePay: cho thử lại, hoặc để thanh toán sau. -->
@@ -290,13 +290,13 @@ onMounted(loadCart)
             <strong>{{ formatPrice(Number(cart?.total_amount || 0)) }}</strong>
           </p>
 
-          <button class="btn btn-dark w-100" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem">
+          <button class="btn btn-primary w-100 checkout-submit" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem">
             {{ submitting ? 'Đang tạo đơn...' : paymentMethod === 'sepay' ? 'Đặt hàng và thanh toán' : 'Đặt hàng' }}
           </button>
         </OrderPanel>
       </aside>
     </form>
-  </main>
+  </section>
 </template>
 
 <style scoped>
@@ -306,18 +306,18 @@ onMounted(loadCart)
   align-items: baseline;
   gap: 8px;
   margin-bottom: 16px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .checkout-breadcrumb a:hover {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .checkout-breadcrumb .is-current {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 .checkout-header {
@@ -326,7 +326,7 @@ onMounted(loadCart)
 
 .checkout-eyebrow {
   margin: 0 0 4px;
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -343,7 +343,7 @@ onMounted(loadCart)
 
 .checkout-subtitle {
   margin: 6px 0 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 14px;
 }
 
@@ -353,7 +353,7 @@ onMounted(loadCart)
   margin: 0 0 24px;
   padding: 0 0 24px;
   border: 0;
-  border-bottom: 1px solid #4e4639;
+  border-bottom: 1px solid #d9d4ca;
 }
 
 .checkout-section--last {
@@ -382,8 +382,8 @@ onMounted(loadCart)
   width: 28px;
   height: 28px;
   border-radius: 4px;
-  background: #e9c176;
-  color: #4e3700;
+  background: #b8893e;
+  color: #ffffff;
   font-family: inherit;
   font-size: 15px;
   font-weight: 700;
@@ -392,7 +392,7 @@ onMounted(loadCart)
 .checkout-label {
   display: block;
   margin-bottom: 6px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -407,20 +407,20 @@ onMounted(loadCart)
   gap: 12px;
   margin-bottom: 10px;
   padding: 14px 16px;
-  border: 1px solid #4e4639;
+  border: 1px solid #d9d4ca;
   border-radius: 4px;
-  background: #1f1f21;
+  background: #ffffff;
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .pay-option:hover {
-  border-color: #9a8f80;
+  border-color: #cfc8b8;
 }
 
 .pay-option.is-selected {
-  border-color: #e9c176;
-  background: #2a2415;
+  border-color: #b8893e;
+  background: #fff7e6;
 }
 
 /* Radio thật được ẩn bằng cách làm trong suốt (vẫn nhận bàn phím); vòng tròn giả hiển thị trạng thái. */
@@ -438,12 +438,12 @@ onMounted(loadCart)
   width: 20px;
   height: 20px;
   margin-top: 2px;
-  border: 2px solid #9a8f80;
+  border: 2px solid #cfc8b8;
   border-radius: 50%;
 }
 
 .pay-option.is-selected .pay-option__check {
-  border-color: #e9c176;
+  border-color: #b8893e;
 }
 
 .pay-option.is-selected .pay-option__check::after {
@@ -451,11 +451,11 @@ onMounted(loadCart)
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #e9c176;
+  background: #b8893e;
 }
 
 .pay-option__input:focus-visible + .pay-option__check {
-  outline: 2px solid #e9c176;
+  outline: 2px solid #b8893e;
   outline-offset: 2px;
 }
 
@@ -471,7 +471,7 @@ onMounted(loadCart)
 }
 
 .pay-option__body small {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -479,14 +479,14 @@ onMounted(loadCart)
 .checkout-back {
   display: inline-block;
   margin-top: 16px;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .checkout-back:hover {
-  color: #e9c176;
+  color: #8c6a32;
 }
 
 /* Cột tóm tắt: dính theo màn hình khi cuộn trên màn hình lớn (dưới thanh điều hướng cố định). */
@@ -500,7 +500,7 @@ onMounted(loadCart)
 .checkout-summary__title {
   margin: 0 0 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #4e4639;
+  border-bottom: 1px solid #d9d4ca;
   color: var(--color-ink);
   font-size: 22px;
   font-weight: 700;
@@ -512,7 +512,7 @@ onMounted(loadCart)
   justify-content: space-between;
   gap: 16px;
   padding: 12px 0;
-  border-bottom: 1px solid #4e4639;
+  border-bottom: 1px solid #d9d4ca;
 }
 
 .checkout-item__main {
@@ -528,13 +528,13 @@ onMounted(loadCart)
 
 .checkout-item__variant {
   margin: 2px 0 0;
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 13px;
 }
 
 .checkout-item__warn {
   margin: 4px 0 0;
-  color: #ffb4ab;
+  color: #93000a;
   font-size: 13px;
 }
 
@@ -554,7 +554,7 @@ onMounted(loadCart)
 }
 
 .checkout-total span {
-  color: #d1c5b4;
+  color: #4a5565;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -562,7 +562,7 @@ onMounted(loadCart)
 }
 
 .checkout-total strong {
-  color: #e9c176;
+  color: #8c6a32;
   font-size: 24px;
   font-weight: 700;
 }
@@ -575,5 +575,16 @@ onMounted(loadCart)
   .checkout-title {
     font-size: 26px;
   }
+}
+
+/* Nút đặt hàng cao hơn, chữ in hoa giãn như CTA chính của Stitch. */
+.checkout-submit {
+  min-height: 48px;
+  margin-top: 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(184, 137, 62, 0.25);
 }
 </style>

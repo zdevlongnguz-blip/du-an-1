@@ -41,6 +41,7 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
 
 <template>
   <article class="catalog-product-card">
+    <!-- Ảnh sản phẩm tỉ lệ 4:5, bấm vào để xem chi tiết. -->
     <RouterLink
       class="catalog-product-media"
       :to="{ name: 'product-detail', params: { slug: product.slug } }"
@@ -58,6 +59,7 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
     </RouterLink>
 
     <div class="catalog-product-body">
+      <!-- Thông tin chính: danh mục, tên, mô tả, giá, chỉ số. -->
       <RouterLink
         class="catalog-product-info"
         :to="{ name: 'product-detail', params: { slug: product.slug } }"
@@ -80,6 +82,7 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
         </p>
       </RouterLink>
 
+      <!-- Hai nút như Stitch: "Xem" (viền) và "Chọn mua" (đồng); cả hai dẫn tới trang chi tiết để chọn phiên bản. -->
       <div class="catalog-product-actions">
         <RouterLink
           class="catalog-product-action catalog-product-action--view"
@@ -91,6 +94,7 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
             <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
             <circle cx="12" cy="12" r="3" />
           </svg>
+          <span>Xem</span>
         </RouterLink>
         <RouterLink
           class="catalog-product-action catalog-product-action--cart"
@@ -103,6 +107,7 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
             <path d="M3 6h18" />
             <path d="M16 10a4 4 0 0 1-8 0" />
           </svg>
+          <span>Chọn mua</span>
         </RouterLink>
       </div>
     </div>
@@ -110,154 +115,163 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
 </template>
 
 <style scoped>
+/* Card sản phẩm theo Stitch: nền trắng, viền kem, bo 8px, bóng nhẹ; hover nhấc lên nhẹ. */
 .catalog-product-card {
   display: flex;
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgb(197 160 89 / 35%);
-  border-radius: 2px;
-  background: #1f1f21;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 50%);
-  color: #ede0d4;
-  transition: transform 350ms ease, border-color 350ms ease, box-shadow 350ms ease;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(28, 42, 58, 0.08);
+  transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
 .catalog-product-card:hover {
-  border-color: rgb(245 206 114 / 80%);
-  box-shadow: 0 12px 32px -8px rgb(0 0 0 / 85%), 0 0 24px rgb(223 183 108 / 30%);
-  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(28, 42, 58, 0.12);
+  transform: translateY(-2px);
 }
 
 .catalog-product-media {
   position: relative;
-  display: grid;
-  width: 100%;
+  display: block;
   aspect-ratio: 4 / 5;
   overflow: hidden;
-  place-items: center;
-  background: #0e0e10;
+  background: #f7f4ee;
 }
 
-.catalog-product-image,
-.catalog-product-image-fallback {
+.catalog-product-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 500ms ease;
+  transition: transform 400ms ease;
 }
 
 .catalog-product-card:hover .catalog-product-image {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
 .catalog-product-image-fallback {
   display: grid;
+  width: 100%;
+  height: 100%;
   place-items: center;
-  color: #9a8f80;
+  color: #b8893e;
+  font-family: var(--font-display);
   font-size: 32px;
-  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
 .catalog-product-body {
   display: flex;
+  min-width: 0;
   flex: 1;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   padding: 16px;
 }
 
 .catalog-product-info {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  min-width: 0;
   gap: 6px;
   color: inherit;
-  text-decoration: none;
+}
+
+.catalog-product-info p {
+  margin: 0;
 }
 
 .catalog-product-category {
-  margin: 0;
-  color: #e9c176;
+  color: #b8893e;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .catalog-product-name {
   display: -webkit-box;
-  min-height: 2.8em;
   margin: 0;
   overflow: hidden;
-  color: #ede0d4;
-  font-size: 16px;
+  color: #1f1f1f;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.3;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.catalog-product-description {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  color: #d1c5b4;
-  font-size: 12px;
-  line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+.catalog-product-info:hover .catalog-product-name {
+  color: #8c6a32;
 }
 
-.catalog-product-price {
-  margin: 4px 0 0;
-  color: #e9c176;
-  font-size: 18px;
+.catalog-product-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #6b6560;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.catalog-product-price strong {
+  color: #b8893e;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .catalog-product-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
-  margin: 0;
-  color: #9a8f80;
+  color: #6b6560;
   font-size: 11px;
 }
 
-.catalog-product-availability--out {
-  color: #ffb4ab;
-  font-weight: 700;
+.catalog-product-code {
+  color: #1c2a3a;
+  font-weight: 600;
 }
 
+.catalog-product-availability {
+  color: #2e7d4f;
+  font-weight: 600;
+}
+
+.catalog-product-availability--out {
+  color: #b3261e;
+}
+
+/* Hai nút cùng hàng, chia đôi chiều ngang, ngăn cách với phần thông tin bằng viền trên. */
 .catalog-product-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e6e0d4;
 }
 
 .catalog-product-action {
-  display: flex;
-  height: 36px;
-  min-width: 0;
+  display: inline-flex;
+  min-height: 38px;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  cursor: pointer;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-decoration: none;
-  text-transform: uppercase;
-  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+  letter-spacing: 0.04em;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
 }
 
 .catalog-product-action svg {
   width: 16px;
   height: 16px;
-  flex: 0 0 16px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -266,62 +280,55 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
 }
 
 .catalog-product-action--view {
-  border-color: rgb(78 70 57 / 40%);
-  background: #2a2a2c;
-  color: #ede0d4;
+  border: 1px solid #e6e0d4;
+  background: #f7f4ee;
+  color: #1f1f1f;
 }
 
 .catalog-product-action--view:hover {
-  border-color: #dfb76c;
-  color: #fce08e;
+  border-color: #1c2a3a;
+  background: #efeae0;
 }
 
 .catalog-product-action--cart {
-  background: #c5a059;
-  color: #4e3700;
+  border: 1px solid #b8893e;
+  background: #b8893e;
+  color: #ffffff;
 }
 
 .catalog-product-action--cart:hover {
-  background: #e9c176;
+  border-color: #9e7432;
+  background: #9e7432;
 }
 
 .catalog-product-action:focus-visible,
 .catalog-product-info:focus-visible,
 .catalog-product-media:focus-visible {
-  outline: 2px solid #e9c176;
+  outline: 3px solid #b8893e;
   outline-offset: 2px;
 }
 
 @media (max-width: 575.98px) {
   .catalog-product-body {
-    gap: 10px;
     padding: 12px;
   }
 
   .catalog-product-name {
-    font-size: 14px;
+    font-size: 15px;
   }
 
-  .catalog-product-description {
+  .catalog-product-action span {
     display: none;
-  }
-
-  .catalog-product-action {
-    height: 34px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .catalog-product-card,
-  .catalog-product-image,
-  .catalog-product-action {
+  .catalog-product-image {
     transition: none;
   }
 
-  .catalog-product-card:hover {
-    transform: none;
-  }
-
+  .catalog-product-card:hover,
   .catalog-product-card:hover .catalog-product-image {
     transform: none;
   }

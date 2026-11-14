@@ -36,7 +36,7 @@ const props = defineProps({
 <style scoped>
 /* CSS chỉ áp dụng trong component này */
 .product-card {
-    border: 1px solid #4e4639;
+    border: 1px solid #d9d4ca;
     padding: 10px;
     margin: 10px;
 }
