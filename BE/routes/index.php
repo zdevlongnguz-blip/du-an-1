@@ -123,10 +123,21 @@ switch ($action) {
         (new OrderController)->checkout($authPayload);
         break;
 
-    // API tạo form thanh toán SePay sandbox cho đơn của user đang đăng nhập.
+    // API tạo form thanh toán SePay cho đơn online của user đang đăng nhập.
     case 'api-order-payment':
         $authPayload = (new AuthMiddleware())->requireAuth();
         (new OrderController)->createPayment($authPayload);
+        break;
+
+    // API hỏi lại SePay xem đơn đã thanh toán chưa (dùng khi quay về từ SePay); yêu cầu đăng nhập.
+    case 'api-order-payment-verify':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new OrderController)->verifyPayment($authPayload);
+        break;
+
+    // API nhận IPN từ SePay; KHÔNG dùng JWT (do SePay gọi), xác thực bằng header X-Secret-Key.
+    case 'api-sepay-ipn':
+        (new OrderController)->sepayIpn();
         break;
 
     // API lấy danh sách đơn của user đang đăng nhập.

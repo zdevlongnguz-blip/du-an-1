@@ -13,17 +13,24 @@ class Order extends BaseModel
      * @param string $recipientName Tên người nhận.
      * @param string $recipientPhone Số điện thoại người nhận.
      * @param string $shippingAddress Địa chỉ giao hàng.
+     * @param string $paymentMethod Phương thức thanh toán: 'cod' (khi nhận hàng) hoặc 'sepay' (online); giá trị khác coi là 'cod'.
      * @return array Kết quả ok/order_id/total_amount, empty_cart hoặc stock_unavailable.
      */
     public function checkout(
         int $userId = 0,
         string $recipientName = '',
         string $recipientPhone = '',
-        string $shippingAddress = ''
+        string $shippingAddress = '',
+        string $paymentMethod = 'cod'
     ): array {
         if ($userId < 1) {
             return ['status' => 'invalid_user'];
         }
+        // Chỉ nhận đúng hai giá trị của cột ENUM; giá trị lạ rơi về 'cod' thay vì gây lỗi SQL.
+        $paymentMethod = $paymentMethod === 'sepay' ? 'sepay' : 'cod';
+
+        // Trả lại tồn kho của các đơn online quá hạn trước, để người mua này thấy đúng số hàng còn lại.
+        $this->expireStaleOnlineOrders(SEPAY_PAYMENT_TIMEOUT_MINUTES);
 
         $this->pdo->beginTransaction();
         try {
@@ -82,9 +89,10 @@ class Order extends BaseModel
             $totalAmount = $this->fromCents($totalCents);
             $orderStatement = $this->pdo->prepare(
                 'INSERT INTO `orders` '
-                . '(`user_id`, `recipient_name`, `recipient_phone`, `shipping_address`, `total_amount`) '
-                . 'VALUES (:user_id, :recipient_name, :recipient_phone, :shipping_address, :total_amount)'
+                . '(`user_id`, `recipient_name`, `recipient_phone`, `shipping_address`, `total_amount`, `payment_method`) '
+                . 'VALUES (:user_id, :recipient_name, :recipient_phone, :shipping_address, :total_amount, :payment_method)'
             );
+            $orderStatement->bindValue(':payment_method', $paymentMethod, PDO::PARAM_STR);
             $orderStatement->bindValue(':user_id', $userId, PDO::PARAM_INT);
             $orderStatement->bindValue(':recipient_name', $recipientName, PDO::PARAM_STR);
             $orderStatement->bindValue(':recipient_phone', $recipientPhone, PDO::PARAM_STR);
@@ -183,7 +191,7 @@ class Order extends BaseModel
 
         $listStatement = $this->pdo->prepare(
             'SELECT `id`, `user_id`, `recipient_name`, `recipient_phone`, `shipping_address`, '
-            . '`total_amount`, `order_status`, `payment_status`, `created_at`, `updated_at` '
+            . '`total_amount`, `order_status`, `payment_status`, `payment_method`, `created_at`, `updated_at` '
             . 'FROM `orders`' . $whereSql . ' ORDER BY `created_at` DESC, `id` DESC LIMIT :limit OFFSET :offset'
         );
         if ($userId !== null) {
@@ -216,7 +224,7 @@ class Order extends BaseModel
     public function getInvoice(int $orderId = 0, int $userId = 0, bool $isAdmin = false): ?array
     {
         $sql = 'SELECT `id`, `user_id`, `recipient_name`, `recipient_phone`, `shipping_address`, '
-            . '`total_amount`, `order_status`, `payment_status`, `created_at`, `updated_at` '
+            . '`total_amount`, `order_status`, `payment_status`, `payment_method`, `created_at`, `updated_at` '
             . 'FROM `orders` WHERE `id` = :order_id';
         if (!$isAdmin) {
             $sql .= ' AND `user_id` = :user_id';
@@ -361,6 +369,168 @@ class Order extends BaseModel
             );
             $updateStatement->bindValue(':order_status', $orderStatus, PDO::PARAM_STR);
             $updateStatement->bindValue(':payment_status', $paymentStatus, PDO::PARAM_STR);
+            $updateStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
+            $updateStatement->execute();
+            $this->pdo->commit();
+
+            return 'ok';
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    /**
+     * Tự hủy các đơn thanh toán online còn pending/unpaid quá hạn và hoàn lại tồn kho.
+     * Không dùng cron: hàm này được gọi "lười" (lazy) mỗi khi có người đặt đơn, xem đơn hoặc bắt đầu thanh toán,
+     * nên đơn bỏ dở không giữ kho mãi mãi. Mỗi lần xử lý tối đa 50 đơn; lỗi một đơn không làm hỏng request đang chạy.
+     *
+     * @param int $minutes Số phút tối đa chờ thanh toán (tối thiểu 1).
+     * @return int Số đơn đã hủy.
+     */
+    public function expireStaleOnlineOrders(int $minutes = 30): int
+    {
+        $minutes = max(1, $minutes);
+        $selectStatement = $this->pdo->prepare(
+            'SELECT `id` FROM `orders` '
+            . 'WHERE `payment_method` = \'sepay\' AND `order_status` = \'pending\' AND `payment_status` = \'unpaid\' '
+            . 'AND `created_at` < (NOW() - INTERVAL :minutes MINUTE) ORDER BY `id` ASC LIMIT 50'
+        );
+        $selectStatement->bindValue(':minutes', $minutes, PDO::PARAM_INT);
+        $selectStatement->execute();
+        $orderIds = $selectStatement->fetchAll(PDO::FETCH_COLUMN);
+
+        $cancelled = 0;
+        foreach ($orderIds as $orderId) {
+            try {
+                $this->pdo->beginTransaction();
+                // Khóa lại dòng đơn và kiểm tra lần nữa: có thể IPN vừa đánh dấu paid hoặc user vừa hủy.
+                $lockStatement = $this->pdo->prepare(
+                    'SELECT `id` FROM `orders` WHERE `id` = :order_id AND `payment_method` = \'sepay\' '
+                    . 'AND `order_status` = \'pending\' AND `payment_status` = \'unpaid\' LIMIT 1 FOR UPDATE'
+                );
+                $lockStatement->bindValue(':order_id', (int) $orderId, PDO::PARAM_INT);
+                $lockStatement->execute();
+                if ($lockStatement->fetchColumn() === false) {
+                    $this->pdo->rollBack();
+                    continue;
+                }
+
+                $this->restoreStock((int) $orderId);
+                $updateStatement = $this->pdo->prepare(
+                    'UPDATE `orders` SET `order_status` = \'cancelled\' WHERE `id` = :order_id'
+                );
+                $updateStatement->bindValue(':order_id', (int) $orderId, PDO::PARAM_INT);
+                $updateStatement->execute();
+                $this->pdo->commit();
+                $cancelled++;
+            } catch (Throwable $exception) {
+                if ($this->pdo->inTransaction()) {
+                    $this->pdo->rollBack();
+                }
+                error_log('Không tự hủy được đơn quá hạn #' . $orderId . ': ' . $exception->getMessage());
+            }
+        }
+
+        return $cancelled;
+    }
+
+    /**
+     * Lưu mã hóa đơn SePay của lần thanh toán online gần nhất để sau này hỏi lại SePay.
+     * Chỉ ghi được khi đơn là đơn sepay, thuộc user này và còn pending/unpaid.
+     *
+     * @param int $orderId ID đơn hàng.
+     * @param int $userId ID user lấy từ JWT.
+     * @param string $invoiceNumber Mã hóa đơn gửi sang SePay.
+     * @return bool True nếu đã lưu.
+     */
+    public function setPaymentInvoice(int $orderId = 0, int $userId = 0, string $invoiceNumber = ''): bool
+    {
+        if ($orderId < 1 || $userId < 1 || $invoiceNumber === '') {
+            return false;
+        }
+
+        $statement = $this->pdo->prepare(
+            'UPDATE `orders` SET `payment_invoice_number` = :invoice_number '
+            . 'WHERE `id` = :order_id AND `user_id` = :user_id AND `payment_method` = \'sepay\' '
+            . 'AND `order_status` = \'pending\' AND `payment_status` = \'unpaid\''
+        );
+        $statement->bindValue(':invoice_number', $invoiceNumber, PDO::PARAM_STR);
+        $statement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
+        $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return $statement->rowCount() === 1;
+    }
+
+    /**
+     * Lấy thông tin thanh toán của đơn thuộc user (phương thức, mã hóa đơn SePay, trạng thái).
+     *
+     * @param int $orderId ID đơn hàng.
+     * @param int $userId ID user lấy từ JWT.
+     * @return array|null Thông tin thanh toán, hoặc null nếu đơn không tồn tại hoặc không thuộc user.
+     */
+    public function getPaymentInfo(int $orderId = 0, int $userId = 0): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT `id`, `payment_method`, `payment_invoice_number`, `order_status`, `payment_status`, `total_amount` '
+            . 'FROM `orders` WHERE `id` = :order_id AND `user_id` = :user_id LIMIT 1'
+        );
+        $statement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
+        $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $statement->execute();
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Đánh dấu đơn đã thanh toán sau khi SePay xác nhận (IPN hoặc hỏi lại SePay khi quay về).
+     * Chỉ nhận đơn sepay còn pending và số tiền SePay thu phải khớp tổng đơn. Gọi lại nhiều lần vẫn an toàn.
+     *
+     * @param int $orderId ID đơn hàng.
+     * @param string $paidAmount Số tiền SePay báo đã thu (chuỗi DECIMAL, ví dụ "300000.00").
+     * @return string Kết quả: ok, already_paid, not_found, not_payable (đơn COD hoặc đã hủy) hoặc amount_mismatch.
+     */
+    public function markPaidBySePay(int $orderId = 0, string $paidAmount = '0'): string
+    {
+        if ($orderId < 1) {
+            return 'not_found';
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            // FOR UPDATE khóa dòng đơn để IPN và nút "kiểm tra lại" chạy cùng lúc không ghi chồng nhau.
+            $statement = $this->pdo->prepare(
+                'SELECT `order_status`, `payment_status`, `payment_method`, `total_amount` '
+                . 'FROM `orders` WHERE `id` = :order_id LIMIT 1 FOR UPDATE'
+            );
+            $statement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
+            $statement->execute();
+            $order = $statement->fetch(PDO::FETCH_ASSOC);
+
+            if ($order === false) {
+                $this->pdo->rollBack();
+                return 'not_found';
+            }
+            if ($order['payment_status'] === 'paid') {
+                $this->pdo->rollBack();
+                return 'already_paid';
+            }
+            if ($order['payment_method'] !== 'sepay' || $order['order_status'] !== 'pending') {
+                $this->pdo->rollBack();
+                return 'not_payable';
+            }
+            if ($this->toCents((string) $order['total_amount']) !== $this->toCents($paidAmount)) {
+                $this->pdo->rollBack();
+                return 'amount_mismatch';
+            }
+
+            $updateStatement = $this->pdo->prepare(
+                'UPDATE `orders` SET `payment_status` = \'paid\' WHERE `id` = :order_id AND `payment_status` = \'unpaid\''
+            );
             $updateStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
             $updateStatement->execute();
             $this->pdo->commit();

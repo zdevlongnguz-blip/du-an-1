@@ -104,3 +104,5 @@ define('SEPAY_SUCCESS_URL', getenv('SEPAY_SUCCESS_URL') ?: rtrim(FRONTEND_URL, '
 define('SEPAY_ERROR_URL', getenv('SEPAY_ERROR_URL') ?: rtrim(FRONTEND_URL, '/') . '/payment/error');
 define('SEPAY_CANCEL_URL', getenv('SEPAY_CANCEL_URL') ?: rtrim(FRONTEND_URL, '/') . '/payment/cancel');
 define('SEPAY_IPN_SECRET', getenv('SEPAY_IPN_SECRET') ?: '');
+// Số phút tối đa chờ thanh toán online; quá hạn thì đơn sepay pending/unpaid tự hủy và hoàn tồn kho.
+define('SEPAY_PAYMENT_TIMEOUT_MINUTES', 30);
