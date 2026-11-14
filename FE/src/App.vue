@@ -71,6 +71,12 @@ onMounted(() => {
               <span v-if="cartCount > 0" class="site-cart-count" aria-hidden="true">{{ cartCount }}</span>
             </router-link>
             <router-link
+              v-if="checkAuth"
+              class="site-nav-link"
+              to="/orders"
+              :aria-current="route.path.startsWith('/orders') ? 'page' : undefined"
+            >Đơn hàng</router-link>
+            <router-link
               class="site-account-button"
               :to="checkAuth ? '/profile' : '/login'"
               :class="{ 'is-active': checkAuth && ['/profile', '/change-password'].includes(route.path) }"
@@ -130,6 +136,12 @@ onMounted(() => {
                 <span>Giỏ hàng</span>
                 <span v-if="cartCount > 0" class="site-cart-count" aria-hidden="true">{{ cartCount }}</span>
               </router-link>
+              <router-link
+                v-if="checkAuth"
+                class="site-mobile-link"
+                to="/orders"
+                :aria-current="route.path.startsWith('/orders') ? 'page' : undefined"
+              >Đơn hàng</router-link>
               <router-link
                 v-if="checkAuth"
                 class="site-mobile-link"
