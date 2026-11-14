@@ -1,0 +1,15 @@
+RewriteEngine On
+
+# Không cho tải file cấu hình nhạy cảm và dữ liệu git qua web.
+RewriteRule (^|/)\.(env|git) - [F,L]
+
+# BE (API, ảnh upload) và vendor giữ nguyên đường dẫn.
+RewriteRule ^(BE|vendor)(/|$) - [L]
+
+# File tĩnh của FE (js, css, ảnh...) được phục vụ từ BE/public/dist.
+RewriteCond %{DOCUMENT_ROOT}/BE/public/dist%{REQUEST_URI} -f
+RewriteRule .* BE/public/dist%{REQUEST_URI} [L]
+
+# Các route của Vue Router (không có phần mở rộng) trả về index.html.
+RewriteCond %{REQUEST_URI} !\.[a-zA-Z0-9]+$
+RewriteRule .* BE/public/dist/index.html [L]

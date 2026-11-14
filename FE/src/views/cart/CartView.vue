@@ -141,7 +141,7 @@ onMounted(() => fetchCart())
   <main class="container py-4 py-lg-5 cart-page">
     <header class="d-flex align-items-baseline justify-content-between mb-4">
       <h1 class="h3 mb-0">Giỏ hàng</h1>
-      <RouterLink v-if="hasItems" class="small text-decoration-none" to="/catalog">Tiếp tục mua sắm</RouterLink>
+      <RouterLink v-if="hasItems" class="btn btn-outline-secondary btn-sm cart-continue" to="/catalog">Tiếp tục mua sắm</RouterLink>
     </header>
 
     <div v-if="loading" class="text-center py-5 text-secondary" role="status">Đang tải giỏ hàng...</div>
@@ -262,6 +262,11 @@ onMounted(() => fetchCart())
 </template>
 
 <style scoped>
+.cart-continue {
+  padding: 0.45rem 1rem;
+  white-space: nowrap;
+}
+
 .cart-thumb {
   width: 80px;
   height: 80px;
@@ -273,8 +278,8 @@ onMounted(() => fetchCart())
   justify-content: center;
   width: 100%;
   height: 100%;
-  background: #e9ecef;
-  color: #6c757d;
+  background: #2a2a2c;
+  color: #9a8f80;
   font-weight: 600;
 }
 
