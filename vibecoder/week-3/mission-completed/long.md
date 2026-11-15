@@ -88,3 +88,35 @@ Người thực hiện: Long. Làm việc cùng Claude Code. Phần này làm th
 1. Viết tool nghiệp vụ (`GeminiToolSearchProduct`, `GeminiToolPrepareOrder`).
 2. Bắt đăng nhập cho `api-ai-chat`, lưu history ở server.
 3. Tool điều hướng (`navigate` + trường `actions`), cần thống nhất contract với FE.
+
+## Ghi công bổ sung (ngày 2026-11-15, phần chat AI)
+
+Người thực hiện: Long. Làm việc cùng Claude Code. Phần này làm thêm ngoài mission ban đầu. Tài liệu chi tiết: [docs/chat-ai/README.md](../../../docs/chat-ai/README.md).
+
+### Backend: chat AI "Louis Dé Fule"
+- Migration `20261115_01_create_ai_chat_tables.sql`: hai bảng `ai_conversations` (chủ sở hữu là user đã đăng nhập) và `ai_messages` (lưu nguyên văn `parts` của Gemini, có `UNIQUE (conversation_id, seq)`).
+- Model mới `AiConversation`, `AiMessage` (đọc lịch sử, lưu lượt trong transaction, dùng `utf8mb4` cho emoji).
+- `ChatController`: yêu cầu đăng nhập, kiểm tra quyền sở hữu hội thoại (404 nếu không thuộc user), tạo hội thoại sau khi Gemini trả lời thành công, trả `conversation_id`, `reply`, `tool_calls`, `actions`, `suggestions`. Bỏ `history` ở request và response.
+- Tool `search_product` (`GeminiToolSearchProduct`) và `Product::searchByKeyword`: tìm tối đa 5 sản phẩm, trả giá và tình trạng hàng, tự chọn điều hướng: 1 kết quả thì trang chi tiết, nhiều thì danh sách, 0 thì danh sách trống.
+- Tool `fule_sing` (`GeminiToolFuleSing`): hát ngẫu nhiên hoặc theo tên bài trong playlist, trả điều hướng tới `/fule-sing`.
+- `Gemini.php`: tách lệnh điều hướng (`_action`) khỏi kết quả tool, tách dòng gợi ý `[[GOI_Y: ...]]` khỏi câu trả lời, giới hạn 3 gợi ý.
+- `GeminiPrompt.php`: danh xưng "Louis Dé Fule", quy tắc gọi tool bắt buộc, cách trả lời khi có kết quả, cấm nói đã thêm giỏ hàng hay đặt hàng.
+
+### Frontend: popup chat và trang sân khấu
+- `ChatAssistant.vue`: popup nhúng ở `App.vue`, launcher tròn có nhãn "Chat with Fule", panel 340px ngay dưới thanh điều hướng, chip gợi ý, trạng thái chưa đăng nhập, thử lại khi lỗi, mở và đóng bằng nút thu nhỏ hoặc Esc.
+- `chatAssistant.js`: state dùng chung ở cấp module, gọi API, lọc lệnh điều hướng theo danh sách route cho phép.
+- `FuleSing.vue` (`/fule-sing`): đĩa nhạc xoay có ảnh avatar, khung video, bố cục desktop và mobile, nút "Nghe Louis hát" vì trình duyệt chặn tự phát.
+- `videoUrl.js`, `resolveSystemImageUrl` trong `imageUrl.js`: dựng URL ảnh và video từ BE, kiểm tra tên file.
+
+### Kiểm tra đã làm
+- `php -l` cho các file PHP đã sửa: OK.
+- `npm run build` (FE): OK sau mỗi đợt sửa.
+- Lưu và đọc lịch sử trên DB local, có emoji; lỗi giữa chừng không để lại hội thoại rỗng.
+- Tool và tách gợi ý với Gemini giả lập; gọi Gemini thật cho luồng hát: model gọi đúng `fule_sing` sau khi sửa prompt.
+- Chưa test: endpoint qua HTTP với JWT thật, giao diện trên trình duyệt đầy đủ, chế độ mobile.
+
+### Còn lại
+1. API lấy lại lịch sử hội thoại khi tải lại trang.
+2. Rate limit cho `api-ai-chat` (gói Gemini miễn phí giới hạn 5 request mỗi phút).
+3. Tool giỏ hàng và đặt hàng (hiện chỉ hướng dẫn khách bấm nút trên trang).
+4. Kiểm tra dữ liệu giá sản phẩm id 5 (có phiên bản giá 300đ).

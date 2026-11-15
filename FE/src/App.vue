@@ -4,6 +4,7 @@ import { onMounted, ref, watch } from 'vue'
 import { isAuthenticated } from '@/helpers/auth/session'
 import { cartCount, refreshCartCount } from '@/helpers/cart/cartCount'
 import { useToast } from '@/helpers/ui/toast'
+import ChatAssistant from '@/components/chat/ChatAssistant.vue'
 
 const checkAuth = ref(isAuthenticated())
 // Trạng thái mở menu điều hướng trên màn hình nhỏ.
@@ -184,5 +185,8 @@ onMounted(() => {
         <span>Bảo lưu mọi quyền.</span>
       </p>
     </footer>
+
+    <!-- Khung chat trợ lý AI dạng popup, đặt ở layout chung nên dùng được ở mọi trang. -->
+    <ChatAssistant :authenticated="checkAuth" />
   </div>
 </template>

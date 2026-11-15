@@ -35,6 +35,19 @@ class Gemini
     // Model dùng khi GEMINI_MODEL trong BE/.env để trống hoặc sai định dạng.
     const DEFAULT_MODEL = 'gemini-2.5-flash';
 
+    // Key dành riêng trong kết quả tool để gửi lệnh cho FE (ví dụ điều hướng trang).
+    // Key này bị tách ra trước khi gửi kết quả cho Gemini: AI không thấy và không sửa được lệnh.
+    const ACTION_KEY = '_action';
+
+    // Mẫu dòng gợi ý mà system prompt yêu cầu Gemini viết ở cuối câu trả lời:
+    // [[GOI_Y: Thêm vào giỏ hàng | Đặt mua ngay | Xem sản phẩm tương tự]]
+    // Regex chấp nhận cả "GỢI Ý" có dấu, phòng khi model tự thêm dấu tiếng Việt.
+    const SUGGESTION_PATTERN = '/\[\[\s*G[OỢ]I[ _]?[YÝ]\s*:(.*?)\]\]/iu';
+
+    // Số gợi ý tối đa và độ dài tối đa (ký tự) mỗi gợi ý gửi cho FE. AI có thể viết dài hoặc nhiều hơn yêu cầu.
+    const MAX_SUGGESTIONS = 3;
+    const MAX_SUGGESTION_LENGTH = 40;
+
     /** @var string System prompt gửi kèm mọi request */
     private $systemInstruction;
 
@@ -91,6 +104,8 @@ class Gemini
      *     'text'       => câu trả lời của Gemini,
      *     'tool_calls' => danh sách tool đã chạy (tên, tham số) để debug/hiển thị,
      *     'history'    => lịch sử sau khi cập nhật (lưu lại, lần sau truyền vào để hỏi tiếp),
+     *     'actions'    => lệnh cho FE do tool tạo ra (tối đa 1 lệnh, của lần gọi tool cuối cùng),
+     *     'suggestions'=> các câu gợi ý khách có thể hỏi tiếp (do Gemini sinh, đã tách khỏi 'text'),
      * ]
      * @throws InvalidArgumentException Khi câu hỏi rỗng
      * @throws RuntimeException Khi gọi Gemini lỗi, bị chặn hoặc vượt quá số vòng tool
@@ -107,6 +122,7 @@ class Gemini
         $history[] = ['role' => 'user', 'parts' => [['text' => $message]]];
 
         $toolCalls = [];
+        $actions = [];
 
         // Vòng đầu là câu hỏi gốc, các vòng sau là gửi kết quả tool, nên tổng là MAX + 1 request.
         for ($round = 0; $round <= self::MAX_TOOL_ROUNDS; $round++) {
@@ -126,10 +142,15 @@ class Gemini
 
             $calls = $this->extractFunctionCalls($content['parts']);
             if ($calls === []) {
+                // Tách dòng gợi ý khỏi câu trả lời. Lịch sử vẫn giữ nguyên dòng này
+                // để ở lượt sau Gemini thấy lại đúng định dạng mà nó đã dùng.
+                [$text, $suggestions] = $this->splitSuggestions($this->extractText($content['parts']));
                 return [
-                    'text' => $this->extractText($content['parts']),
+                    'text' => $text,
+                    'suggestions' => $suggestions,
                     'tool_calls' => $toolCalls,
                     'history' => $history,
+                    'actions' => $actions,
                 ];
             }
 
@@ -139,6 +160,17 @@ class Gemini
             foreach ($calls as $call) {
                 $toolCalls[] = ['name' => $call['name'], 'args' => $call['args']];
                 $result = $this->runTool($call['name'], $call['args'], $context);
+
+                // Tách lệnh cho FE ra khỏi kết quả trước khi gửi cho Gemini và trước khi lưu lịch sử.
+                // Chỉ giữ lệnh của lần gọi tool cuối cùng: nếu Gemini tìm nhiều lần,
+                // trang được mở phải khớp với lần tìm sau cùng mà câu trả lời dựa vào.
+                if (is_array($result) && array_key_exists(self::ACTION_KEY, $result)) {
+                    if (is_array($result[self::ACTION_KEY])) {
+                        $actions = [$result[self::ACTION_KEY]];
+                    }
+                    unset($result[self::ACTION_KEY]);
+                }
+
                 $responseParts[] = [
                     'functionResponse' => [
                         'name' => $call['name'],
@@ -382,6 +414,39 @@ class Gemini
             }
         }
         return $calls;
+    }
+
+    /**
+     * Tách dòng gợi ý [[GOI_Y: a | b | c]] ra khỏi câu trả lời.
+     *
+     * Gợi ý do AI viết nên phải làm sạch như dữ liệu người dùng nhập:
+     * bỏ khoảng trắng thừa, bỏ câu rỗng, bỏ trùng, cắt bớt câu quá dài, giới hạn số lượng.
+     * Nếu model viết dòng này nhiều lần thì lấy lần cuối, và xóa hết khỏi câu trả lời.
+     *
+     * @param string $text Câu trả lời gốc của Gemini
+     * @return array [câu trả lời đã bỏ dòng gợi ý, danh sách gợi ý (mảng chuỗi)]
+     */
+    private function splitSuggestions($text = '')
+    {
+        $text = (string) $text;
+        if (!preg_match_all(self::SUGGESTION_PATTERN, $text, $matches) || $matches[1] === []) {
+            return [trim($text), []];
+        }
+
+        $suggestions = [];
+        foreach (explode('|', end($matches[1])) as $item) {
+            // preg_replace('/\s+/u'...): gộp nhiều khoảng trắng/xuống dòng thành một dấu cách.
+            $item = trim(preg_replace('/\s+/u', ' ', $item));
+            if ($item === '' || in_array($item, $suggestions, true)) {
+                continue;
+            }
+            $suggestions[] = mb_substr($item, 0, self::MAX_SUGGESTION_LENGTH, 'UTF-8');
+            if (count($suggestions) >= self::MAX_SUGGESTIONS) {
+                break;
+            }
+        }
+
+        return [trim(preg_replace(self::SUGGESTION_PATTERN, '', $text)), $suggestions];
     }
 
     /**

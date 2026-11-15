@@ -17,3 +17,19 @@ export function resolveImageUrl(image) {
 
   return new URL(encodeURIComponent(imageValue), uploadsUrl).toString()
 }
+
+/**
+ * Tạo URL ảnh hệ thống (avatar trợ lý, logo...) nằm trong thư mục BE/assets/system/.
+ * Dùng cùng base URL với API như resolveImageUrl, nên không cần ghi cứng địa chỉ server.
+ *
+ * @param {string} fileName Tên file trong assets/system, ví dụ 'fule.webp'.
+ * @returns {string} URL ảnh, hoặc chuỗi rỗng nếu tên file không hợp lệ.
+ */
+export function resolveSystemImageUrl(fileName) {
+  if (typeof fileName !== 'string' || fileName.trim() === '') return ''
+
+  const apiBaseUrl = `${api.defaults.baseURL.replace(/\/+$/, '')}/`
+  const systemUrl = new URL('assets/system/', apiBaseUrl)
+
+  return new URL(encodeURIComponent(fileName.trim()), systemUrl).toString()
+}

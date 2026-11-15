@@ -96,6 +96,59 @@ class Product extends BaseModel
     }
 
     /**
+     * Tìm sản phẩm theo từ khóa, dùng cho tool của trợ lý AI (Gemini).
+     * Khác getFiltered: không đếm tổng, không phân trang, chỉ trả các cột AI cần để gọn token.
+     *
+     * Tìm trong tên, mã và mô tả sản phẩm. Ưu tiên sản phẩm còn hàng, rồi đến sản phẩm mới hơn.
+     *
+     * @param string $keyword Từ khóa khách hỏi (rỗng = không tìm, trả mảng rỗng)
+     * @param int    $limit   Số sản phẩm tối đa trả về, được giới hạn trong khoảng 1-10
+     * @return array Danh sách sản phẩm (id, name, slug, code, category_name, min_final_price, max_final_price, in_stock)
+     */
+    public function searchByKeyword($keyword = '', $limit = 5)
+    {
+        $keyword = trim((string)$keyword);
+        if ($keyword === '') {
+            return [];
+        }
+
+        // Giới hạn số dòng để tránh AI yêu cầu quá nhiều dữ liệu cùng lúc.
+        $limit = min(10, max(1, (int)$limit));
+
+        // Ký tự % và _ trong LIKE có nghĩa đặc biệt ("bất kỳ chuỗi" và "một ký tự").
+        // Thêm dấu \ phía trước để coi chúng là ký tự thường, tránh khách vô tình tìm rộng hơn ý muốn.
+        $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $keyword);
+
+        // LEFT JOIN (không phải INNER JOIN) để sản phẩm vẫn được trả về khi chưa gán danh mục
+        // hoặc danh mục đã bị xóa; khi đó category_name là NULL.
+        // slug chưa dùng trong tool, nhưng sẽ cần để điều hướng tới trang chi tiết (đã chốt trong kế hoạch).
+        $sql = "SELECT `products`.`id`, `products`.`name`, `products`.`slug`, `products`.`code`,
+                       `categories`.`name` AS `category_name`,
+                       `products`.`min_final_price`, `products`.`max_final_price`, `products`.`in_stock`
+                FROM `v_product_catalog` AS `products`
+                LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
+                WHERE `products`.`name` LIKE :kw_name
+                   OR `products`.`code` LIKE :kw_code
+                   OR `products`.`description` LIKE :kw_desc
+                ORDER BY `products`.`in_stock` DESC, `products`.`id` DESC
+                LIMIT :limit";
+
+        // Mỗi cột dùng một tên tham số riêng (:kw_name, :kw_code, :kw_desc) để không phụ thuộc
+        // vào cách PDO xử lý tham số trùng tên.
+        $likeValue = '%' . $escaped . '%';
+        $stmt = $this->pdo->prepare($sql);
+        // Bọc %...% ở đây để controller/tool không phải biết cú pháp LIKE.
+        $stmt->bindValue(':kw_name', $likeValue, PDO::PARAM_STR);
+        $stmt->bindValue(':kw_code', $likeValue, PDO::PARAM_STR);
+        $stmt->bindValue(':kw_desc', $likeValue, PDO::PARAM_STR);
+        // LIMIT không dùng được dấu ? hay tham số chuỗi, phải bind đúng kiểu số nguyên.
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Lấy chi tiết sản phẩm theo slug: tổng hợp giá/tồn kho, danh sách biến thể đang bán và album ảnh.
      *
      * @param string $slug Slug duy nhất của sản phẩm
