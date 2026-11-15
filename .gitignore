@@ -75,3 +75,8 @@ BE/assets/uploads/*
 
 # MCP config chứa API key cá nhân (Stitch), không commit
 .mcp.json
+
+# Media cá nhân: video bài hát của Louis (BE/assets/fule), file local của Claude Code
+# BE/assets/system/ KHÔNG ignore vì có ảnh avatar trợ lý mà FE cần (fule.webp).
+BE/assets/fule/
+.claude/

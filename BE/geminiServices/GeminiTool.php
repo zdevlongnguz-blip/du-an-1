@@ -77,4 +77,27 @@ abstract class GeminiTool
 
         return $declaration;
     }
+
+    /**
+     * Tạo lệnh điều hướng gửi cho FE, dùng chung cho mọi tool cần mở một trang.
+     * Tool đặt lệnh này vào key Gemini::ACTION_KEY trong kết quả trả về.
+     *
+     * FE chỉ chấp nhận tên route trong danh sách cho phép, không nhận URL tự do,
+     * nên ở đây cũng chỉ trả tên route và tham số.
+     *
+     * @param string $route  Tên route bên FE (Vue Router), ví dụ catalog
+     * @param array  $query  Tham số trên URL sau dấu ?, ví dụ ['search' => 'sáp']
+     * @param array  $params Tham số trong đường dẫn, ví dụ ['slug' => 'sap-vuot-toc']
+     * @return array ['type' => 'navigate', 'route' => ..., 'query' => {...}, 'params' => {...}]
+     */
+    protected function navigateAction($route = 'catalog', $query = [], $params = [])
+    {
+        return [
+            'type' => 'navigate',
+            'route' => (string)$route,
+            // Mảng rỗng [] phải đổi thành object rỗng {} để FE luôn nhận cùng một kiểu dữ liệu.
+            'query' => $query === [] ? new stdClass() : $query,
+            'params' => $params === [] ? new stdClass() : $params,
+        ];
+    }
 }

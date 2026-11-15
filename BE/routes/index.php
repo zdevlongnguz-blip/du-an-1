@@ -283,9 +283,11 @@ switch ($action) {
         (new Test)->sayHello();
         break;
 
-    // API chat với trợ lý AI Gemini (POST, body JSON message + history). Tạm thời chưa yêu cầu đăng nhập.
+    // API chat với trợ lý AI Gemini (POST, body JSON message + conversation_id). Yêu cầu đăng nhập.
     case 'api-ai-chat':
-        (new ChatController)->chat();
+        // Middleware kiểm tra Bearer JWT; payload có sub = ID user, dùng để kiểm tra quyền sở hữu hội thoại.
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ChatController)->chat($authPayload);
         break;
 
     default:

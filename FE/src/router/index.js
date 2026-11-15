@@ -15,6 +15,7 @@ import OrderDetailView from '../views/orders/OrderDetail.vue'
 import PaymentResultView from '../views/PaymentResult.vue'
 import CheckoutView from '../views/CheckoutView.vue'
 import CartView from '../views/cart/CartView.vue'
+import FuleSingView from '../views/FuleSing.vue'
 
 const routes = [
   {
@@ -131,6 +132,14 @@ const routes = [
     name: "payment-cancel",
     component: PaymentResultView,
     meta: { paymentResult: "cancel" },
+  },
+
+  // Sân khấu giải trí: Louis Dé Fule hát tặng một bài (mở từ khung chat, query song + video).
+  // Không yêu cầu đăng nhập vì chỉ phát video công khai.
+  {
+    path: "/fule-sing",
+    name: "fule-sing",
+    component: FuleSingView,
   },
 
   {
