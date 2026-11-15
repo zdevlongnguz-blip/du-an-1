@@ -66,6 +66,7 @@ define('PATH_MODEL', PATH_ROOT . 'models/');
 define('PATH_CONTROLLER', PATH_ROOT . 'controllers/');
 define('BASE_ASSETS_JS', BASE_URL . 'assets/js/');
 define('PATH_EXTENSION', PATH_ROOT . 'extensions/');
+define('PATH_GEMINI_SERVICE', PATH_ROOT . 'geminiServices/');
 
 // Các thiết lập không phải bí mật được giữ trực tiếp trong file cấu hình.
 define('APP_ENV', 'development');
@@ -106,3 +107,8 @@ define('SEPAY_CANCEL_URL', getenv('SEPAY_CANCEL_URL') ?: rtrim(FRONTEND_URL, '/'
 define('SEPAY_IPN_SECRET', getenv('SEPAY_IPN_SECRET') ?: '');
 // Số phút tối đa chờ thanh toán online; quá hạn thì đơn sepay pending/unpaid tự hủy và hoàn tồn kho.
 define('SEPAY_PAYMENT_TIMEOUT_MINUTES', 30);
+
+// Gemini (AI của Google): API key là bí mật nên đọc từ BE/.env; để trống thì service Gemini báo lỗi khi được gọi.
+define('GEMINI_API_KEY', getenv('GEMINI_API_KEY') ?: '');
+// Tên model Gemini dùng mặc định, đổi được qua GEMINI_MODEL trong BE/.env mà không phải sửa code.
+define('GEMINI_MODEL', getenv('GEMINI_MODEL') ?: 'gemini-2.5-flash');

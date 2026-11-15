@@ -278,6 +278,16 @@ switch ($action) {
         (new ProductController)->camChim();
         break;
 
+    // API test cho Gemini service
+    case 'api-test-gemini':
+        (new Test)->sayHello();
+        break;
+
+    // API chat với trợ lý AI Gemini (POST, body JSON message + history). Tạm thời chưa yêu cầu đăng nhập.
+    case 'api-ai-chat':
+        (new ChatController)->chat();
+        break;
+
     default:
         // Xử lý khi không khớp route nào (404 Not Found)
         http_response_code(404);

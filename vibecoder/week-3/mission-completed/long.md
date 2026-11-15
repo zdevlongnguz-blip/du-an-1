@@ -63,3 +63,28 @@ Người thực hiện: Long. Làm việc cùng Claude Code. Phần này làm th
 - API: login mật khẩu 3 ký tự trả 422 đúng thông báo.
 
 ## Đã test
+
+## Ghi công bổ sung (ngày 2026-11-15)
+
+Người thực hiện: Long. Làm việc cùng Claude Code. Phần này làm thêm ngoài mission ban đầu.
+
+### Backend: dựng khung service Gemini chat có tool call
+- Tạo thư mục `BE/geminiServices/` và autoload cho thư mục này trong `BE/index.php`.
+- `Gemini.php`: gọi Gemini API bằng cURL, vòng lặp tool call (tối đa 5 vòng), giữ và cắt lịch sử hội thoại, xử lý lỗi tool và trường hợp bị chặn nội dung.
+- `GeminiPrompt.php`: file riêng cho system prompt của trợ lý FuLe BarberShop.
+- `GeminiTool.php`: lớp cha cho tool nghiệp vụ (`name`, `description`, `parameters`, `execute`).
+- `ChatController.php` + route `api-ai-chat` (POST, body `message` + `history`), tạm thời chưa bắt đăng nhập.
+- Cấu hình: `GEMINI_API_KEY`, `GEMINI_MODEL` đọc từ `BE/.env`, thêm tên biến vào `.env.example`.
+- Ban đầu tách 5 file (Config, Client, History, Tool, Gemini); sau đó gộp còn 3 file cho dễ đọc.
+- Tài liệu: [huong-dan-gemini-chat-tools.md](../../../docs/huong-dan-gemini-chat-tools.md).
+
+### Đã kiểm tra
+- `php -l` cho các file trong `BE/geminiServices/`, `ChatController.php`, `config.php`, `routes/index.php`: OK.
+- Client giả lập (không gọi Google): gọi nhiều tool một lượt, tool lỗi, tool không tồn tại, hỏi tiếp với history lưu qua JSON, quá 5 vòng, bị chặn nội dung, câu hỏi rỗng, prompt mặc định và prompt riêng: đúng.
+- curl qua Laragon `api-ai-chat`: GET 405, body sai 400, message rỗng 422, history sai kiểu 400, chưa có key 500.
+- Chưa test với Gemini thật vì chưa có `GEMINI_API_KEY`.
+
+### Còn lại
+1. Viết tool nghiệp vụ (`GeminiToolSearchProduct`, `GeminiToolPrepareOrder`).
+2. Bắt đăng nhập cho `api-ai-chat`, lưu history ở server.
+3. Tool điều hướng (`navigate` + trường `actions`), cần thống nhất contract với FE.
