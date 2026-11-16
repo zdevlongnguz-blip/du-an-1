@@ -12,10 +12,11 @@ import ForgotPasswordView from '../views/auth/ForgotPassword.vue'
 import ResetPasswordView from '../views/auth/ResetPassword.vue'
 import OrderListView from '../views/orders/OrderList.vue'
 import OrderDetailView from '../views/orders/OrderDetail.vue'
-import PaymentResultView from '../views/PaymentResult.vue'
-import CheckoutView from '../views/CheckoutView.vue'
+import PaymentResultView from '../views/payment/PaymentResult.vue'
+import CheckoutView from '../views/payment/CheckoutView.vue'
 import CartView from '../views/cart/CartView.vue'
-import FuleSingView from '../views/FuleSing.vue'
+import FuleSingView from '../views/ai/FuleSing.vue'
+import AiCheckoutView from '../views/ai/AiCheckout.vue'
 
 const routes = [
   {
@@ -140,6 +141,14 @@ const routes = [
     path: "/fule-sing",
     name: "fule-sing",
     component: FuleSingView,
+  },
+  // Trang "Lên đơn nhanh cho quý ông": đơn nháp do Louis Dé Fule (AI) lên, khách chỉnh số lượng/người nhận rồi xác nhận.
+  // Cần đăng nhập vì hiển thị thông tin giao hàng và gọi API tạo đơn. Đơn nháp nằm trong bộ nhớ (helpers/ai/checkoutDraft.js).
+  {
+    path: "/ai-checkout",
+    name: "ai-checkout",
+    component: AiCheckoutView,
+    meta: { requiresAuth: true },
   },
 
   {

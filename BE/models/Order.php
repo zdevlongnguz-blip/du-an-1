@@ -4,6 +4,11 @@ class Order extends BaseModel
 {
     protected $table = 'orders';
 
+    // Giới hạn cho đơn tạo từ danh sách SKU (đơn nháp của trợ lý AI), dùng chung cho tool AI và API xác nhận.
+    // Số món khác nhau tối đa trong một đơn, và số lượng tối đa của mỗi món (còn bị giới hạn thêm bởi tồn kho).
+    const MAX_DIRECT_ITEMS = 10;
+    const MAX_ITEM_QUANTITY = 99;
+
     /**
      * Tạo đơn từ giỏ: chụp snapshot (tên, SKU, tên biến thể, giá), trừ tồn kho của
      * từng biến thể và cộng sales_count của sản phẩm, tất cả trong một transaction.
@@ -87,64 +92,13 @@ class Order extends BaseModel
             unset($item);
 
             $totalAmount = $this->fromCents($totalCents);
-            $orderStatement = $this->pdo->prepare(
-                'INSERT INTO `orders` '
-                . '(`user_id`, `recipient_name`, `recipient_phone`, `shipping_address`, `total_amount`, `payment_method`) '
-                . 'VALUES (:user_id, :recipient_name, :recipient_phone, :shipping_address, :total_amount, :payment_method)'
+            // Ghi đơn, chi tiết đơn, trừ kho và cộng lượt bán (dùng chung với checkoutItems).
+            $orderId = $this->insertOrderRows(
+                $userId, $items, $recipientName, $recipientPhone, $shippingAddress, $paymentMethod, $totalAmount
             );
-            $orderStatement->bindValue(':payment_method', $paymentMethod, PDO::PARAM_STR);
-            $orderStatement->bindValue(':user_id', $userId, PDO::PARAM_INT);
-            $orderStatement->bindValue(':recipient_name', $recipientName, PDO::PARAM_STR);
-            $orderStatement->bindValue(':recipient_phone', $recipientPhone, PDO::PARAM_STR);
-            $orderStatement->bindValue(':shipping_address', $shippingAddress, PDO::PARAM_STR);
-            $orderStatement->bindValue(':total_amount', $totalAmount, PDO::PARAM_STR);
-            $orderStatement->execute();
-            $orderId = (int) $this->pdo->lastInsertId();
-
-            $detailStatement = $this->pdo->prepare(
-                'INSERT INTO `order_details` '
-                . '(`order_id`, `product_id`, `variant_id`, `product_name`, `variant_sku`, `variant_label`, '
-                . '`quantity`, `unit_price`) '
-                . 'VALUES (:order_id, :product_id, :variant_id, :product_name, :variant_sku, :variant_label, '
-                . ':quantity, :unit_price)'
-            );
-            // Trừ kho nguyên tử: điều kiện stock >= số lượng nằm ngay trong câu UPDATE,
-            // nên nếu có người mua trước làm hết hàng thì rowCount = 0 và ta hoàn tác đơn.
-            $stockStatement = $this->pdo->prepare(
-                'UPDATE `product_variants` SET `stock` = `stock` - :quantity '
-                . 'WHERE `id` = :variant_id AND `stock` >= :required_quantity AND `is_active` = 1'
-            );
-            // sales_count là tổng lượt bán của sản phẩm (cộng dồn mọi biến thể).
-            $salesStatement = $this->pdo->prepare(
-                'UPDATE `products` SET `sales_count` = `sales_count` + :sold_quantity WHERE `id` = :product_id'
-            );
-
-            foreach ($items as $item) {
-                $quantity = (int) $item['quantity'];
-                $productId = (int) $item['product_id'];
-                $variantId = (int) $item['variant_id'];
-                $detailStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
-                $detailStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
-                $detailStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
-                $detailStatement->bindValue(':product_name', $item['name'], PDO::PARAM_STR);
-                $detailStatement->bindValue(':variant_sku', $item['sku'], PDO::PARAM_STR);
-                $detailStatement->bindValue(':variant_label', $item['variant_name'], PDO::PARAM_STR);
-                $detailStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
-                $detailStatement->bindValue(':unit_price', $item['unit_price'], PDO::PARAM_STR);
-                $detailStatement->execute();
-
-                $stockStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
-                $stockStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
-                $stockStatement->bindValue(':required_quantity', $quantity, PDO::PARAM_INT);
-                $stockStatement->execute();
-                if ($stockStatement->rowCount() !== 1) {
-                    $this->pdo->rollBack();
-                    return ['status' => 'stock_unavailable'];
-                }
-
-                $salesStatement->bindValue(':sold_quantity', $quantity, PDO::PARAM_INT);
-                $salesStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
-                $salesStatement->execute();
+            if ($orderId === null) {
+                $this->pdo->rollBack();
+                return ['status' => 'stock_unavailable'];
             }
 
             $clearCartStatement = $this->pdo->prepare(
@@ -165,6 +119,222 @@ class Order extends BaseModel
             }
             throw $exception;
         }
+    }
+
+    /**
+     * Tạo đơn từ danh sách SKU + số lượng (đơn nháp do trợ lý AI lên, khách đã xác nhận), KHÔNG đụng tới giỏ hàng.
+     * Giá lấy lại từ DB trong transaction; giá FE gửi lên không được dùng để tính tiền.
+     * Nếu $expectedTotal khác tổng tính lại (giá đã đổi từ lúc lên đơn nháp) thì không tạo đơn, trả price_changed
+     * để khách thấy giá mới trước khi bị tính tiền.
+     *
+     * @param int         $userId          ID user lấy từ JWT.
+     * @param array       $items           Danh sách ['sku' => string, 'quantity' => int], SKU không trùng, đã validate ở controller.
+     * @param string      $recipientName   Tên người nhận.
+     * @param string      $recipientPhone  Số điện thoại đã chuẩn hóa.
+     * @param string      $shippingAddress Địa chỉ giao hàng.
+     * @param string      $paymentMethod   'cod' hoặc 'sepay'; giá trị khác coi là 'cod'.
+     * @param string|null $expectedTotal   Tổng tiền khách đã thấy (chuỗi số), null = không đối chiếu.
+     * @return array status: ok (kèm order_id, total_amount), invalid_user, empty_items,
+     *               stock_unavailable (kèm sku nếu biết), price_changed (kèm total_amount mới).
+     */
+    public function checkoutItems(
+        int $userId = 0,
+        array $items = [],
+        string $recipientName = '',
+        string $recipientPhone = '',
+        string $shippingAddress = '',
+        string $paymentMethod = 'cod',
+        ?string $expectedTotal = null
+    ): array {
+        if ($userId < 1) {
+            return ['status' => 'invalid_user'];
+        }
+        if ($items === []) {
+            return ['status' => 'empty_items'];
+        }
+        $paymentMethod = $paymentMethod === 'sepay' ? 'sepay' : 'cod';
+
+        // Gom số lượng theo SKU để tra một lần.
+        $quantities = [];
+        foreach ($items as $item) {
+            $quantities[(string) $item['sku']] = (int) $item['quantity'];
+        }
+
+        // Trả lại tồn kho của các đơn online quá hạn trước, để khách này thấy đúng số hàng còn lại.
+        $this->expireStaleOnlineOrders(SEPAY_PAYMENT_TIMEOUT_MINUTES);
+
+        // IN (...) với số phần tử thay đổi: tạo tên tham số :sku0, :sku1... rồi bind từng giá trị (chống SQL injection).
+        $skus = array_keys($quantities);
+        $placeholders = [];
+        foreach ($skus as $i => $sku) {
+            $placeholders[] = ':sku' . $i;
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            // FOR UPDATE khóa các dòng biến thể đến hết transaction, để hai đơn cùng lúc không đặt trùng hàng.
+            // Sắp xếp theo ID để mọi giao dịch khóa theo cùng thứ tự, tránh deadlock (giống checkout từ giỏ).
+            $statement = $this->pdo->prepare(
+                'SELECT `product_variants`.`id` AS `variant_id`, `product_variants`.`product_id`, `product_variants`.`sku`, '
+                . '`product_variants`.`variant_name`, `product_variants`.`final_price`, `product_variants`.`stock`, '
+                . '`product_variants`.`is_active`, `products`.`name` '
+                . 'FROM `product_variants` '
+                . 'INNER JOIN `products` ON `products`.`id` = `product_variants`.`product_id` '
+                . 'WHERE `product_variants`.`sku` IN (' . implode(', ', $placeholders) . ') '
+                . 'ORDER BY `product_variants`.`id` ASC FOR UPDATE'
+            );
+            foreach ($skus as $i => $sku) {
+                $statement->bindValue(':sku' . $i, $sku, PDO::PARAM_STR);
+            }
+            $statement->execute();
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+            // Đánh dấu theo SKU viết thường: cột sku dùng collation không phân biệt hoa thường,
+            // nên DB có thể trả "MOROCCANOIL" khi khách gửi "moroccanoil".
+            $requested = [];
+            foreach ($quantities as $sku => $quantity) {
+                $requested[mb_strtolower($sku, 'UTF-8')] = $quantity;
+            }
+
+            $orderItems = [];
+            $totalCents = 0;
+            foreach ($rows as $row) {
+                $key = mb_strtolower((string) $row['sku'], 'UTF-8');
+                $quantity = $requested[$key] ?? 0;
+                // Biến thể ngừng bán hoặc không đủ hàng thì không cho đặt.
+                if ($quantity < 1 || (int) $row['is_active'] !== 1 || (int) $row['stock'] < $quantity) {
+                    $this->pdo->rollBack();
+                    return ['status' => 'stock_unavailable', 'sku' => $row['sku']];
+                }
+                unset($requested[$key]);
+
+                $unitPrice = (string) $row['final_price'];
+                $row['quantity'] = $quantity;
+                $row['unit_price'] = $unitPrice;
+                $orderItems[] = $row;
+                $totalCents += $this->toCents($unitPrice) * $quantity;
+            }
+
+            // Còn SKU chưa khớp dòng nào = SKU không tồn tại.
+            if ($requested !== []) {
+                $this->pdo->rollBack();
+                return ['status' => 'stock_unavailable', 'sku' => (string) array_key_first($requested)];
+            }
+
+            $totalAmount = $this->fromCents($totalCents);
+            // So theo đơn vị xu (số nguyên) để tránh sai số khi so sánh số thập phân.
+            if ($expectedTotal !== null && $this->toCents($expectedTotal) !== $totalCents) {
+                $this->pdo->rollBack();
+                return ['status' => 'price_changed', 'total_amount' => $totalAmount];
+            }
+
+            $orderId = $this->insertOrderRows(
+                $userId, $orderItems, $recipientName, $recipientPhone, $shippingAddress, $paymentMethod, $totalAmount
+            );
+            if ($orderId === null) {
+                $this->pdo->rollBack();
+                return ['status' => 'stock_unavailable'];
+            }
+            $this->pdo->commit();
+
+            return [
+                'status' => 'ok',
+                'order_id' => $orderId,
+                'total_amount' => $totalAmount,
+            ];
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    /**
+     * Ghi một đơn hàng hoàn chỉnh: dòng orders, các dòng order_details, trừ tồn kho từng biến thể,
+     * cộng sales_count của sản phẩm. Dùng chung cho checkout (từ giỏ) và checkoutItems (từ đơn nháp của AI).
+     *
+     * PHẢI được gọi bên trong transaction đã mở và sau khi các dòng biến thể đã bị khóa (FOR UPDATE).
+     * Hàm không tự commit/rollback: nơi gọi quyết định, vì chỉ nơi gọi biết transaction bắt đầu từ đâu.
+     *
+     * @param int    $userId          ID user lấy từ JWT.
+     * @param array  $items           Các dòng hàng: quantity, product_id, variant_id, name, sku, variant_name, unit_price.
+     * @param string $recipientName   Tên người nhận.
+     * @param string $recipientPhone  Số điện thoại đã chuẩn hóa.
+     * @param string $shippingAddress Địa chỉ giao hàng.
+     * @param string $paymentMethod   'cod' hoặc 'sepay'.
+     * @param string $totalAmount     Tổng tiền dạng chuỗi thập phân (ví dụ "1449000.00").
+     * @return int|null ID đơn vừa tạo, hoặc null nếu trừ kho thất bại (nơi gọi phải rollback).
+     */
+    private function insertOrderRows(
+        int $userId = 0,
+        array $items = [],
+        string $recipientName = '',
+        string $recipientPhone = '',
+        string $shippingAddress = '',
+        string $paymentMethod = 'cod',
+        string $totalAmount = '0'
+    ): ?int {
+        $orderStatement = $this->pdo->prepare(
+            'INSERT INTO `orders` '
+            . '(`user_id`, `recipient_name`, `recipient_phone`, `shipping_address`, `total_amount`, `payment_method`) '
+            . 'VALUES (:user_id, :recipient_name, :recipient_phone, :shipping_address, :total_amount, :payment_method)'
+        );
+        $orderStatement->bindValue(':payment_method', $paymentMethod, PDO::PARAM_STR);
+        $orderStatement->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $orderStatement->bindValue(':recipient_name', $recipientName, PDO::PARAM_STR);
+        $orderStatement->bindValue(':recipient_phone', $recipientPhone, PDO::PARAM_STR);
+        $orderStatement->bindValue(':shipping_address', $shippingAddress, PDO::PARAM_STR);
+        $orderStatement->bindValue(':total_amount', $totalAmount, PDO::PARAM_STR);
+        $orderStatement->execute();
+        $orderId = (int) $this->pdo->lastInsertId();
+
+        $detailStatement = $this->pdo->prepare(
+            'INSERT INTO `order_details` '
+            . '(`order_id`, `product_id`, `variant_id`, `product_name`, `variant_sku`, `variant_label`, '
+            . '`quantity`, `unit_price`) '
+            . 'VALUES (:order_id, :product_id, :variant_id, :product_name, :variant_sku, :variant_label, '
+            . ':quantity, :unit_price)'
+        );
+        // Trừ kho nguyên tử: điều kiện stock >= số lượng nằm ngay trong câu UPDATE,
+        // nên nếu có người mua trước làm hết hàng thì rowCount = 0 và ta hoàn tác đơn.
+        $stockStatement = $this->pdo->prepare(
+            'UPDATE `product_variants` SET `stock` = `stock` - :quantity '
+            . 'WHERE `id` = :variant_id AND `stock` >= :required_quantity AND `is_active` = 1'
+        );
+        // sales_count là tổng lượt bán của sản phẩm (cộng dồn mọi biến thể).
+        $salesStatement = $this->pdo->prepare(
+            'UPDATE `products` SET `sales_count` = `sales_count` + :sold_quantity WHERE `id` = :product_id'
+        );
+
+        foreach ($items as $item) {
+            $quantity = (int) $item['quantity'];
+            $productId = (int) $item['product_id'];
+            $variantId = (int) $item['variant_id'];
+            $detailStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
+            $detailStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $detailStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
+            $detailStatement->bindValue(':product_name', $item['name'], PDO::PARAM_STR);
+            $detailStatement->bindValue(':variant_sku', $item['sku'], PDO::PARAM_STR);
+            $detailStatement->bindValue(':variant_label', $item['variant_name'], PDO::PARAM_STR);
+            $detailStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
+            $detailStatement->bindValue(':unit_price', $item['unit_price'], PDO::PARAM_STR);
+            $detailStatement->execute();
+
+            $stockStatement->bindValue(':quantity', $quantity, PDO::PARAM_INT);
+            $stockStatement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
+            $stockStatement->bindValue(':required_quantity', $quantity, PDO::PARAM_INT);
+            $stockStatement->execute();
+            if ($stockStatement->rowCount() !== 1) {
+                return null;
+            }
+
+            $salesStatement->bindValue(':sold_quantity', $quantity, PDO::PARAM_INT);
+            $salesStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $salesStatement->execute();
+        }
+
+        return $orderId;
     }
 
     /**

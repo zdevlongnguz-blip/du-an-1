@@ -7,10 +7,12 @@
 | `FE/src/components/chat/ChatAssistant.vue` | Popup: launcher, panel, tin nhắn, chip, ô nhập |
 | `FE/src/helpers/ai/chatAssistant.js` | State dùng chung, gọi API, lọc lệnh điều hướng |
 | `FE/src/App.vue` | Nhúng popup ở layout chung, truyền `:authenticated="checkAuth"` |
-| `FE/src/views/FuleSing.vue` | Trang sân khấu `/fule-sing` |
+| `FE/src/views/ai/FuleSing.vue` | Trang sân khấu `/fule-sing` |
 | `FE/src/helpers/media/videoUrl.js` | Dựng URL video, kiểm tra tên file |
 | `FE/src/helpers/media/imageUrl.js` | Hàm `resolveSystemImageUrl` cho avatar (`BE/assets/system/`) |
-| `FE/src/router/index.js` | Đăng ký route `fule-sing` (không cần đăng nhập) |
+| `FE/src/views/ai/AiCheckout.vue` | Trang "Lên đơn nhanh cho quý ông" `/ai-checkout`: hiệu ứng điền đơn, khách chỉnh rồi xác nhận |
+| `FE/src/helpers/ai/checkoutDraft.js` | Giữ đơn nháp trong bộ nhớ (`setCheckoutDraft`, `clearCheckoutDraft`, `useCheckoutDraft`) |
+| `FE/src/router/index.js` | Đăng ký route `fule-sing` (không cần đăng nhập) và `ai-checkout` (cần đăng nhập) |
 
 ## 2. Vì sao state nằm ngoài component
 
@@ -145,3 +147,19 @@ Lưu ý: thư mục `BE/assets/system/` chưa được git theo dõi. Khi commit
 | Câu mở đầu | "Bông dua quý ông! Tôi là Louis Dé Fule…" |
 | Nút trang sân khấu | "Nghe Louis hát" |
 | Dòng chú thích | "Louis dùng AI nên có thể nhầm. Giá và tồn kho chính xác xem tại trang sản phẩm." |
+
+## Đơn nháp và trang lên đơn nhanh
+
+Luồng khi tool `create_order_draft` trả `ready=true`:
+
+1. BE gửi `actions: [{ type: 'checkout-draft', draft: {...} }]`.
+2. `requestReply()` trong `chatAssistant.js` gọi `setCheckoutDraft(draft)`. Hàm này kiểm tra định dạng, sai thì bỏ qua lệnh.
+3. Hợp lệ thì trả location `{ name: 'ai-checkout' }`, `ChatAssistant.vue` gọi `router.push` như các lệnh khác. URL không có query.
+4. `AiCheckout.vue` đọc đơn nháp, chạy hiệu ứng, rồi mở khóa cho khách chỉnh số lượng (1 đến tồn kho) và thông tin nhận hàng. Giá bị khóa.
+5. Bấm "Xác nhận đặt hàng": gọi `api-order-checkout-items` với SKU, số lượng, người nhận, phương thức thanh toán và `expected_total`. Chọn SePay thì tiếp tục `startOnlinePayment()`.
+
+Vì sao không đưa đơn nháp lên URL hay localStorage:
+- Đơn nháp có tên, số điện thoại, địa chỉ. Đưa lên URL thì lộ ở thanh địa chỉ, lịch sử trình duyệt, log server và header `Referer`.
+- `checkoutDraft.js` giữ đơn trong `ref` cấp module: còn khi chuyển trang trong web, mất khi tải lại trang. Trang không có đơn nháp thì hiện màn "Chưa có đơn nháp" kèm nút mở chat.
+- Đơn nháp bị xóa khi đặt hàng thành công và khi đăng xuất (watch `authenticated` trong `ChatAssistant.vue`).
+

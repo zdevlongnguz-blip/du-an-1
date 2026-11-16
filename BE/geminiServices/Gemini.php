@@ -580,6 +580,65 @@ class Gemini
     }
 
     /**
+     * Đổi các lượt đã lưu (định dạng Gemini) thành tin nhắn để hiển thị lại trong khung chat.
+     *
+     * - Lượt user có chữ: thành tin nhắn 'user'.
+     * - Lượt model có chữ: thành tin nhắn 'assistant', đã tách dòng gợi ý [[GOI_Y: ...]] ra 'suggestions'.
+     * - Lượt gọi tool (functionCall) và kết quả tool (functionResponse): không hiển thị. Tên tool được gắn vào
+     *   câu trả lời ngay sau đó; chỉ giữ từ khóa của search_product (để hiện chip "Đã tra cứu"),
+     *   tham số của tool khác bị bỏ vì có thể chứa thông tin cá nhân (SĐT, địa chỉ khách nhập).
+     *
+     * @param array $turns Các lượt ['role', 'parts', 'created_at'] theo thứ tự cũ -> mới
+     * @return array Danh sách ['role', 'text', 'created_at', 'tool_calls', 'suggestions']
+     */
+    public function toDisplayMessages($turns = [])
+    {
+        $messages = [];
+        // Các tool đã gọi từ sau câu hỏi gần nhất, chờ gắn vào câu trả lời kế tiếp.
+        $pendingTools = [];
+
+        foreach (is_array($turns) ? $turns : [] as $turn) {
+            $parts = is_array($turn['parts'] ?? null) ? $turn['parts'] : [];
+            $createdAt = (string)($turn['created_at'] ?? '');
+
+            if (($turn['role'] ?? '') === 'user') {
+                // Lượt user chỉ chứa functionResponse là kết quả tool, không phải câu khách gõ.
+                $text = $this->extractText($parts);
+                if ($text !== '') {
+                    $messages[] = ['role' => 'user', 'text' => $text, 'created_at' => $createdAt, 'tool_calls' => [], 'suggestions' => []];
+                    $pendingTools = [];
+                }
+                continue;
+            }
+
+            foreach ($parts as $part) {
+                if (isset($part['functionCall']['name'])) {
+                    $name = (string)$part['functionCall']['name'];
+                    $keyword = $part['functionCall']['args']['keyword'] ?? null;
+                    $pendingTools[] = [
+                        'name' => $name,
+                        'args' => $name === 'search_product' && is_string($keyword) ? ['keyword' => $keyword] : new stdClass(),
+                    ];
+                }
+            }
+
+            [$text, $suggestions] = $this->splitSuggestions($this->extractText($parts));
+            if ($text !== '') {
+                $messages[] = [
+                    'role' => 'assistant',
+                    'text' => $text,
+                    'created_at' => $createdAt,
+                    'tool_calls' => $pendingTools,
+                    'suggestions' => $suggestions,
+                ];
+                $pendingTools = [];
+            }
+        }
+
+        return $messages;
+    }
+
+    /**
      * Ghép các part dạng chữ thành câu trả lời.
      *
      * @param array $parts Các part của content

@@ -18,12 +18,18 @@ class ChatController
      * - message (string, bắt buộc): câu hỏi, 1-2000 ký tự
      * - conversation_id (int, không bắt buộc): cuộc hội thoại đang chat tiếp. Không gửi hoặc gửi null = tạo cuộc mới.
      * - history bị bỏ qua: lịch sử giờ do server lưu trong DB, client không gửi lên nữa.
+     * - checkout_draft (object, không bắt buộc): đơn nháp khách đang mở trên trang /ai-checkout, ĐÃ GỒM số lượng khách chỉnh.
+     *   { items: [{ sku, quantity }] (1-10 món) }. KHÔNG có thông tin người nhận: phần đó FE tự lo, không đi qua luồng AI.
+     *   Dùng để Louis lên đơn tiếp từ đúng trạng thái khách đang thấy (xem docs/chat-ai/len-don-nhanh/11-dong-bo-don-nhap.md).
+     *   Server tra lại SKU trong DB, chỉ SKU có thật mới được đưa vào system prompt của lượt này (không lưu lịch sử).
      *
      * Thành công 200: { status, conversation_id, reply, tool_calls, actions, suggestions }
      *   suggestions: tối đa 3 câu gợi ý (chuỗi) để FE hiện thành chip, mảng rỗng nếu AI không gợi ý.
-     *   actions: lệnh cho FE, hiện chỉ có dạng
-     *   { type: 'navigate', route: 'catalog'|'product-detail', query: {...}, params: {...} }, mảng rỗng nếu không có.
-     * Lỗi: 405 sai method, 400 body sai kiểu hoặc conversation_id không phải số nguyên dương,
+     *   actions: lệnh cho FE (tối đa 1 lệnh), mảng rỗng nếu không có. Có 2 dạng:
+     *   - { type: 'navigate', route: 'catalog'|'product-detail'|'fule-sing', query: {...}, params: {...} }
+     *   - { type: 'checkout-draft', draft: { items: [...], total_amount } }
+     *     do tool create_order_draft tạo; FE giữ đơn nháp trong bộ nhớ, tự điền người nhận từ hồ sơ rồi mở trang /ai-checkout.
+     * Lỗi: 405 sai method, 400 body sai kiểu, conversation_id không phải số nguyên dương hoặc checkout_draft sai định dạng,
      *      401 thiếu/sai token (do requireAuth ở router), 404 cuộc hội thoại không thuộc user này,
      *      422 câu hỏi rỗng/quá dài, 500 lỗi cấu hình hoặc không lưu được lịch sử, 502 Gemini lỗi.
      *
@@ -65,6 +71,12 @@ class ChatController
             }
         }
 
+        // Đơn nháp khách đang mở (không bắt buộc). null = không có; false = sai định dạng.
+        $checkoutDraft = $this->readCheckoutDraft($input['checkout_draft'] ?? null);
+        if ($checkoutDraft === false) {
+            response_json(['status' => 'error', 'message' => 'checkout_draft không hợp lệ'], 400);
+        }
+
         // Claim sub trong JWT là ID user. requireAuth() ở router đã kiểm tra sub là số nguyên dương;
         // kiểm tra lại ở đây chỉ để phòng khi controller bị gọi mà quên requireAuth().
         $userId = (int)($payload['sub'] ?? 0);
@@ -95,10 +107,21 @@ class ChatController
             // Đăng ký các tool nghiệp vụ Gemini được phép gọi. Tool tra cứu sản phẩm (search_product)
             // chỉ đọc dữ liệu công khai nên không cần user ID. Tool mới thì thêm ->addTool(new GeminiToolXxx()).
             // $context chỉ là thông tin server truyền xuống tool, không do client gửi.
-            $result = (new Gemini())
+            // Có đơn nháp trên trang: thêm đoạn mô tả đơn nháp vào system prompt CỦA RIÊNG LƯỢT NÀY
+            // để Louis lên đơn tiếp từ đúng số lượng khách đang thấy. System prompt không được lưu vào ai_messages,
+            // nên đoạn này không nằm lại trong lịch sử.
+            $systemPrompt = GeminiPrompt::system();
+            if ($checkoutDraft !== null) {
+                $systemPrompt .= GeminiPrompt::checkoutDraftContext($this->describeDraftItems($checkoutDraft['items']));
+            }
+
+            $result = (new Gemini($systemPrompt))
                 ->addTool(new GeminiToolSearchProduct())
                 // Tool giải trí: Louis hát tặng một bài, mở trang /fule-sing. Không đọc dữ liệu riêng của user.
                 ->addTool(new GeminiToolFuleSing())
+                // Tool lên đơn nháp: đọc hồ sơ của chính user đang chat (user_id trong $context, lấy từ JWT).
+                // Chỉ tạo đơn nháp cho FE hiển thị, không ghi DB; đơn thật do khách bấm xác nhận trên trang.
+                ->addTool(new GeminiToolCreateOrderDraft())
                 ->chat($message, $history, ['user_id' => $userId]);
         } catch (Throwable $e) {
             // Ghi chi tiết vào log cho dev xem, client chỉ nhận thông báo chung
@@ -140,5 +163,120 @@ class ChatController
             'actions' => $result['actions'],
             'suggestions' => $result['suggestions'],
         ]);
+    }
+
+    /**
+     * Lấy lại cuộc hội thoại gần nhất của user để hiển thị trong khung chat (sau khi đăng nhập lại hoặc tải lại trang).
+     * Yêu cầu đăng nhập. Chỉ đọc hội thoại của chính user trong token, không nhận ID cuộc hội thoại từ client.
+     *
+     * Method: GET.
+     * Thành công 200: { status, conversation_id, messages }
+     *   - conversation_id: ID cuộc gần nhất, null nếu user chưa chat lần nào (khi đó messages = []).
+     *   - messages: [{ role: 'user'|'assistant', text, created_at, tool_calls, suggestions }], cũ trước mới sau,
+     *     tối đa theo Gemini::MAX_HISTORY lượt gần nhất. Lượt gọi tool và dòng gợi ý đã được lọc khỏi text.
+     * Lỗi: 405 sai method, 401 thiếu/sai token (requireAuth ở router), 500 lỗi đọc DB.
+     *
+     * Lưu ý: lệnh _action (điều hướng, đơn nháp) không được lưu trong DB, nên tải lại lịch sử không mở lại trang nào.
+     *
+     * @param array $payload Payload JWT đã xác minh (sub = ID user), do router truyền xuống.
+     * @return void
+     */
+    public function history($payload = [])
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $userId = (int)($payload['sub'] ?? 0);
+        if ($userId < 1) {
+            response_json(['status' => 'error', 'message' => 'Bạn cần đăng nhập để xem lịch sử trò chuyện'], 401);
+        }
+
+        $conversationId = null;
+        $messages = [];
+        try {
+            // Chỉ tìm trong các cuộc hội thoại của chính user (lọc theo user_id), nên không đọc nhầm của người khác.
+            $conversationId = (new AiConversation())->findLatestIdByUser($userId);
+            if ($conversationId !== null) {
+                $turns = (new AiMessage())->getRecentWithTime($conversationId, Gemini::MAX_HISTORY);
+                $messages = (new Gemini())->toDisplayMessages($turns);
+            }
+        } catch (Throwable $e) {
+            error_log('[ChatController] Đọc lịch sử lỗi: ' . $e->getMessage());
+            response_json(['status' => 'error', 'message' => 'Không tải được lịch sử trò chuyện, vui lòng thử lại sau'], 500);
+        }
+
+        response_json([
+            'status' => 'success',
+            'conversation_id' => $conversationId,
+            'messages' => $messages,
+        ]);
+    }
+
+    /**
+     * Kiểm tra trường checkout_draft trong body (đơn nháp khách đang mở, đã gồm số lượng khách chỉnh trên trang).
+     * Chỉ đọc danh sách món. Nếu client vẫn gửi kèm thông tin người nhận thì bỏ qua: phần đó không thuộc luồng AI.
+     * Đây là dữ liệu client gửi nên kiểm tra như mọi dữ liệu người dùng; giá trị chỉ dùng làm gợi ý cho AI,
+     * tool vẫn tra lại giá, tồn kho khi lên đơn.
+     *
+     * @param mixed $raw Giá trị checkout_draft trong body
+     * @return array|null|false null nếu không gửi; false nếu sai định dạng; ['items' => [['sku', 'quantity']]] nếu hợp lệ
+     */
+    private function readCheckoutDraft($raw = null)
+    {
+        if ($raw === null) {
+            return null;
+        }
+        if (!is_array($raw) || !is_array($raw['items'] ?? null)) {
+            return false;
+        }
+
+        $items = $raw['items'];
+        if ($items === [] || count($items) > Order::MAX_DIRECT_ITEMS) {
+            return false;
+        }
+        $cleanItems = [];
+        foreach ($items as $item) {
+            $sku = is_array($item) && is_string($item['sku'] ?? null) ? trim($item['sku']) : '';
+            $quantity = is_array($item) ? ($item['quantity'] ?? null) : null;
+            if ($sku === '' || strlen($sku) > 100 || !is_int($quantity)
+                || $quantity < 1 || $quantity > Order::MAX_ITEM_QUANTITY) {
+                return false;
+            }
+            $cleanItems[] = ['sku' => $sku, 'quantity' => $quantity];
+        }
+
+        return ['items' => $cleanItems];
+    }
+
+    /**
+     * Tra các món trong đơn nháp với DB để mô tả cho AI.
+     * Chỉ SKU có thật và đang bán mới được giữ, và tên món lấy từ DB, nên chuỗi do client gửi
+     * không bao giờ được chép thẳng vào system prompt (tránh khách chèn câu lệnh qua trường sku).
+     *
+     * @param array $items Danh sách ['sku' => string, 'quantity' => int] đã qua readCheckoutDraft
+     * @return array Danh sách ['sku', 'name', 'quantity'] với sku và name lấy từ DB
+     */
+    private function describeDraftItems($items = [])
+    {
+        $variants = [];
+        foreach ((new Product())->getActiveVariantsBySkus(array_column($items, 'sku')) as $row) {
+            $variants[mb_strtolower((string)$row['sku'], 'UTF-8')] = $row;
+        }
+
+        $lines = [];
+        foreach ($items as $item) {
+            $variant = $variants[mb_strtolower($item['sku'], 'UTF-8')] ?? null;
+            if ($variant === null) {
+                continue;
+            }
+            $lines[] = [
+                'sku' => $variant['sku'],
+                'name' => $variant['product_name'] . ' - ' . $variant['variant_name'],
+                'quantity' => $item['quantity'],
+            ];
+        }
+
+        return $lines;
     }
 }

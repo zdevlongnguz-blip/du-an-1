@@ -28,4 +28,24 @@ class AiConversation extends BaseModel
 
         return $statement->fetchColumn() !== false;
     }
+
+    /**
+     * Lấy ID cuộc hội thoại gần nhất (có lượt mới nhất) của user.
+     * Dùng để nạp lại khung chat sau khi đăng nhập lại hoặc tải lại trang.
+     *
+     * @param int $userId ID user lấy từ JWT
+     * @return int|null ID cuộc hội thoại, null nếu user chưa chat lần nào
+     */
+    public function findLatestIdByUser($userId = 0)
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT `id` FROM `ai_conversations` WHERE `user_id` = :user_id '
+            . 'ORDER BY `updated_at` DESC, `id` DESC LIMIT 1'
+        );
+        $statement->bindValue(':user_id', (int)$userId, PDO::PARAM_INT);
+        $statement->execute();
+        $id = $statement->fetchColumn();
+
+        return $id === false ? null : (int)$id;
+    }
 }
