@@ -278,12 +278,21 @@ const canRecheck = computed(() => kind.value === 'success' && orderId.value && l
   text-transform: uppercase;
 }
 
+/* Nút là thẻ <a> (RouterLink) nên dùng flex để chữ căn giữa cả chiều dọc và ngang, hai nút cùng một mức. */
 .result-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
+  margin: 0;
+  padding: 10px 20px;
   border-radius: 6px;
   font-size: 12px;
+  line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-align: center;
+  text-decoration: none;
 }
 
 </style>
