@@ -279,4 +279,40 @@ class ChatController
 
         return $lines;
     }
+
+    /**
+     * Xóa toàn bộ lịch sử trò chuyện với trợ lý AI của user đang đăng nhập.
+     * Yêu cầu đăng nhập. User lấy từ sub trong JWT, không nhận ID từ client nên không xóa được của người khác.
+     *
+     * Method: DELETE. Không cần body.
+     * Thành công 200: { status, message, deleted_conversations } (số cuộc đã xóa, 0 nếu chưa có gì).
+     * Lỗi: 405 sai method, 401 thiếu/sai token (requireAuth ở router), 500 lỗi DB.
+     *
+     * @param array $payload Payload JWT đã xác minh (sub = ID user), do router truyền xuống.
+     * @return void
+     */
+    public function clearHistory($payload = [])
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'DELETE') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $userId = (int)($payload['sub'] ?? 0);
+        if ($userId < 1) {
+            response_json(['status' => 'error', 'message' => 'Bạn cần đăng nhập để xóa lịch sử trò chuyện'], 401);
+        }
+
+        try {
+            $deleted = (new AiConversation())->deleteByUser($userId);
+        } catch (Throwable $e) {
+            error_log('[ChatController] Xóa lịch sử lỗi: ' . $e->getMessage());
+            response_json(['status' => 'error', 'message' => 'Không xóa được lịch sử trò chuyện, vui lòng thử lại sau'], 500);
+        }
+
+        response_json([
+            'status' => 'success',
+            'message' => 'Đã xóa toàn bộ lịch sử trò chuyện',
+            'deleted_conversations' => $deleted,
+        ]);
+    }
 }

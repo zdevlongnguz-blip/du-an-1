@@ -102,6 +102,25 @@ export function resetChat() {
   unreadCount.value = 0
 }
 
+// Xóa toàn bộ lịch sử chat trên server (API api-ai-history-clear, DELETE, cần đăng nhập).
+// Thành công thì xóa màn hình và quên conversation_id. Trả true nếu thành công; false nếu lỗi (giữ nguyên hội thoại).
+// Không xóa khi đang gửi câu hỏi, vì câu trả lời đến sau sẽ ghi lại cuộc chat vừa xóa.
+export async function clearAllHistory() {
+  if (isSending.value || historyStatus.value === 'loading') return false
+  try {
+    // API api-ai-history-clear (DELETE): { status, message, deleted_conversations }.
+    const response = await api.delete('/?action=api-ai-history-clear')
+    if (response.data?.status !== 'success') throw new Error('Phản hồi không hợp lệ')
+    resetChat()
+    // Lịch sử đã được nạp (rỗng) rồi, không cần nạp lại khi mở chat.
+    historyStatus.value = 'loaded'
+    return true
+  } catch (err) {
+    console.error('Không xóa được lịch sử chat:', err)
+    return false
+  }
+}
+
 // Dùng khi đăng xuất: xóa hội thoại trên màn hình và quên trạng thái đã nạp,
 // để lần đăng nhập sau nạp đúng lịch sử của người mới.
 export function forgetChat() {
@@ -269,6 +288,7 @@ export function useChatAssistant() {
     closeChat,
     resetChat,
     forgetChat,
+    clearAllHistory,
     loadHistory,
     sendMessage,
     retryMessage,

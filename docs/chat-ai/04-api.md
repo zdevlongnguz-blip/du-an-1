@@ -128,3 +128,18 @@ FE gửi kèm khi khách đang có đơn nháp (tính năng lên đơn nhanh), �
 - Sai định dạng: 400 `checkout_draft không hợp lệ`.
 - Chi tiết: [len-don-nhanh/11-dong-bo-don-nhap.md](len-don-nhanh/11-dong-bo-don-nhap.md).
 
+## Endpoint xóa lịch sử: `api-ai-history-clear`
+
+Xóa **toàn bộ** cuộc trò chuyện với trợ lý AI của user đang đăng nhập. Nút xóa trên header khung chat gọi API này.
+
+| Mục | Nội dung |
+| --- | --- |
+| URL | `DELETE /BE/?action=api-ai-history-clear` |
+| Xác thực | Bearer token (`requireAuth` ở router). User lấy từ `sub` trong JWT, không nhận ID từ client |
+| 200 | `{ status: 'success', message, deleted_conversations }` (0 nếu chưa có cuộc nào) |
+| 401 / 405 / 500 | Thiếu token / sai method / lỗi DB |
+
+- Lệnh xóa luôn có `WHERE user_id = :user_id`. Các lượt trong `ai_messages` xóa theo `ON DELETE CASCADE`.
+- FE: nút xóa hỏi xác nhận bằng hai lần bấm trong 4 giây (không dùng `confirm()`). Sau khi xóa thành công thì xóa đơn nháp và màn hình chat.
+- Không xóa khi đang gửi câu hỏi.
+
