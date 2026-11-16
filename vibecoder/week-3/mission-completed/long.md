@@ -148,3 +148,27 @@ Người thực hiện: Long (admin). Làm việc cùng Claude Code. Chưa commi
 1. Commit và tạo PR theo 3 nhóm (hồ sơ người dùng; xoay vòng key Gemini; icon menu).
 2. Thêm key Gemini thuộc project khác, rồi kiểm tra lại chat thật.
 3. Viết test tự động cho BE (hiện chưa có).
+
+## Ghi công bổ sung (ngày 2026-11-17)
+
+Người thực hiện: Long (BE). Làm việc cùng Claude Code. Phần này làm thêm ngoài mission, chưa commit, chưa tạo PR. Phân công phần sơ đồ và FE xem `vinh.md`.
+
+### Tool lên đơn nháp và API xác nhận đơn
+- `BE/geminiServices/GeminiToolCreateOrderDraft.php` (mới): tool `create_order_draft`. Chỉ lo món hàng: kiểm tra SKU đang bán, tồn kho, số lượng 1-99, gộp SKU trùng. Trả `_action` loại `checkout-draft` (chỉ món và tổng tiền). Không đọc hồ sơ, không nhận thông tin cá nhân.
+- `BE/geminiServices/GeminiPrompt.php`: quy tắc dạy trợ lý khi nào lên đơn, đổi món, bỏ món, không hỏi thông tin cá nhân trong chat; có đoạn `checkoutDraftContext()` gắn đơn nháp đang mở vào system prompt của từng lượt.
+- `BE/controllers/ChatController.php`: đăng ký tool; đọc `checkout_draft` (chỉ `items`), tra SKU trong DB rồi đưa vào prompt; `history()` cho `GET api-ai-history`.
+- `BE/controllers/OrderController.php` và `BE/models/Order.php`: `api-order-checkout-items` (`checkoutItems`). Khóa dòng `FOR UPDATE`, tính giá từ DB, đối chiếu `expected_total` (lệch thì 409, không tạo đơn), ghi đơn qua `insertOrderRows()` dùng chung với checkout từ giỏ.
+- `BE/models/Product.php`: `getActiveVariantsBySkus()`.
+- `BE/models/AiConversation.php`, `BE/models/AiMessage.php`, `BE/geminiServices/Gemini.php`: `findLatestIdByUser`, `getRecentWithTime`, `toDisplayMessages` (ẩn lượt gọi tool, tách gợi ý, bỏ tham số tool lên đơn khỏi lịch sử hiển thị).
+- `BE/routes/index.php`: đăng ký `api-order-checkout-items` và `api-ai-history`, cả hai yêu cầu đăng nhập.
+
+### Đã kiểm tra (BE)
+- `php -l` cho các file PHP đã sửa: OK.
+- Chạy tool và model trực tiếp trên DB local bằng script: đơn nháp đúng giá, có giá gốc khi giảm; SKU sai và vượt tồn kho báo đúng; tham số sai kiểu bị từ chối; giá đổi trả `price_changed`; tồn kho và số đơn không đổi sau các nhánh rollback.
+- Gọi `api-order-checkout-items` không token: 401.
+- Lọc lịch sử trên DB: không sót dòng gợi ý, ẩn tham số tool lên đơn.
+
+### Chưa làm
+- Test đặt đơn thật (COD và SePay) qua API với JWT hợp lệ.
+- Test chat thật với Gemini cho các kịch bản đổi số lượng và thiếu hồ sơ.
+- Test tự động cho BE (hiện chưa có).

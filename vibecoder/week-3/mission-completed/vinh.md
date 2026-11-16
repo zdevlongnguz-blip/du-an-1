@@ -57,3 +57,27 @@ Ngày ghi: 2026-11-16. Ghi theo phân công của admin Long, nhánh `feature/us
 - Kiểm thử hồi quy trang Đặt hàng sau khi đổi quy tắc SĐT: SĐT hợp lệ, số cố định bị chặn, lỗi hiện đúng dưới ô.
 - Kiểm thử hồi quy trang Giỏ hàng và Đơn hàng sau khi đổi menu desktop sang icon.
 - Báo lỗi cho admin, không tự sửa FE.
+
+## Ghi công bổ sung (ngày 2026-11-17)
+
+Người thực hiện: Vinh. Làm việc cùng Claude Code. Phần này làm thêm ngoài mission, chưa commit, chưa tạo PR. Phần BE code do Long, xem `long.md`.
+
+### BE: ý tưởng và sơ đồ luồng demo
+- Ý tưởng tính năng "Lên đơn nhanh cho quý ông": khách nói muốn mua trong khung chat, trợ lý lên đơn nháp, khách kiểm tra rồi tự bấm xác nhận. AI không tạo đơn thật.
+- Bộ tài liệu `docs/chat-ai/len-don-nhanh/` (12 file): nghiệp vụ, kiến trúc, luồng xử lý với sơ đồ tuần tự cho từng tình huống (thành công, COD, SePay, hết hàng, giá đổi, tải lại trang), tool, API xác nhận, giao diện, prompt, bảo mật (lớp chốt chặn BE khi FE bị sửa bằng F12), kiểm thử, vấn đáp, mô phỏng JSON theo từng bước.
+- Thiết kế đồng bộ đơn nháp với trợ lý: số lượng gửi kèm lượt chat, thông tin người nhận do FE giữ và lấy từ hồ sơ.
+
+### FE: thiết kế Stitch và trang nối API
+- Lấy màn "Thông tin giao hàng" từ Stitch project "Fule BarberShop Online Store" làm tham khảo bố cục: form bên trái, cụm điều khiển tóm tắt đơn bên phải.
+- `FE/src/views/ai/AiCheckout.vue` (mới), route `/ai-checkout` (cần đăng nhập): hiệu ứng Louis điền đơn; số lượng tăng/giảm trong giới hạn tồn kho; giá khóa; ô người nhận trống được tô nổi để khách tự điền; nút xác nhận gọi `api-order-checkout-items`, COD hoặc SePay.
+- `FE/src/helpers/ai/checkoutDraft.js` (mới): kho đơn nháp lưu `sessionStorage`, gắn với user ID; lấy hồ sơ qua `api-profile` đúng một lần cho mỗi đơn.
+- `FE/src/helpers/ai/chatAssistant.js` và `ChatAssistant.vue`: nhận lệnh `checkout-draft`, gửi số lượng kèm mỗi lượt chat, xóa đơn nháp khi đăng xuất, nạp lại lịch sử chat khi mở khung chat.
+
+### Đã kiểm tra (FE)
+- `npm run build`: OK, lặp lại sau mỗi thay đổi.
+- Trang `/ai-checkout` trả 200 qua Apache local và qua ngrok (chỉ kiểm tra HTTP, không mở trình duyệt).
+
+### Chưa làm
+- Kiểm thử trình duyệt trên link ngrok do Việt Hoàng thực hiện, xem `viethoang.md`. Phần chỉnh sửa theo kết quả kiểm thử (nếu có) chưa ghi nhận trong phần này.
+- Chưa test luồng xác nhận đơn thật từ trang FE.
+- Chưa commit và tạo PR cho nhánh `feature-ai-tool-len-don-tu-dong`.

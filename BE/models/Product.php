@@ -203,6 +203,51 @@ class Product extends BaseModel
     }
 
     /**
+     * Lấy các biến thể ĐANG BÁN theo danh sách SKU, kèm tên và ảnh của sản phẩm cha.
+     * Dùng cho tool AI create_order_draft: AI chỉ biết SKU (lấy từ search_product), server tự tra giá và tồn kho.
+     * Chỉ đọc để lên đơn nháp, không khóa dòng; lúc khách xác nhận, Order::checkoutItems sẽ khóa và kiểm tra lại.
+     *
+     * @param array $skus Danh sách SKU (chuỗi), tối đa 20 phần tử
+     * @return array Mảng [sku => dòng biến thể], SKU không tồn tại hoặc ngừng bán thì không có key
+     */
+    public function getActiveVariantsBySkus($skus = [])
+    {
+        // Chỉ giữ chuỗi không rỗng, bỏ trùng, giới hạn 20 SKU để câu truy vấn không quá dài.
+        $skus = array_slice(array_values(array_unique(array_filter(
+            is_array($skus) ? $skus : [],
+            static fn($sku) => is_string($sku) && trim($sku) !== ''
+        ))), 0, 20);
+        if ($skus === []) {
+            return [];
+        }
+
+        // IN (...) với số phần tử thay đổi: tạo tên tham số :sku0, :sku1... rồi bind từng giá trị (chống SQL injection).
+        $placeholders = [];
+        foreach ($skus as $i => $sku) {
+            $placeholders[] = ':sku' . $i;
+        }
+
+        $sql = 'SELECT `v`.`id`, `v`.`product_id`, `v`.`sku`, `v`.`variant_name`, `v`.`price`, `v`.`sale_price`,
+                       `v`.`final_price`, `v`.`stock`, `p`.`name` AS `product_name`, `p`.`image`
+                FROM `product_variants` AS `v`
+                INNER JOIN `products` AS `p` ON `p`.`id` = `v`.`product_id`
+                WHERE `v`.`is_active` = 1 AND `v`.`sku` IN (' . implode(', ', $placeholders) . ')';
+
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($skus as $i => $sku) {
+            $stmt->bindValue(':sku' . $i, trim($sku), PDO::PARAM_STR);
+        }
+        $stmt->execute();
+
+        $result = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $result[$row['sku']] = $row;
+        }
+
+        return $result;
+    }
+
+    /**
      * Lấy chi tiết sản phẩm theo slug: tổng hợp giá/tồn kho, danh sách biến thể đang bán và album ảnh.
      *
      * @param string $slug Slug duy nhất của sản phẩm

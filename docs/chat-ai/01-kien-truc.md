@@ -6,8 +6,8 @@
 | --- | --- | --- |
 | Popup chat | `FE/src/components/chat/ChatAssistant.vue` | Giao diện khung chat, nằm ở layout chung `App.vue` |
 | State chat | `FE/src/helpers/ai/chatAssistant.js` | Giữ danh sách tin nhắn, `conversation_id`, gọi API, lọc lệnh điều hướng |
-| Trang sân khấu | `FE/src/views/FuleSing.vue` | Phát video bài hát của Louis, route `/fule-sing` |
-| Router API | `BE/routes/index.php` | Điều phối `?action=api-ai-chat`, yêu cầu đăng nhập |
+| Trang sân khấu | `FE/src/views/ai/FuleSing.vue` | Phát video bài hát của Louis, route `/fule-sing` |
+| Router API | `BE/routes/index.php` | Điều phối `?action=api-ai-chat` và `api-ai-history`, yêu cầu đăng nhập |
 | Controller | `BE/controllers/ChatController.php` | Validate request, kiểm tra quyền, gọi Gemini, lưu lịch sử, trả JSON |
 | Service Gemini | `BE/geminiServices/Gemini.php` | Gọi Gemini API (xoay vòng nhiều API key, tự chuyển key khi hết hạn mức), vòng lặp tool, tách gợi ý và lệnh điều hướng |
 | System prompt | `BE/geminiServices/GeminiPrompt.php` | Quy tắc trả lời, danh xưng, cách gọi tool |

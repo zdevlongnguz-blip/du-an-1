@@ -12,15 +12,16 @@ Trợ lý tên **Louis Dé Fule**, dùng model Gemini (`gemini-2.5-flash`) qua R
 | [02-luong-nghiep-vu.md](02-luong-nghiep-vu.md) | Sơ đồ luồng từng nghiệp vụ (hỏi đáp, tool, điều hướng, gợi ý, hát) | Cần vẽ/giải thích luồng hoạt động |
 | [03-co-so-du-lieu.md](03-co-so-du-lieu.md) | Hai bảng `ai_conversations`, `ai_messages`, ERD, ràng buộc | Cần giải thích cách lưu lịch sử |
 | [04-api.md](04-api.md) | Contract endpoint `api-ai-chat`, mã lỗi | Cần biết FE gọi và nhận gì |
-| [05-tools.md](05-tools.md) | Hai tool `search_product`, `fule_sing`, cơ chế lệnh điều hướng | Cần giải thích AI tra cứu/hát thế nào |
+| [05-tools.md](05-tools.md) | Các tool `search_product`, `fule_sing`, `create_order_draft`, cơ chế lệnh điều hướng | Cần giải thích AI tra cứu/hát/lên đơn thế nào |
 | [06-frontend.md](06-frontend.md) | Popup chat, trạng thái giao diện, trang `/fule-sing` | Cần giải thích phần giao diện |
 | [07-bao-mat.md](07-bao-mat.md) | Các lớp bảo mật, rủi ro đã biết, kết quả kiểm thử | Cần trả lời câu hỏi an toàn |
 | [08-van-hanh.md](08-van-hanh.md) | Cài đặt, cấu hình, migration, cách thêm tool/bài hát | Cần cài lại hoặc mở rộng |
 | [09-van-dap.md](09-van-dap.md) | Câu hỏi thường gặp khi bảo vệ, trả lời ngắn gọn | Chuẩn bị vấn đáp |
+| [len-don-nhanh/](len-don-nhanh/README.md) | **Bộ tài liệu riêng** cho tính năng Louis lên đơn nháp và API xác nhận đơn (10 file, đủ sơ đồ) | Làm việc với tính năng lên đơn |
 
 ## Tóm tắt một dòng
 
-Khách đăng nhập → gửi câu hỏi lên `api-ai-chat` → server đọc lịch sử trong DB → Gemini trả lời, có thể gọi tool tra sản phẩm hoặc hát → server lưu các lượt mới → FE hiện câu trả lời, gợi ý và điều hướng đến trang phù hợp.
+Khách đăng nhập → gửi câu hỏi lên `api-ai-chat` → server đọc lịch sử trong DB → Gemini trả lời, có thể gọi tool tra sản phẩm, hát hoặc lên đơn nháp → server lưu các lượt mới → FE hiện câu trả lời, gợi ý và điều hướng đến trang phù hợp.
 
 ## Thuật ngữ
 

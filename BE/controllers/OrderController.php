@@ -79,6 +79,127 @@ class OrderController
     }
 
     /**
+     * Tạo đơn từ đơn nháp do trợ lý AI lên (danh sách SKU + số lượng), khách đã kiểm tra và bấm xác nhận.
+     * Không đụng tới giỏ hàng. Giá và tồn kho được tính lại trong transaction, không tin giá FE gửi lên.
+     *
+     * Method: POST. Body JSON:
+     * - items (bắt buộc): mảng 1-10 phần tử { sku: string 1-100 ký tự, quantity: số nguyên 1-99 }, SKU không trùng
+     * - recipient_name, recipient_phone, shipping_address (bắt buộc): cùng quy tắc với api-order-checkout
+     * - payment_method (không bắt buộc): 'cod' (mặc định) hoặc 'sepay'
+     * - expected_total (không bắt buộc): tổng tiền khách đang thấy, dùng để phát hiện giá đã đổi
+     *
+     * Thành công 201: { status, message, order: { id, total_amount, order_status, payment_status, payment_method } }
+     * Lỗi: 405 sai method, 400 body sai kiểu, 401 thiếu/sai token (requireAuth ở router),
+     *      422 dữ liệu không hợp lệ, 409 hết hàng/ngừng bán hoặc giá đã thay đổi (kèm total_amount mới).
+     *
+     * @param array $authPayload Payload JWT từ middleware. User ID lấy từ sub, không lấy từ body.
+     * @return void
+     */
+    public function checkoutItems(array $authPayload = []): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $userId = $this->getUserId($authPayload);
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($input) || !is_array($input['items'] ?? null)
+            || !is_string($input['recipient_name'] ?? null)
+            || !is_string($input['recipient_phone'] ?? null)
+            || !is_string($input['shipping_address'] ?? null)) {
+            response_json(['status' => 'error', 'message' => 'Dữ liệu đơn hàng không hợp lệ'], 400);
+        }
+
+        // Kiểm tra danh sách món: đúng kiểu, không trùng SKU, số lượng trong giới hạn.
+        $rawItems = $input['items'];
+        if ($rawItems === [] || count($rawItems) > Order::MAX_DIRECT_ITEMS) {
+            response_json(['status' => 'error', 'message' => 'Đơn hàng phải có từ 1 đến ' . Order::MAX_DIRECT_ITEMS . ' món'], 422);
+        }
+        $items = [];
+        $seenSkus = [];
+        foreach ($rawItems as $rawItem) {
+            $sku = is_array($rawItem) && is_string($rawItem['sku'] ?? null) ? trim($rawItem['sku']) : '';
+            // Chỉ nhận số nguyên thật; is_int loại cả "2" lẫn 2.5 và true.
+            $quantity = is_array($rawItem) ? ($rawItem['quantity'] ?? null) : null;
+            if ($sku === '' || strlen($sku) > 100 || !is_int($quantity)
+                || $quantity < 1 || $quantity > Order::MAX_ITEM_QUANTITY) {
+                response_json(['status' => 'error', 'message' => 'Món hàng hoặc số lượng không hợp lệ'], 422);
+            }
+            // So trùng theo chữ thường vì SKU trong DB không phân biệt hoa thường.
+            $skuKey = mb_strtolower($sku, 'UTF-8');
+            if (isset($seenSkus[$skuKey])) {
+                response_json(['status' => 'error', 'message' => 'Một món hàng bị lặp trong đơn'], 422);
+            }
+            $seenSkus[$skuKey] = true;
+            $items[] = ['sku' => $sku, 'quantity' => $quantity];
+        }
+
+        // Thông tin người nhận: cùng quy tắc với api-order-checkout.
+        $recipientName = trim($input['recipient_name']);
+        $shippingAddress = trim($input['shipping_address']);
+        if ($recipientName === '' || strlen($recipientName) > 100
+            || $shippingAddress === '' || strlen($shippingAddress) > 500) {
+            response_json(['status' => 'error', 'message' => 'Thông tin giao hàng không hợp lệ'], 422);
+        }
+        $recipientPhone = VietnamPhone::normalize($input['recipient_phone']);
+        if ($recipientPhone === null) {
+            response_json(['status' => 'error', 'message' => 'Số điện thoại phải là số di động Việt Nam 10 chữ số (03, 05, 07, 08, 09)'], 422);
+        }
+
+        $paymentMethod = $input['payment_method'] ?? 'cod';
+        if (!is_string($paymentMethod) || !in_array($paymentMethod, ['cod', 'sepay'], true)) {
+            response_json(['status' => 'error', 'message' => 'Phương thức thanh toán không hợp lệ'], 422);
+        }
+
+        // expected_total không bắt buộc. Nhận số (1449000) hoặc chuỗi số ("1449000.00"), tối đa 2 chữ số thập phân.
+        // Regex đảm bảo chuỗi chỉ gồm chữ số và tối đa một dấu chấm trước khi model đổi sang đơn vị xu.
+        $expectedTotal = null;
+        if (array_key_exists('expected_total', $input) && $input['expected_total'] !== null) {
+            $rawTotal = $input['expected_total'];
+            $totalText = is_int($rawTotal) ? (string) $rawTotal
+                : (is_float($rawTotal) ? number_format($rawTotal, 2, '.', '') : (is_string($rawTotal) ? trim($rawTotal) : ''));
+            if (!preg_match('/^\d{1,12}(\.\d{1,2})?$/', $totalText)) {
+                response_json(['status' => 'error', 'message' => 'Tổng tiền đối chiếu không hợp lệ'], 422);
+            }
+            $expectedTotal = $totalText;
+        }
+
+        $result = $this->order->checkoutItems(
+            $userId, $items, $recipientName, $recipientPhone, $shippingAddress, $paymentMethod, $expectedTotal
+        );
+        $status = $result['status'] ?? '';
+        if ($status === 'stock_unavailable') {
+            response_json([
+                'status' => 'error',
+                'message' => 'Có món đã hết hàng, ngừng bán hoặc không đủ số lượng. Quý khách vui lòng nhờ trợ lý lên lại đơn.',
+            ], 409);
+        }
+        if ($status === 'price_changed') {
+            response_json([
+                'status' => 'error',
+                'message' => 'Giá sản phẩm vừa thay đổi. Tổng mới là ' . number_format((float) $result['total_amount'], 0, ',', '.')
+                    . 'đ, quý khách vui lòng kiểm tra lại trước khi đặt.',
+                'total_amount' => $result['total_amount'],
+            ], 409);
+        }
+        if ($status !== 'ok') {
+            response_json(['status' => 'error', 'message' => 'Dữ liệu đơn hàng không hợp lệ'], 422);
+        }
+
+        response_json([
+            'status' => 'success',
+            'message' => 'Đặt hàng thành công',
+            'order' => [
+                'id' => $result['order_id'],
+                'total_amount' => $result['total_amount'],
+                'order_status' => 'pending',
+                'payment_status' => 'unpaid',
+                'payment_method' => $paymentMethod,
+            ],
+        ], 201);
+    }
+
+    /**
      * Tạo dữ liệu form thanh toán SePay cho đơn online (payment_method = sepay) còn pending/unpaid của user.
      * Lưu mã hóa đơn của lần thanh toán này để sau đó hỏi lại SePay khi người dùng quay về.
      * Sai method trả 405, đơn không tồn tại trả 404, đơn COD hoặc sai trạng thái trả 409.

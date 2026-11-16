@@ -1,10 +1,11 @@
 <script setup>
 // Khung chat trợ lý AI "Louis Dé Fule" dạng popup, đặt ở App.vue nên dùng được ở mọi trang.
 // Gọi API api-ai-chat qua helpers/ai/chatAssistant.js. Chưa đăng nhập thì hiện lời mời đăng nhập.
-// Khi BE trả lệnh điều hướng (actions), component mở trang danh sách hoặc chi tiết sản phẩm.
+// Khi BE trả lệnh (actions), component mở trang tương ứng: danh sách/chi tiết sản phẩm, sân khấu hát, hoặc trang lên đơn nháp.
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatAssistant, MAX_MESSAGE_LENGTH } from '@/helpers/ai/chatAssistant'
+import { clearCheckoutDraft } from '@/helpers/ai/checkoutDraft'
 import { saveReturnUrl } from '@/helpers/auth/returnUrl'
 import { getUser } from '@/helpers/auth/session'
 import { getDisplayName } from '@/helpers/auth/profile'
@@ -23,9 +24,12 @@ const {
   isOpen,
   isSending,
   unreadCount,
+  historyStatus,
   openChat,
   closeChat,
   resetChat,
+  forgetChat,
+  loadHistory,
   sendMessage,
   retryMessage,
 } = useChatAssistant()
@@ -81,7 +85,7 @@ const suggestions = computed(() => {
 // computed: tự tính lại khi draft hoặc isSending đổi. true khi được phép bấm gửi.
 const canSend = computed(() => {
   const text = draft.value.trim()
-  return !isSending.value && text !== '' && text.length <= MAX_MESSAGE_LENGTH
+  return !isSending.value && historyStatus.value !== 'loading' && text !== '' && text.length <= MAX_MESSAGE_LENGTH
 })
 
 // Cuộn vùng tin nhắn xuống cuối. nextTick: đợi Vue vẽ xong tin mới rồi mới cuộn.
@@ -184,12 +188,24 @@ onBeforeUnmount(removeGlobalListeners)
 // watch: theo dõi số tin nhắn và trạng thái đang gửi; có thay đổi thì cuộn xuống cuối.
 watch([() => messages.value.length, isSending], scrollToBottom)
 
-// Khi đăng xuất (hoặc token hết hạn), xóa hội thoại trên màn hình để người dùng sau không thấy.
+// Khi đăng xuất (hoặc token hết hạn), xóa hội thoại và đơn nháp trên màn hình để người dùng sau không thấy.
+// forgetChat (không phải resetChat) để lần đăng nhập sau nạp lại lịch sử của đúng người đó.
 watch(() => props.authenticated, (loggedIn) => {
   if (!loggedIn) {
-    resetChat()
+    forgetChat()
+    clearCheckoutDraft()
   }
 })
+
+// watch: khi khung chat đang mở và đã đăng nhập thì nạp lại cuộc chat gần nhất (chỉ 1 lần, xem loadHistory).
+// Theo dõi cả isOpen lẫn authenticated vì chat có thể được mở từ trang khác (openChat) hoặc đăng nhập lúc đang mở.
+// immediate: chạy luôn 1 lần khi component vừa tạo, phòng trường hợp panel đã mở sẵn.
+watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
+  if (open && loggedIn) {
+    await loadHistory()
+    scrollToBottom()
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -277,6 +293,13 @@ watch(() => props.authenticated, (loggedIn) => {
                 </div>
               </div>
             </div>
+
+            <!-- Trạng thái nạp lại cuộc chat cũ: đang tải, hoặc lỗi kèm nút thử lại -->
+            <p v-if="historyStatus === 'loading'" class="chat-history-note">Đang tải lại cuộc trò chuyện trước...</p>
+            <p v-else-if="historyStatus === 'error'" class="chat-history-note chat-history-note--error">
+              Không tải được cuộc trò chuyện trước.
+              <button type="button" class="chat-history-retry" @click="loadHistory">Thử lại</button>
+            </p>
 
             <!-- Các lượt hội thoại. v-for + :key: Vue dùng id để cập nhật đúng từng tin nhắn -->
             <div
@@ -727,6 +750,27 @@ watch(() => props.authenticated, (loggedIn) => {
   color: #ba1a1a;
   font-size: 0.8rem;
   text-align: right;
+}
+
+/* Dòng báo đang tải / lỗi tải lịch sử, nằm giữa vùng tin nhắn. */
+.chat-history-note {
+  margin: 0.25rem 0 0.75rem;
+  color: #6b6560;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.chat-history-note--error {
+  color: #93000a;
+}
+
+.chat-history-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #9e7432;
+  font-weight: 600;
+  text-decoration: underline;
 }
 
 .chat-retry {

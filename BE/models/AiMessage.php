@@ -66,6 +66,39 @@ class AiMessage extends BaseModel
     }
 
     /**
+     * Lấy các lượt gần nhất kèm thời điểm lưu, theo thứ tự cũ -> mới. Dùng để hiển thị lại khung chat
+     * (khác getRecent: getRecent chỉ trả role + parts đúng định dạng gửi cho Gemini).
+     *
+     * @param int $conversationId ID cuộc hội thoại (nơi gọi phải kiểm tra quyền sở hữu trước)
+     * @param int $limit          Số lượt tối đa lấy (1-100)
+     * @return array Danh sách ['role' => 'user'|'model', 'parts' => [...], 'created_at' => 'Y-m-d H:i:s']
+     */
+    public function getRecentWithTime($conversationId = 0, $limit = 30)
+    {
+        $limit = min(100, max(1, (int)$limit));
+
+        // Lấy mới nhất trước (LIMIT cắt từ đầu) rồi đảo lại cho đúng thứ tự thời gian.
+        $statement = $this->pdo->prepare(
+            'SELECT `role`, `parts`, `created_at` FROM `ai_messages` '
+            . 'WHERE `conversation_id` = :conversation_id ORDER BY `seq` DESC LIMIT :limit'
+        );
+        $statement->bindValue(':conversation_id', (int)$conversationId, PDO::PARAM_INT);
+        $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $statement->execute();
+
+        $turns = [];
+        foreach (array_reverse($statement->fetchAll(PDO::FETCH_ASSOC)) as $row) {
+            $parts = json_decode($row['parts'], true);
+            if (!is_array($parts) || $parts === []) {
+                continue;
+            }
+            $turns[] = ['role' => $row['role'], 'parts' => $parts, 'created_at' => $row['created_at']];
+        }
+
+        return $turns;
+    }
+
+    /**
      * Ghi các lượt mới vào cuộc hội thoại; nếu chưa có cuộc hội thoại thì tạo mới. Tất cả trong một transaction.
      *
      * Transaction: hoặc ghi đủ (cuộc hội thoại + mọi lượt), hoặc không ghi gì.

@@ -19,6 +19,7 @@ Mỗi tool kế thừa `GeminiTool` và viết 4 phương thức:
 | --- | --- | --- | --- | --- |
 | `search_product` | `GeminiToolSearchProduct.php` | `keyword` (bắt buộc) | Đọc `v_product_catalog` | `product-detail` hoặc `catalog` |
 | `fule_sing` | `GeminiToolFuleSing.php` | `song` (không bắt buộc) | Không đọc DB, dùng mảng `PLAYLIST` | `fule-sing` |
+| `create_order_draft` | `GeminiToolCreateOrderDraft.php` | `items` (bắt buộc; không có tham số thông tin cá nhân) | Đọc `product_variants`, `users` (không ghi) | `checkout-draft` |
 
 ## 3. Tool `search_product`
 
@@ -106,6 +107,43 @@ Khớp một phần dùng `str_contains` theo hai chiều, nên "bài vì con" v
 - Tìm được: `found=true`, `song`, `message`, `playlist`, và action `fule-sing` với `query.song` và `query.video`.
 - Không tìm được: `found=false`, `message` ("Louis Dé Fule chưa thuộc bài..."), `playlist`. Không có action, trang không mở.
 
+## 4b. Tool `create_order_draft` (lên đơn nháp)
+
+> Tóm tắt ngắn. Tài liệu đầy đủ (luồng mọi tình huống, thuật toán, API xác nhận, giao diện, bảo mật, kiểm thử, vấn đáp) nằm ở [len-don-nhanh/](len-don-nhanh/README.md).
+
+Tool **không tạo đơn**. Nó tra giá, tồn kho, thông tin giao hàng rồi gửi đơn nháp cho FE; khách tự bấm xác nhận thì đơn mới được tạo.
+
+### Đầu vào
+
+- `items`: 1-10 phần tử `{ sku, quantity }`. SKU lấy từ kết quả `search_product`. Số lượng là số nguyên 1-99. SKU trùng được cộng dồn.
+- Không có tham số tên, SĐT, địa chỉ, và tool không đọc hồ sơ. Người nhận do FE tự điền (`api-profile`). Louis không hỏi thông tin cá nhân trong chat.
+- User ID lấy từ `$context['user_id']` (JWT), không bao giờ lấy từ AI.
+
+### Kết quả
+
+```mermaid
+flowchart TD
+    I[items + context user_id] --> V{Món có vấn đề?<br/>sai SKU, hết hàng, thiếu số lượng}
+    V -- Có --> P["ready=false, problems<br/>không mở trang"]
+    V -- Không --> R["Thông tin giao hàng: trang → hồ sơ<br/>thiếu/sai → để trống"]
+    R --> OK["ready=true + tóm tắt món, tổng tiền<br/>_action checkout-draft (chỉ món), trang luôn mở"]
+```
+
+- Phần gửi cho AI chỉ có tên món, số lượng, thành tiền, tổng tiền. **Không có** tên, SĐT, địa chỉ.
+- Thông tin cá nhân chỉ nằm trong `_action.draft.recipient`, nên AI không thấy và bảng `ai_messages` không lưu.
+
+### Xác nhận đơn: `api-order-checkout-items`
+
+| Mục | Nội dung |
+| --- | --- |
+| Method | POST, cần Bearer token (`requireAuth` ở router) |
+| Body | `items: [{ sku, quantity }]`, `recipient_name`, `recipient_phone`, `shipping_address` (do form trên trang gửi), `payment_method` (`cod`/`sepay`), `expected_total` (không bắt buộc) |
+| 201 | `{ status, message, order: { id, total_amount, order_status, payment_status, payment_method } }` |
+| 409 | Hết hàng, ngừng bán, không đủ số lượng; hoặc giá đã đổi (kèm `total_amount` mới) |
+| 422 / 400 / 405 / 401 | Dữ liệu sai / body sai kiểu / sai method / thiếu token |
+
+`Order::checkoutItems` khóa các dòng biến thể (`FOR UPDATE`), tính lại giá từ DB, so với `expected_total`, rồi ghi đơn qua `insertOrderRows` (dùng chung với checkout từ giỏ). Giỏ hàng không bị đụng tới.
+
 ## 5. Cơ chế lệnh điều hướng `_action`
 
 ```mermaid
@@ -134,6 +172,7 @@ Ba điểm bảo đảm:
 $result = (new Gemini())
     ->addTool(new GeminiToolSearchProduct())
     ->addTool(new GeminiToolFuleSing())
+    ->addTool(new GeminiToolCreateOrderDraft())
     ->chat($message, $history, ['user_id' => $userId]);
 ```
 

@@ -93,3 +93,38 @@ Chi tiết lỗi thật (ví dụ mã 429 của Google) chỉ ghi vào log PHP v
 | Không có `actions`, `suggestions` | Có cả hai |
 
 File `docs/huong-dan-gemini-chat-tools.md` là bản mô tả cũ, còn nhắc tới `history` và chưa đăng nhập. Hãy đọc bộ tài liệu này thay thế.
+
+## Endpoint lấy lại lịch sử: `api-ai-history`
+
+Dùng khi khung chat mở sau lúc đăng nhập lại hoặc tải lại trang, để khách thấy lại cuộc chat gần nhất và chat tiếp trong cùng cuộc đó.
+
+| Mục | Nội dung |
+| --- | --- |
+| URL | `GET /BE/?action=api-ai-history` |
+| Xác thực | Bearer token (`requireAuth` ở router). Chỉ đọc hội thoại của user trong token, không nhận ID cuộc hội thoại từ client |
+| 200 | `{ status: 'success', conversation_id, messages }` |
+| 401 / 405 / 500 | Thiếu token / sai method / lỗi đọc DB |
+
+- `conversation_id`: cuộc có lượt mới nhất của user; `null` nếu chưa chat lần nào (khi đó `messages: []`).
+- `messages`: `[{ role: 'user' | 'assistant', text, created_at, tool_calls, suggestions }]`, cũ trước mới sau, tối đa `Gemini::MAX_HISTORY` lượt gần nhất.
+- Đã lọc: lượt gọi tool (`functionCall`/`functionResponse`) không hiện thành tin nhắn; dòng `[[GOI_Y: ...]]` được tách ra `suggestions`.
+- `tool_calls` chỉ giữ từ khóa của `search_product` (chip "Đã tra cứu"); tham số tool khác bị bỏ vì có thể chứa SĐT, địa chỉ.
+- Lệnh `_action` không lưu trong DB, nên nạp lại lịch sử không mở lại trang nào.
+
+Phía FE (`chatAssistant.js`): `loadHistory()` chạy 1 lần khi khung chat mở lúc đã đăng nhập. Nút "cuộc mới" không nạp lại cuộc cũ. Đăng xuất gọi `forgetChat()` để lần đăng nhập sau nạp đúng lịch sử của người mới.
+
+## Trường `checkout_draft` của `api-ai-chat` (không bắt buộc)
+
+FE gửi kèm khi khách đang có đơn nháp (tính năng lên đơn nhanh), để Louis lên đơn tiếp từ đúng trạng thái trên trang:
+
+```json
+"checkout_draft": {
+  "items": [{ "sku": "CLAYMATION", "quantity": 3 }]
+}
+```
+
+- `items`: 1-10 món, `sku` chuỗi 1-100 byte, `quantity` số nguyên 1-99. Server tra SKU trong DB, chỉ SKU có thật được đưa vào system prompt của lượt đó (không lưu lịch sử).
+- Không có thông tin người nhận: tên, SĐT, địa chỉ không đi qua `api-ai-chat`. Trường khác bị bỏ qua.
+- Sai định dạng: 400 `checkout_draft không hợp lệ`.
+- Chi tiết: [len-don-nhanh/11-dong-bo-don-nhap.md](len-don-nhanh/11-dong-bo-don-nhap.md).
+

@@ -135,6 +135,12 @@ switch ($action) {
         (new OrderController)->checkout($authPayload);
         break;
 
+    // API tạo đơn từ đơn nháp của trợ lý AI (danh sách SKU + số lượng, không dùng giỏ); yêu cầu user đăng nhập.
+    case 'api-order-checkout-items':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new OrderController)->checkoutItems($authPayload);
+        break;
+
     // API tạo form thanh toán SePay cho đơn online của user đang đăng nhập.
     case 'api-order-payment':
         $authPayload = (new AuthMiddleware())->requireAuth();
@@ -300,6 +306,12 @@ switch ($action) {
         // Middleware kiểm tra Bearer JWT; payload có sub = ID user, dùng để kiểm tra quyền sở hữu hội thoại.
         $authPayload = (new AuthMiddleware())->requireAuth();
         (new ChatController)->chat($authPayload);
+        break;
+
+    // API lấy lại cuộc chat gần nhất của user để hiện lại trong khung chat (GET). Yêu cầu đăng nhập.
+    case 'api-ai-history':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ChatController)->history($authPayload);
         break;
 
     default:
