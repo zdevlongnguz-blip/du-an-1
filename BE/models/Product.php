@@ -124,7 +124,8 @@ class Product extends BaseModel
         // slug chưa dùng trong tool, nhưng sẽ cần để điều hướng tới trang chi tiết (đã chốt trong kế hoạch).
         $sql = "SELECT `products`.`id`, `products`.`name`, `products`.`slug`, `products`.`code`,
                        `categories`.`name` AS `category_name`,
-                       `products`.`min_final_price`, `products`.`max_final_price`, `products`.`in_stock`
+                       `products`.`min_final_price`, `products`.`max_final_price`, `products`.`in_stock`,
+                       `products`.`variant_count`
                 FROM `v_product_catalog` AS `products`
                 LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
                 WHERE `products`.`name` LIKE :kw_name
@@ -146,6 +147,59 @@ class Product extends BaseModel
         $stmt->execute();
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Lấy các biến thể ĐANG BÁN của nhiều sản phẩm trong một truy vấn, nhóm theo sản phẩm.
+     * Dùng cho tool AI search_product để AI biết từng phiên bản: tên, SKU, giá, tồn kho.
+     *
+     * Thứ tự trong mỗi sản phẩm: biến thể mặc định trước, rồi giá bán tăng dần.
+     * Mỗi sản phẩm chỉ giữ tối đa $perProduct biến thể để kết quả gửi AI không quá dài.
+     *
+     * @param array $productIds ID các sản phẩm cần lấy biến thể (số nguyên dương)
+     * @param int   $perProduct Số biến thể tối đa mỗi sản phẩm (1-10)
+     * @return array Mảng [product_id => [các biến thể]], sản phẩm không có biến thể đang bán thì không có key
+     */
+    public function getActiveVariantsByProductIds($productIds = [], $perProduct = 5)
+    {
+        // Chỉ giữ ID là số nguyên dương, bỏ trùng. array_values đánh lại chỉ số 0, 1, 2...
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', is_array($productIds) ? $productIds : []),
+            static fn($id) => $id > 0
+        )));
+        if ($ids === []) {
+            return [];
+        }
+        $perProduct = min(10, max(1, (int)$perProduct));
+
+        // IN (...) với số phần tử thay đổi: tạo sẵn tên tham số :id0, :id1... rồi bind từng giá trị,
+        // không nối thẳng ID vào SQL (vẫn dùng prepared statement để chống SQL injection).
+        $placeholders = [];
+        foreach ($ids as $i => $id) {
+            $placeholders[] = ':id' . $i;
+        }
+
+        $sql = 'SELECT `product_id`, `sku`, `variant_name`, `price`, `sale_price`, `final_price`, `stock`, `is_default`
+                FROM `product_variants`
+                WHERE `is_active` = 1 AND `product_id` IN (' . implode(', ', $placeholders) . ')
+                ORDER BY `product_id`, `is_default` DESC, `final_price` ASC, `id` ASC';
+
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($ids as $i => $id) {
+            $stmt->bindValue(':id' . $i, $id, PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        // Nhóm theo product_id và cắt bớt ở PHP; giới hạn theo nhóm bằng SQL sẽ phức tạp hơn với người mới.
+        $grouped = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $productId = (int)$row['product_id'];
+            if (count($grouped[$productId] ?? []) < $perProduct) {
+                $grouped[$productId][] = $row;
+            }
+        }
+
+        return $grouped;
     }
 
     /**

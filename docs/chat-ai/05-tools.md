@@ -39,13 +39,24 @@ Gọi `Product::searchByKeyword($keyword, 5)`:
 ```json
 {
   "products": [
-    { "id": 5, "name": "Sáp vuốt tóc Vinh Râu", "code": "HOANG-VINH-01",
-      "category": "Gel, Sáp vuốt tóc", "price_from": 300, "price_to": 50000, "in_stock": true }
+    { "id": 3, "name": "Tinh Dầu Dưỡng Tóc Moroccanoil Treatment", "code": "MOROCCANOIL",
+      "category": "Dưỡng tóc", "price_from": 290000, "price_to": 720000, "in_stock": true,
+      "variant_count": 2,
+      "variants": [
+        { "name": "Chai 100ml", "sku": "MOROCCANOIL", "price": 720000, "original_price": 750000, "stock": 25, "is_default": true },
+        { "name": "Chai 25ml", "sku": "MOROCCANOIL-25ML", "price": 290000, "original_price": null, "stock": 40, "is_default": false }
+      ] }
   ]
 }
 ```
 
-Không gửi cho AI: `slug`, ảnh, mô tả, số lượng tồn kho cụ thể. Giá là giá thấp nhất và cao nhất của các phiên bản đang bán (đã tính giảm giá).
+- `price_from`, `price_to`: giá thấp nhất và cao nhất của các phiên bản đang bán (đã tính giảm giá), lấy từ `v_product_catalog`.
+- `variants`: các phiên bản đang bán (`is_active = 1`) lấy từ bảng `product_variants` bằng `Product::getActiveVariantsByProductIds()`, một truy vấn cho cả 5 sản phẩm. Mặc định đứng đầu, sau đó theo giá tăng dần, tối đa 5 phiên bản mỗi sản phẩm.
+- `price` là giá bán thực tế; `original_price` là giá niêm yết, chỉ có khi đang giảm giá. `stock` là số lượng lúc tra cứu, 0 nghĩa là phiên bản đó hết hàng.
+- `variant_count` là tổng số phiên bản đang bán; lớn hơn số phần tử `variants` nghĩa là danh sách đã bị cắt.
+- Gửi kèm phiên bản trong cùng kết quả (không tách tool riêng) để không tốn thêm request Gemini, vì gói miễn phí giới hạn số request mỗi phút.
+
+Không gửi cho AI: `slug`, ảnh, mô tả, thuộc tính JSON của phiên bản.
 
 Khi không có kết quả: `products: []` kèm `message` dặn AI báo cửa hàng chưa có hoặc chưa cập nhật sản phẩm đó.
 
