@@ -314,6 +314,12 @@ switch ($action) {
         (new ChatController)->history($authPayload);
         break;
 
+    // API xóa toàn bộ lịch sử trò chuyện với trợ lý AI của user đang đăng nhập (DELETE). Yêu cầu đăng nhập.
+    case 'api-ai-history-clear':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ChatController)->clearHistory($authPayload);
+        break;
+
     default:
         // Xử lý khi không khớp route nào (404 Not Found)
         http_response_code(404);

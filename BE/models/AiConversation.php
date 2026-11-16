@@ -48,4 +48,20 @@ class AiConversation extends BaseModel
 
         return $id === false ? null : (int)$id;
     }
+
+    /**
+     * Xóa toàn bộ cuộc hội thoại của một user. Các lượt trong ai_messages tự xóa theo khóa ngoại ON DELETE CASCADE.
+     * Câu lệnh luôn có WHERE user_id, nên không bao giờ xóa dữ liệu của người khác.
+     *
+     * @param int $userId ID user lấy từ JWT
+     * @return int Số cuộc hội thoại đã xóa
+     */
+    public function deleteByUser($userId = 0)
+    {
+        $statement = $this->pdo->prepare('DELETE FROM `ai_conversations` WHERE `user_id` = :user_id');
+        $statement->bindValue(':user_id', (int)$userId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return $statement->rowCount();
+    }
 }
