@@ -932,6 +932,16 @@ watch(() => props.authenticated, (loggedIn) => {
 .chat-guest-link {
   color: var(--color-navy);
   font-size: 0.85rem;
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+
+/* Rê chuột hoặc chọn bằng bàn phím (Tab): chữ đổi sang màu đồng đậm và gạch chân, để biết đây là link bấm được. */
+.chat-guest-link:hover,
+.chat-guest-link:focus-visible {
+  color: #9e7432;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* ---------- Điện thoại: panel chiếm toàn màn hình ---------- */
