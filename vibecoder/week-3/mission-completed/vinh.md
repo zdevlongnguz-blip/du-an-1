@@ -29,3 +29,31 @@ Tham chiếu: `vibecoder/Week 2/vinh.md` (phần FE Product Detail).
 3. Commit và tạo PR cho `feature-cart`.
 
 Chi tiết giỏ hàng: [cart.md](/C:/laragon/www/du-an-1/fix%20code/cart.md).
+
+## Ghi công bổ sung (ngày 2026-11-16, nhánh `feature/user-profile-fields`)
+
+Ngày ghi: 2026-11-16. Ghi theo phân công của admin Long, nhánh `feature/user-profile-fields`. Chưa commit, chưa tạo PR.
+
+### Phân công
+- Vai trò: phó nhóm, chuyên BE, kiểm thử code và báo admin.
+- Công BE: chia đều với Long (xem `long.md`).
+- FE: không nhận công viết code FE. Chỉ được giao việc kiểm thử và báo admin (xem mục dưới).
+
+### Phần BE được ghi công
+- API cập nhật hồ sơ `PUT api-profile-update` (chỉ tên, SĐT, địa chỉ): `User::updateProfile`, `ProfileController::update`, route. Validate tên tối đa 100 byte, địa chỉ tối đa 500 byte, SĐT theo quy tắc chung.
+- Quy tắc SĐT di động Việt Nam dùng chung: `extensions/VietnamPhone.php`, áp dụng cho `OrderController` (đặt hàng) và `ProfileController`.
+- Xoay vòng nhiều Gemini API key: `geminiServices/Gemini.php` (`callApi`, `nextKeyIndex`, `isKeyError`, `sendRequest`), `configs/config.php` (`GEMINI_API_KEYS`), `.env.example`.
+
+### Kiểm thử và báo admin
+- Kiểm thử API `api-profile-update`: các trường hợp 200, 400, 401, 405, 422.
+- Kiểm thử quy tắc SĐT: bộ 33 trường hợp chạy trên cả PHP và JS, so khớp từng dòng.
+- Kiểm thử xoay vòng Gemini bằng client giả lập: 11 kiểm tra, đạt.
+
+### Đã nêu rõ với admin
+- Gọi Gemini thật thất bại: key hiện có hết hạn mức miễn phí (429). Cần thêm key thuộc project khác rồi kiểm tra lại.
+- Chưa có test tự động cho BE.
+
+### Việc FE được giao (kiểm thử, không tính công code FE)
+- Kiểm thử hồi quy trang Đặt hàng sau khi đổi quy tắc SĐT: SĐT hợp lệ, số cố định bị chặn, lỗi hiện đúng dưới ô.
+- Kiểm thử hồi quy trang Giỏ hàng và Đơn hàng sau khi đổi menu desktop sang icon.
+- Báo lỗi cho admin, không tự sửa FE.

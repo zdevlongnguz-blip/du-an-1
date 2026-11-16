@@ -7,7 +7,10 @@ import { RouterLink, useRouter } from 'vue-router'
 import api from '@/helpers/api/client'
 import { refreshCartCount } from '@/helpers/cart/cartCount'
 import { formatPrice } from '@/helpers/format/price'
+import { validateVietnamPhone } from '@/helpers/format/phone'
 import { startOnlinePayment } from '@/helpers/orders/orderActions'
+import { getUser } from '@/helpers/auth/session'
+import { fetchProfile } from '@/helpers/auth/profile'
 import { showToast } from '@/helpers/ui/toast'
 import OrderPanel from '@/components/orders/OrderPanel.vue'
 
@@ -54,7 +57,7 @@ async function loadCart() {
   }
 }
 
-// Kiểm tra thông tin nhận hàng ở FE (cùng quy tắc với BE: tên ≤ 100, SĐT 7-20 ký tự số/+()-, địa chỉ ≤ 500).
+// Kiểm tra thông tin nhận hàng ở FE (cùng quy tắc với BE: tên ≤ 100, SĐT di động Việt Nam 10 số, địa chỉ ≤ 500).
 // Chỉ để người dùng sửa sớm; BE vẫn kiểm tra lại. Trả true nếu hợp lệ.
 function validateForm() {
   fieldErrors.recipientName = ''
@@ -66,7 +69,8 @@ function validateForm() {
   const address = shippingAddress.value.trim()
   if (!name) fieldErrors.recipientName = 'Vui lòng nhập tên người nhận.'
   else if (name.length > 100) fieldErrors.recipientName = 'Tên người nhận tối đa 100 ký tự.'
-  if (!/^[0-9+()\-\s]{7,20}$/.test(phone)) fieldErrors.recipientPhone = 'Số điện thoại gồm 7-20 ký tự (số, +, -, dấu ngoặc).'
+  // Quy tắc SĐT dùng chung (helpers/format/phone.js); bắt buộc nhập vì cần liên hệ khi giao hàng.
+  fieldErrors.recipientPhone = validateVietnamPhone(phone, { required: true })
   if (!address) fieldErrors.shippingAddress = 'Vui lòng nhập địa chỉ giao hàng.'
   else if (address.length > 500) fieldErrors.shippingAddress = 'Địa chỉ tối đa 500 ký tự.'
 
@@ -135,7 +139,44 @@ async function submitCheckout() {
 }
 
 // Tải giỏ một lần khi người dùng mở trang đặt hàng.
-onMounted(loadCart)
+// Giá trị mà trang đã tự điền vào từng ô. Dùng để biết khách đã sửa ô hay chưa:
+// ô còn đúng giá trị tự điền (hoặc đang trống) thì được thay bằng dữ liệu mới hơn; ô khách đã sửa thì giữ nguyên.
+const autoFilled = { name: '', phone: '', address: '' }
+
+// Điền thông tin nhận hàng từ một hồ sơ (name/phone/address có thể null). Chỉ ghi vào ô khách chưa tự sửa.
+// Khách vẫn sửa được các ô này; thay đổi chỉ áp dụng cho đơn hàng, không ghi ngược vào hồ sơ.
+function prefillRecipient(profile = {}) {
+  const fields = [
+    { key: 'name', input: recipientName },
+    { key: 'phone', input: recipientPhone },
+    { key: 'address', input: shippingAddress },
+  ]
+  for (const { key, input } of fields) {
+    const untouched = input.value === '' || input.value === autoFilled[key]
+    if (untouched && profile[key]) {
+      input.value = profile[key]
+      autoFilled[key] = profile[key]
+    }
+  }
+}
+
+// Điền 2 bước: (1) lấy ngay từ localStorage (auth_user) để ô có dữ liệu tức thì;
+// (2) gọi GET api-profile lấy bản mới nhất từ server (helper cũng cập nhật lại localStorage).
+// Lỗi ở bước 2 không chặn việc đặt hàng: khách vẫn tự nhập được, nên chỉ ghi log, không hiện toast gây nhiễu.
+async function prefillRecipientFromProfile() {
+  prefillRecipient(getUser() || {})
+  try {
+    prefillRecipient(await fetchProfile())
+  } catch (error) {
+    console.error('Không tải được hồ sơ để điền sẵn thông tin giao hàng:', error)
+  }
+}
+
+// onMounted: chạy 1 lần khi trang vừa hiện ra; điền sẵn thông tin và tải giỏ hàng song song.
+onMounted(() => {
+  prefillRecipientFromProfile()
+  loadCart()
+})
 </script>
 
 <template>

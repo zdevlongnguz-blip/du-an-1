@@ -109,6 +109,14 @@ define('SEPAY_IPN_SECRET', getenv('SEPAY_IPN_SECRET') ?: '');
 define('SEPAY_PAYMENT_TIMEOUT_MINUTES', 30);
 
 // Gemini (AI của Google): API key là bí mật nên đọc từ BE/.env; để trống thì service Gemini báo lỗi khi được gọi.
+// GEMINI_API_KEY có thể chứa 1 key hoặc nhiều key cách nhau bằng dấu phẩy (key1,key2,key3)
+// để dùng luân phiên nhiều key miễn phí. File .env không có kiểu mảng nên phải tự tách chuỗi.
 define('GEMINI_API_KEY', getenv('GEMINI_API_KEY') ?: '');
+// Danh sách key đã tách: bỏ khoảng trắng, bỏ phần tử rỗng (ví dụ dấu phẩy thừa ở cuối), bỏ key trùng.
+// array_values: đánh lại chỉ số 0, 1, 2... sau khi lọc để service chọn key theo vị trí.
+define('GEMINI_API_KEYS', array_values(array_unique(array_filter(
+    array_map('trim', explode(',', GEMINI_API_KEY)),
+    static fn($key) => $key !== ''
+))));
 // Tên model Gemini dùng mặc định, đổi được qua GEMINI_MODEL trong BE/.env mà không phải sửa code.
 define('GEMINI_MODEL', getenv('GEMINI_MODEL') ?: 'gemini-2.5-flash');

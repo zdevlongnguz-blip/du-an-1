@@ -120,3 +120,31 @@ Người thực hiện: Long. Làm việc cùng Claude Code. Phần này làm th
 2. Rate limit cho `api-ai-chat` (gói Gemini miễn phí giới hạn 5 request mỗi phút).
 3. Tool giỏ hàng và đặt hàng (hiện chỉ hướng dẫn khách bấm nút trên trang).
 4. Kiểm tra dữ liệu giá sản phẩm id 5 (có phiên bản giá 300đ).
+
+## Ghi công bổ sung (ngày 2026-11-16, nhánh `feature/user-profile-fields`)
+
+Người thực hiện: Long (admin). Làm việc cùng Claude Code. Chưa commit, chưa tạo PR.
+
+### Vai trò admin
+- Lên ý tưởng và yêu cầu tính năng: hồ sơ người dùng (họ tên, SĐT, địa chỉ), điền sẵn checkout từ hồ sơ, lời chào trợ lý có tên, icon giỏ hàng và đơn hàng trên menu desktop, quy tắc SĐT di động Việt Nam, xoay vòng nhiều Gemini API key.
+- Chia đầu việc BE/FE cho nhóm và quản lý git (tạo nhánh `feature/user-profile-fields` từ `dev`, chia PR gợi ý).
+- Kiểm thử: chạy kiểm tra API và luồng trình duyệt trong phiên, đối chiếu kết quả với yêu cầu.
+
+### Backend (phần chính)
+- Migration `20261116_add_user_profile_fields.sql`: thêm `name`, `phone`, `address` (NULL), chạy lặp được. Cập nhật `database-schema.md`.
+- Seed `users_profiles.sql`: dữ liệu hồ sơ mẫu, đặt lại mật khẩu mẫu.
+- `User.php`: `findProfileById`, `updateProfile`. `ProfileController.php` (mới): `GET api-profile`, `PUT api-profile-update`. Route thêm vào `routes/index.php`.
+- `extensions/VietnamPhone.php`: quy tắc SĐT di động Việt Nam dùng chung cho đặt hàng và hồ sơ, lưu dạng `0xxxxxxxxx`.
+- Xoay vòng nhiều Gemini API key trong `Gemini.php` và `config.php`: luân phiên, tự chuyển key khi 429/401/403, log không ghi key. Cập nhật `.env.example`.
+- Tài liệu: `README.md`, `docs/huong-dan-gemini-chat-tools.md`, `docs/chat-ai/` (01, 04, 07, 08, 09).
+
+### Đã kiểm tra (BE)
+- `php -l` cho các file PHP đã sửa: OK.
+- API thật với tài khoản test: `api-profile` 200/401/405; `api-profile-update` lưu hợp lệ, xóa trường bằng null, email/role gửi kèm không đổi, SĐT sai 422, sai method 405, thiếu token 401.
+- Quy tắc SĐT: 33 trường hợp chạy giống nhau ở PHP và JS, không lệch.
+- Xoay vòng Gemini: 11 kiểm tra với client giả lập, đạt. Gọi Gemini thật thất bại vì key hiện có đã hết hạn mức miễn phí.
+
+### Còn lại
+1. Commit và tạo PR theo 3 nhóm (hồ sơ người dùng; xoay vòng key Gemini; icon menu).
+2. Thêm key Gemini thuộc project khác, rồi kiểm tra lại chat thật.
+3. Viết test tự động cho BE (hiện chưa có).

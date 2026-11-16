@@ -208,6 +208,58 @@ class User extends BaseModel
     }
 
     /**
+     * Lấy hồ sơ của tài khoản đang hoạt động theo ID.
+     * Chỉ chọn các cột hồ sơ cần hiển thị; không chọn password, token hay token_version để tránh lộ dữ liệu nhạy cảm.
+     * Cột họ tên, số điện thoại, địa chỉ có thể là NULL nếu user chưa điền (PDO trả về null).
+     *
+     * @param int $userId ID user lấy từ payload JWT (claim sub).
+     * @return array|false Thông tin hồ sơ hoặc false nếu không có tài khoản hoạt động.
+     */
+    public function findProfileById(int $userId = 0)
+    {
+        // Dùng bindValue với PDO::PARAM_INT để ID được coi là số, không bị nối chuỗi vào SQL.
+        $statement = $this->pdo->prepare(
+            'SELECT `id`, `email`, `role`, `name`, `phone`, `address` FROM `users` '
+            . 'WHERE `id` = :id AND `is_active` = 1 LIMIT 1'
+        );
+        $statement->bindValue(':id', $userId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return $statement->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cập nhật hồ sơ (họ tên, số điện thoại, địa chỉ) của tài khoản đang hoạt động.
+     * Chỉ ghi 3 cột này; email, role, mật khẩu không bao giờ bị đổi qua hàm này.
+     * Giá trị null nghĩa là xóa trường đó (lưu NULL trong DB). Dữ liệu phải được controller validate trước.
+     *
+     * @param int         $userId  ID user lấy từ payload JWT.
+     * @param string|null $name    Họ tên mới hoặc null.
+     * @param string|null $phone   Số điện thoại mới hoặc null.
+     * @param string|null $address Địa chỉ mới hoặc null.
+     * @return bool True nếu câu lệnh chạy thành công (kể cả khi dữ liệu không đổi).
+     */
+    public function updateProfile(int $userId = 0, ?string $name = null, ?string $phone = null, ?string $address = null): bool
+    {
+        if ($userId < 1) {
+            return false;
+        }
+
+        $statement = $this->pdo->prepare(
+            'UPDATE `users` SET `name` = :name, `phone` = :phone, `address` = :address '
+            . 'WHERE `id` = :id AND `is_active` = 1'
+        );
+        // PARAM_NULL để MySQL lưu NULL thật, không lưu chuỗi rỗng; PARAM_STR cho chuỗi bình thường.
+        $statement->bindValue(':name', $name, $name === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $statement->bindValue(':phone', $phone, $phone === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $statement->bindValue(':address', $address, $address === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $statement->bindValue(':id', $userId, PDO::PARAM_INT);
+
+        // Không dùng rowCount() để kết luận: MySQL trả 0 dòng khi giá trị mới giống hệt giá trị cũ.
+        return $statement->execute();
+    }
+
+    /**
      * Tăng token_version nếu JWT hiện tại vẫn là phiên bản mới nhất.
      *
      * @param int $userId ID user trong JWT.

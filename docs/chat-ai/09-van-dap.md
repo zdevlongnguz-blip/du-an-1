@@ -84,7 +84,10 @@ A: Cú pháp PHP, build FE, lưu và đọc lịch sử trên DB thật, tool v�
 A: Chưa có API lấy lại lịch sử khi F5, chưa có rate limit, chưa có tool giỏ hàng và đặt hàng, chưa có chính sách dọn hội thoại cũ. Tham chiếu: [07-bao-mat.md](07-bao-mat.md), mục 2.
 
 **Q: Vì sao có lỗi 429?**
-A: Gói miễn phí của Gemini chỉ cho 5 request mỗi phút. Một câu hỏi có tool tốn 2 request. Đây là giới hạn của nhà cung cấp, không phải lỗi code.
+A: Gói miễn phí của Gemini chỉ cho 5 request mỗi phút. Một câu hỏi có tool tốn 2 request. Đây là giới hạn của nhà cung cấp, không phải lỗi code. Để giảm lỗi, `GEMINI_API_KEY` nhận nhiều key cách nhau bằng dấu phẩy: `Gemini::callApi()` dùng luân phiên từng key và gặp 429 thì thử ngay key tiếp theo; chỉ khi mọi key đều hết lượt mới báo lỗi.
+
+**Q: Làm sao các request PHP độc lập biết lần trước đã dùng key nào?**
+A: Mỗi request PHP chạy xong là mất hết biến. Vì vậy vị trí key kế tiếp được lưu trong một file nhỏ ở thư mục tạm của hệ thống, khóa bằng `flock` khi đọc-ghi để hai request cùng lúc không lấy trùng vị trí. Không ghi được file thì chọn key ngẫu nhiên, chat vẫn chạy.
 
 **Q: Vì sao AI có thể nói sai giá?**
 A: Giá lấy từ tool, nhưng AI diễn đạt lại bằng văn bản nên có thể sai chi tiết. Giao diện có dòng chú thích nhắc khách xem trang sản phẩm để biết giá chính xác.

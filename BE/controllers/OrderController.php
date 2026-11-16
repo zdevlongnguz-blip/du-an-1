@@ -39,12 +39,16 @@ class OrderController
         }
 
         $recipientName = trim($input['recipient_name']);
-        $recipientPhone = trim($input['recipient_phone']);
         $shippingAddress = trim($input['shipping_address']);
         if ($recipientName === '' || strlen($recipientName) > 100
-            || !preg_match('/^[0-9+()\-\s]{7,20}$/', $recipientPhone)
             || $shippingAddress === '' || strlen($shippingAddress) > 500) {
             response_json(['status' => 'error', 'message' => 'Thông tin giao hàng không hợp lệ'], 422);
+        }
+
+        // Dùng quy tắc SĐT di động Việt Nam chung (extensions/VietnamPhone.php); lưu dạng chuẩn 0xxxxxxxxx.
+        $recipientPhone = VietnamPhone::normalize($input['recipient_phone']);
+        if ($recipientPhone === null) {
+            response_json(['status' => 'error', 'message' => 'Số điện thoại phải là số di động Việt Nam 10 chữ số (03, 05, 07, 08, 09)'], 422);
         }
 
         // Không gửi payment_method thì coi như thanh toán khi nhận hàng (giữ tương thích với FE cũ).

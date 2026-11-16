@@ -9,7 +9,7 @@
 | Trang sân khấu | `FE/src/views/FuleSing.vue` | Phát video bài hát của Louis, route `/fule-sing` |
 | Router API | `BE/routes/index.php` | Điều phối `?action=api-ai-chat`, yêu cầu đăng nhập |
 | Controller | `BE/controllers/ChatController.php` | Validate request, kiểm tra quyền, gọi Gemini, lưu lịch sử, trả JSON |
-| Service Gemini | `BE/geminiServices/Gemini.php` | Gọi Gemini API, vòng lặp tool, tách gợi ý và lệnh điều hướng |
+| Service Gemini | `BE/geminiServices/Gemini.php` | Gọi Gemini API (xoay vòng nhiều API key, tự chuyển key khi hết hạn mức), vòng lặp tool, tách gợi ý và lệnh điều hướng |
 | System prompt | `BE/geminiServices/GeminiPrompt.php` | Quy tắc trả lời, danh xưng, cách gọi tool |
 | Lớp cha tool | `BE/geminiServices/GeminiTool.php` | Khai báo chuẩn cho mọi tool, hàm tạo lệnh điều hướng |
 | Tool tra sản phẩm | `BE/geminiServices/GeminiToolSearchProduct.php` | Tool `search_product` |

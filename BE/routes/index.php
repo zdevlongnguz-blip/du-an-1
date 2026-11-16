@@ -45,6 +45,18 @@ switch ($action) {
         (new AuthController)->changePassword($authPayload);
         break;
 
+    // API lấy hồ sơ cá nhân (họ tên, SĐT, địa chỉ) của user đang đăng nhập. Yêu cầu Bearer token.
+    case 'api-profile':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ProfileController)->show($authPayload);
+        break;
+
+    // API cập nhật họ tên, SĐT, địa chỉ của user đang đăng nhập (PUT). Yêu cầu Bearer token.
+    case 'api-profile-update':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ProfileController)->update($authPayload);
+        break;
+
     case 'api-login':
         (new AuthController)->login();
         break;

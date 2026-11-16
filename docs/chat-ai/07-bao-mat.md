@@ -40,7 +40,7 @@ flowchart LR
 | Giả mạo `user_id` | `user_id` không lấy từ body. Tool nhận `user_id` qua `$context` do server đặt. |
 | SQL injection | Prepared statement mọi nơi. Ký tự `% _ \` trong LIKE được escape. |
 | Lộ thông tin lỗi | Lỗi chi tiết ghi vào log, client chỉ nhận thông báo chung. |
-| Lộ API key | Key gửi qua header `x-goog-api-key`, không đưa vào URL hay log. |
+| Lộ API key | Key gửi qua header `x-goog-api-key`, không đưa vào URL hay log. Khi xoay vòng nhiều key, log chỉ ghi số thứ tự key (`Key số 2/3`), thông báo lỗi không chứa key. |
 | Lộ cấu hình | Không in giá trị `.env` ra response, log hay comment. |
 | Tin nhắn quá dài | Giới hạn 2000 ký tự ở controller và maxlength ở ô nhập. |
 | Lời AI giả mạo "đã làm" | Prompt cấm nói đã thêm giỏ/đặt hàng vì chưa có tool tương ứng. |
@@ -50,7 +50,7 @@ flowchart LR
 | Rủi ro | Mức | Ghi chú |
 | --- | --- | --- |
 | Chưa có rate limit cho `api-ai-chat` | Trung bình | Mỗi request tốn tiền gọi Google. Có thể bị lạm dụng bằng tài khoản thật. |
-| Gói miễn phí Gemini giới hạn 5 request/phút | Cao khi demo | Hội thoại có tool tốn 2 request. Gặp lỗi 429 sẽ thành 502 cho khách. |
+| Gói miễn phí Gemini giới hạn 5 request/phút | Cao khi demo | Hội thoại có tool tốn 2 request. Đã giảm bằng cách xoay vòng nhiều key trong `GEMINI_API_KEY` (tự chuyển key khi gặp 429); chỉ khi mọi key đều hết lượt mới thành 502 cho khách. Key cùng một project dùng chung hạn mức nên không giúp được. Dùng nhiều project để vượt hạn mức miễn phí có thể trái điều khoản của Google: chỉ nên dùng cho demo. |
 | AI có thể nhầm giá hoặc tình trạng hàng | Trung bình | Giá lấy từ tool, nhưng AI diễn đạt có thể sai. Có dòng chú thích nhắc khách xem trang sản phẩm. |
 | Dữ liệu giá bất thường | Cần kiểm tra | Sản phẩm id 5 có phiên bản giá 300đ, có thể nhập nhầm. |
 | Chưa có API lấy lại lịch sử | Thấp | F5 làm mất tin hiển thị, dù DB vẫn còn. |
