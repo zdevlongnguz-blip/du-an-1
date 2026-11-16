@@ -17,6 +17,10 @@ class GeminiToolSearchProduct extends GeminiTool
     // Số sản phẩm tối đa đưa cho Gemini. Ít kết quả giúp câu trả lời gọn và tiết kiệm token.
     const MAX_RESULTS = 5;
 
+    // Số phiên bản (biến thể) tối đa mỗi sản phẩm gửi cho Gemini. Kèm luôn trong kết quả tìm kiếm
+    // để AI trả lời được câu hỏi về phiên bản mà không phải gọi thêm tool (mỗi lần gọi tool tốn thêm 1 request Gemini).
+    const MAX_VARIANTS_PER_PRODUCT = 5;
+
     /**
      * Tên tool. Gemini dùng tên này khi yêu cầu gọi.
      *
@@ -35,7 +39,8 @@ class GeminiToolSearchProduct extends GeminiTool
     public function description()
     {
         return 'Tìm sản phẩm của cửa hàng theo từ khóa (tên, mã hoặc mô tả). '
-            . 'Dùng khi khách hỏi cửa hàng có bán gì, sản phẩm nào, giá bao nhiêu, còn hàng không.';
+            . 'Kết quả có kèm từng phiên bản đang bán (tên phiên bản, giá, giá gốc nếu giảm giá, số lượng tồn kho). '
+            . 'Dùng khi khách hỏi cửa hàng có bán gì, sản phẩm nào, có những phiên bản nào, giá bao nhiêu, còn hàng không.';
     }
 
     /**
@@ -99,11 +104,18 @@ class GeminiToolSearchProduct extends GeminiTool
             ];
         }
 
+        // Lấy phiên bản đang bán của tất cả sản phẩm tìm được bằng MỘT truy vấn (không truy vấn từng sản phẩm).
+        $variantsByProduct = (new Product())->getActiveVariantsByProductIds(
+            array_column($rows, 'id'),
+            self::MAX_VARIANTS_PER_PRODUCT
+        );
+
         // Chỉ lấy các cột AI cần, không trả cả bản ghi từ DB.
         $products = [];
         foreach ($rows as $row) {
+            $productId = (int)$row['id'];
             $products[] = [
-                'id' => (int)$row['id'],
+                'id' => $productId,
                 'name' => $row['name'],
                 'code' => $row['code'],
                 'category' => $row['category_name'],
@@ -111,6 +123,9 @@ class GeminiToolSearchProduct extends GeminiTool
                 'price_from' => $row['min_final_price'] === null ? null : (float)$row['min_final_price'],
                 'price_to' => $row['max_final_price'] === null ? null : (float)$row['max_final_price'],
                 'in_stock' => (bool)$row['in_stock'],
+                // Tổng số phiên bản đang bán; lớn hơn số phần tử trong 'variants' nghĩa là danh sách đã bị cắt bớt.
+                'variant_count' => (int)($row['variant_count'] ?? 0),
+                'variants' => $this->formatVariants($variantsByProduct[$productId] ?? []),
             ];
         }
 
@@ -124,5 +139,33 @@ class GeminiToolSearchProduct extends GeminiTool
             'products' => $products,
             Gemini::ACTION_KEY => $action,
         ];
+    }
+
+    /**
+     * Rút gọn dữ liệu phiên bản từ DB thành dạng dễ đọc cho Gemini.
+     *
+     * - price: giá bán thực tế (đã tính khuyến mãi).
+     * - original_price: giá niêm yết, chỉ có khi đang giảm giá (null = không giảm), để AI nói được "giảm từ X còn Y".
+     * - stock: số lượng tồn kho tại thời điểm tra cứu; 0 nghĩa là phiên bản đó hết hàng.
+     *
+     * @param array $variants Các dòng biến thể từ Product::getActiveVariantsByProductIds
+     * @return array Danh sách phiên bản đã rút gọn
+     */
+    private function formatVariants($variants = [])
+    {
+        $result = [];
+        foreach (is_array($variants) ? $variants : [] as $variant) {
+            $onSale = $variant['sale_price'] !== null;
+            $result[] = [
+                'name' => $variant['variant_name'],
+                'sku' => $variant['sku'],
+                'price' => (float)$variant['final_price'],
+                'original_price' => $onSale ? (float)$variant['price'] : null,
+                'stock' => (int)$variant['stock'],
+                'is_default' => (bool)$variant['is_default'],
+            ];
+        }
+
+        return $result;
     }
 }
