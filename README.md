@@ -116,6 +116,7 @@ Mở `BE/.env` và điền các giá trị cần thiết:
 | URL công khai | `APP_URL`, `FRONTEND_URL` | Không bắt buộc. `APP_URL=https://ten-mien` dùng khi deploy hoặc chia sẻ ngrok để link trong email đúng domain; `FRONTEND_URL` chỉ cần khi FE ở origin khác BE |
 | Email | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_ENCRYPTION` | Dùng gửi email xác thực và đặt lại mật khẩu |
 | SePay | `SEPAY_ENVIRONMENT`, `SEPAY_MERCHANT_ID`, `SEPAY_SECRET_KEY`, `SEPAY_IPN_SECRET`, `SEPAY_SUCCESS_URL`, `SEPAY_ERROR_URL`, `SEPAY_CANCEL_URL` | Dùng khóa sandbox khi phát triển; `SEPAY_IPN_SECRET` là secret riêng để xác thực IPN |
+| Trợ lý AI (Gemini) | `GEMINI_API_KEY`, `GEMINI_MODEL` | Key lấy tại Google AI Studio. Ghi được nhiều key cách nhau bằng dấu phẩy (`key1,key2,key3`) để dùng luân phiên; key hết hạn mức (HTTP 429) thì tự chuyển sang key khác. Key nên thuộc các project khác nhau vì hạn mức miễn phí tính theo project. `GEMINI_MODEL` để trống thì dùng `gemini-2.5-flash` |
 
 `BE/.env` không được commit. Không đưa mật khẩu hoặc khóa bí mật vào mã nguồn.
 
@@ -297,6 +298,7 @@ Các endpoint đánh dấu "đăng nhập" cần header `Authorization: Bearer <
 | Gọi API bị lỗi hoặc CORS khi chạy dev | Kiểm tra `VITE_API_BASE_URL=/api` và `VITE_API_PROXY_TARGET` trỏ đúng BE đang chạy; restart `npm run dev` sau khi sửa file env |
 | Lỗi "Thiếu DB_USERNAME, DB_PASSWORD hoặc JWT_SECRET" | Chưa tạo `BE/.env` từ `BE/.env.example` hoặc thiếu biến |
 | Lỗi thiếu class PHPMailer hoặc SePay | Chưa chạy `composer install` ở thư mục gốc |
+| Trợ lý AI báo "đang gặp sự cố" (502) | Thường do mọi key Gemini đã hết hạn mức miễn phí. Xem log PHP (Laragon: `C:\laragon\tmp\php_errors.log`) dòng `[Gemini]`/`[ChatController]`; đợi khoảng 1 phút hoặc thêm key thuộc project khác vào `GEMINI_API_KEY` (cách nhau bằng dấu phẩy) |
 | Ảnh sản phẩm báo 404 | Tên ảnh trong database không có file tương ứng trong `BE/assets/uploads` |
 | Qua ngrok, link trong email trỏ về `du-an-1.test` hoặc `localhost:5173` | Chưa đặt `APP_URL` (và các `SEPAY_*_URL`) theo URL ngrok trong `BE/.env`; xem [Chia sẻ qua ngrok](#chia-sẻ-qua-ngrok) |
 

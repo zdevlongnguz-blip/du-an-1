@@ -35,6 +35,12 @@ class Gemini
     // Model dùng khi GEMINI_MODEL trong BE/.env để trống hoặc sai định dạng.
     const DEFAULT_MODEL = 'gemini-2.5-flash';
 
+    // Mã HTTP cho thấy lỗi nằm ở KEY (không phải ở câu hỏi): đổi sang key khác có thể thành công.
+    // 429 = hết hạn mức/gửi quá nhanh (key miễn phí hay gặp), 401/403 = key sai, bị khóa hoặc không có quyền.
+    // 400 chỉ tính là lỗi key khi message nói về API key (Gemini trả 400 "API key not valid" cho key sai),
+    // vì 400 còn dùng cho lỗi dữ liệu gửi đi, mà lỗi đó thì đổi key cũng không hết.
+    const KEY_ERROR_HTTP_CODES = [401, 403, 429];
+
     // Key dành riêng trong kết quả tool để gửi lệnh cho FE (ví dụ điều hướng trang).
     // Key này bị tách ra trước khi gửi kết quả cho Gemini: AI không thấy và không sửa được lệnh.
     const ACTION_KEY = '_action';
@@ -188,20 +194,23 @@ class Gemini
     // ===================== GỌI API =====================
 
     /**
-     * Gửi payload tới endpoint generateContent của Gemini bằng cURL.
+     * Gửi payload tới endpoint generateContent của Gemini, xoay vòng nhiều API key.
      *
-     * cURL: thư viện có sẵn trong PHP để gửi request HTTP từ server tới server khác.
+     * - Luân phiên: mỗi lần gọi bắt đầu từ key kế tiếp (xem nextKeyIndex), chia đều lượt dùng cho các key miễn phí.
+     * - Dự phòng: key bị hết hạn mức (429) hoặc sai/bị khóa (401, 403, 400 về API key) thì thử ngay key tiếp theo.
+     *   Lỗi khác (câu hỏi bị chặn, dữ liệu sai, lỗi mạng) đổi key cũng không hết nên báo lỗi luôn.
      * Để protected (không phải private) để khi thử nghiệm có thể viết class con giả lập API.
      *
      * @param array $payload Body theo định dạng Gemini (contents, tools, systemInstruction)
      * @return array Response của Gemini dạng mảng
-     * @throws RuntimeException Khi thiếu API key, lỗi mạng, Gemini trả HTTP lỗi hoặc JSON không hợp lệ
+     * @throws RuntimeException Khi thiếu API key, lỗi mạng, mọi key đều lỗi hoặc JSON không hợp lệ
      */
     protected function callApi($payload = [])
     {
-        $apiKey = defined('GEMINI_API_KEY') ? trim((string) GEMINI_API_KEY) : '';
-        if ($apiKey === '') {
+        $apiKeys = $this->apiKeys();
+        if ($apiKeys === []) {
             // Không in key ra thông báo lỗi, chỉ báo tên biến còn thiếu.
+            // ChatController dựa vào chữ "GEMINI_API_KEY" trong message để báo "chưa được cấu hình".
             throw new RuntimeException('Thiếu GEMINI_API_KEY trong BE/.env.');
         }
 
@@ -217,6 +226,132 @@ class Gemini
             throw new RuntimeException('Không mã hóa được dữ liệu gửi Gemini.');
         }
 
+        $keyCount = count($apiKeys);
+        $startIndex = $this->nextKeyIndex($keyCount);
+        $lastError = '';
+
+        // Thử lần lượt từng key, bắt đầu từ key được chọn; % (chia lấy dư) để quay vòng về key đầu khi hết danh sách.
+        for ($attempt = 0; $attempt < $keyCount; $attempt++) {
+            $index = ($startIndex + $attempt) % $keyCount;
+            [$httpCode, $data] = $this->sendRequest($url, $body, $apiKeys[$index]);
+
+            if ($httpCode >= 200 && $httpCode < 300) {
+                return $data;
+            }
+
+            // Chỉ lấy message lỗi Gemini gửi về, không kèm header hay key.
+            $message = $data['error']['message'] ?? 'Lỗi không xác định';
+            $lastError = 'Gemini báo lỗi (HTTP ' . $httpCode . '): ' . $message;
+
+            if (!$this->isKeyError($httpCode, $message)) {
+                throw new RuntimeException($lastError);
+            }
+
+            // Ghi log số thứ tự key (không ghi key) để dev biết key nào hết lượt/hỏng mà thay.
+            error_log('[Gemini] Key số ' . ($index + 1) . '/' . $keyCount . ' lỗi HTTP ' . $httpCode . ', thử key khác.');
+        }
+
+        // Không dùng chữ "GEMINI_API_KEY" ở đây: key đã cấu hình, chỉ là tạm hết lượt,
+        // nên ChatController báo "đang gặp sự cố" (502) thay vì "chưa được cấu hình".
+        throw new RuntimeException('Đã thử hết ' . $keyCount . ' key Gemini nhưng đều lỗi. Lỗi cuối: ' . $lastError);
+    }
+
+    /**
+     * Lấy danh sách API key đã cấu hình (config.php tách sẵn từ GEMINI_API_KEY theo dấu phẩy).
+     *
+     * @return string[] Danh sách key, rỗng nếu chưa cấu hình
+     */
+    private function apiKeys()
+    {
+        if (defined('GEMINI_API_KEYS') && is_array(GEMINI_API_KEYS)) {
+            return GEMINI_API_KEYS;
+        }
+
+        // Dự phòng khi config.php cũ chưa có GEMINI_API_KEYS: tự tách chuỗi như config.php.
+        $raw = defined('GEMINI_API_KEY') ? (string) GEMINI_API_KEY : '';
+        return array_values(array_unique(array_filter(array_map('trim', explode(',', $raw)), static fn($key) => $key !== '')));
+    }
+
+    /**
+     * Chọn vị trí key bắt đầu cho lần gọi này theo kiểu luân phiên: 0, 1, 2, ..., rồi quay lại 0.
+     *
+     * Mỗi request PHP chạy độc lập và quên hết biến khi kết thúc, nên vị trí kế tiếp được lưu
+     * vào một file nhỏ trong thư mục tạm của hệ thống. flock khóa file trong lúc đọc-ghi để
+     * hai request chạy cùng lúc không lấy trùng vị trí hoặc ghi đè lẫn nhau.
+     * Không mở được file (thiếu quyền...) thì chọn ngẫu nhiên: vẫn chia tương đối đều, không làm hỏng chat.
+     *
+     * @param int $keyCount Số key đang có
+     * @return int Vị trí key (0 .. $keyCount - 1)
+     */
+    private function nextKeyIndex($keyCount = 1)
+    {
+        $keyCount = (int) $keyCount;
+        if ($keyCount <= 1) {
+            return 0;
+        }
+
+        // md5(__DIR__): tên file riêng cho từng bản cài dự án, tránh 2 dự án trên cùng máy dùng chung bộ đếm.
+        $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gemini_key_index_' . md5(__DIR__) . '.txt';
+        // Chế độ 'c+': mở để đọc và ghi, tự tạo file nếu chưa có, KHÔNG xóa nội dung cũ khi mở.
+        $handle = @fopen($file, 'c+');
+        if ($handle === false) {
+            return random_int(0, $keyCount - 1);
+        }
+
+        try {
+            // LOCK_EX: khóa độc quyền; request khác muốn đọc file phải chờ tới khi mở khóa.
+            if (!flock($handle, LOCK_EX)) {
+                return random_int(0, $keyCount - 1);
+            }
+
+            // Số đã lưu có thể lớn hơn số key hiện tại (vừa bớt key trong .env) nên chia lấy dư cho chắc.
+            $index = max(0, (int) stream_get_contents($handle)) % $keyCount;
+
+            // Ghi vị trí của lần sau: xóa nội dung cũ (ftruncate), quay về đầu file (rewind) rồi ghi.
+            ftruncate($handle, 0);
+            rewind($handle);
+            fwrite($handle, (string) (($index + 1) % $keyCount));
+            fflush($handle);
+            flock($handle, LOCK_UN);
+
+            return $index;
+        } finally {
+            // finally luôn chạy, kể cả khi return sớm ở trên, nên file luôn được đóng.
+            fclose($handle);
+        }
+    }
+
+    /**
+     * Kiểm tra lỗi có phải do API key (đổi key khác có thể thành công) hay không.
+     *
+     * @param int    $httpCode Mã HTTP Gemini trả về
+     * @param string $message  Message lỗi Gemini trả về
+     * @return bool True nếu nên thử key khác
+     */
+    private function isKeyError($httpCode = 0, $message = '')
+    {
+        if (in_array((int) $httpCode, self::KEY_ERROR_HTTP_CODES, true)) {
+            return true;
+        }
+
+        // stripos: tìm chuỗi không phân biệt hoa thường; khác false nghĩa là có xuất hiện.
+        return (int) $httpCode === 400 && stripos((string) $message, 'API key') !== false;
+    }
+
+    /**
+     * Gửi một request tới Gemini bằng cURL với một API key cụ thể.
+     *
+     * cURL: thư viện có sẵn trong PHP để gửi request HTTP từ server tới server khác.
+     * Để protected để khi thử nghiệm có thể viết class con giả lập Gemini (không gọi mạng thật).
+     *
+     * @param string $url    Endpoint generateContent
+     * @param string $body   Body JSON đã mã hóa
+     * @param string $apiKey API key dùng cho lần gửi này
+     * @return array [mã HTTP, dữ liệu JSON đã giải mã thành mảng]
+     * @throws RuntimeException Khi lỗi mạng hoặc Gemini trả về dữ liệu không phải JSON
+     */
+    protected function sendRequest($url = '', $body = '', $apiKey = '')
+    {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
@@ -246,13 +381,8 @@ class Gemini
             throw new RuntimeException('Gemini trả về dữ liệu không phải JSON (HTTP ' . $httpCode . ').');
         }
 
-        if ($httpCode < 200 || $httpCode >= 300) {
-            // Chỉ lấy message lỗi Gemini gửi về, không kèm header hay key.
-            $message = $data['error']['message'] ?? 'Lỗi không xác định';
-            throw new RuntimeException('Gemini báo lỗi (HTTP ' . $httpCode . '): ' . $message);
-        }
-
-        return $data;
+        // Không kết luận thành công/thất bại ở đây; callApi quyết định có thử key khác hay không.
+        return [$httpCode, $data];
     }
 
     /**

@@ -73,9 +73,9 @@ FE chỉ chấp nhận các route trong danh sách cho phép: `catalog`, `produc
 | 404 | `conversation_id` không tồn tại hoặc không thuộc user | "Không tìm thấy cuộc hội thoại" |
 | 500 | Chưa có `GEMINI_API_KEY` | "Trợ lý AI chưa được cấu hình" |
 | 500 | Không lưu được lịch sử | "Không lưu được lịch sử hội thoại, vui lòng thử lại sau" |
-| 502 | Gemini lỗi: HTTP lỗi, bị chặn nội dung, vượt 5 vòng tool, mạng | "Trợ lý AI đang gặp sự cố, vui lòng thử lại sau" |
+| 502 | Gemini lỗi: HTTP lỗi, mọi key đều hết hạn mức hoặc hỏng, bị chặn nội dung, vượt 5 vòng tool, mạng | "Trợ lý AI đang gặp sự cố, vui lòng thử lại sau" |
 
-Chi tiết lỗi thật (ví dụ mã 429 của Google) chỉ ghi vào log PHP với tiền tố `[ChatController]`, không trả cho client.
+Chi tiết lỗi thật (ví dụ mã 429 của Google) chỉ ghi vào log PHP với tiền tố `[ChatController]`, không trả cho client. Khi có nhiều key, mỗi lần một key bị 429/401/403 và được thay bằng key khác, log ghi thêm dòng `[Gemini] Key số i/n lỗi HTTP ...` (chỉ số thứ tự, không ghi key); client không thấy gì nếu key sau thành công.
 
 ## 6. Quy ước ghi nhận
 

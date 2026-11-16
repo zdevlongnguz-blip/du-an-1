@@ -6,6 +6,8 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatAssistant, MAX_MESSAGE_LENGTH } from '@/helpers/ai/chatAssistant'
 import { saveReturnUrl } from '@/helpers/auth/returnUrl'
+import { getUser } from '@/helpers/auth/session'
+import { getDisplayName } from '@/helpers/auth/profile'
 import { resolveSystemImageUrl } from '@/helpers/media/imageUrl'
 import { showToast } from '@/helpers/ui/toast'
 
@@ -44,6 +46,18 @@ const PANEL_GAP_PX = 12
 const avatarUrl = resolveSystemImageUrl('fule.webp')
 // true khi ảnh tải lỗi (sai đường dẫn, server tắt...): mọi avatar chuyển sang hiện chữ "L".
 const avatarFailed = ref(false)
+
+// Tên dùng trong lời chào: họ tên trong hồ sơ, chưa có thì phần trước @ của email; rỗng = chào chung.
+const greetingName = ref('')
+
+// Đọc lại tên từ localStorage (auth_user). localStorage không "phản ứng" như ref,
+// nên phải chủ động đọc lại khi có thể đã đổi: đổi trạng thái đăng nhập, đổi trang, mở khung chat.
+function refreshGreetingName() {
+  greetingName.value = props.authenticated ? getDisplayName(getUser()) : ''
+}
+
+// watch nhiều nguồn cùng lúc; immediate: true để chạy luôn 1 lần khi component vừa tạo.
+watch([() => props.authenticated, () => route.fullPath, isOpen], refreshGreetingName, { immediate: true })
 
 // Gợi ý mặc định khi chưa có câu trả lời nào, hoặc khi AI không sinh gợi ý.
 // Mỗi chip ứng với một việc trợ lý làm được: hát (tool fule_sing), xem 1 sản phẩm, xem danh sách (tool search_product).
@@ -252,13 +266,14 @@ watch(() => props.authenticated, (loggedIn) => {
         <template v-else>
           <!-- Danh sách tin nhắn. aria-live: trình đọc màn hình đọc tin mới khi xuất hiện -->
           <div ref="scrollBox" class="chat-body" aria-live="polite">
-            <!-- Lời chào cố định ở đầu hội thoại (chỉ hiển thị, không gửi lên server) -->
+            <!-- Lời chào ở đầu hội thoại, gắn tên user nếu có (chỉ hiển thị, không gửi lên server).
+                 Khoảng trắng trước tên đặt trong chuỗi JS vì Vue bỏ khoảng trắng đầu dòng trong template. -->
             <div class="chat-row chat-row--assistant">
               <span class="chat-message-avatar"><img v-if="!avatarFailed" :src="avatarUrl" alt="" class="chat-avatar-img" @error="avatarFailed = true" /><span v-else class="chat-avatar-letter">L</span></span>
               <div class="chat-message-stack">
                 <span class="chat-sender">Louis Dé Fule</span>
                 <div class="chat-bubble chat-bubble--assistant">
-                  Bông dua quý ông! Tôi là Louis Dé Fule, trợ lý tư vấn của FuLe BarberShop. Quý ông đang tìm sáp, pomade hay sản phẩm chăm sóc tóc nào để Fule tư vấn ạ?
+                  Bông dua quý ông{{ greetingName ? ' ' + greetingName : '' }}! Tôi là Louis Dé Fule, trợ lý tư vấn của FuLe BarberShop. Quý ông đang tìm sáp, pomade hay sản phẩm chăm sóc tóc nào để Fule tư vấn ạ?
                 </div>
               </div>
             </div>

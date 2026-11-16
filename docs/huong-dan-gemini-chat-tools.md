@@ -52,6 +52,7 @@ GEMINI_API_KEY=<key lấy tại https://aistudio.google.com/apikey>
 GEMINI_MODEL=
 ```
 
+- Nhiều key dùng luân phiên: ghi cách nhau bằng dấu phẩy trên cùng một dòng, ví dụ `GEMINI_API_KEY=key1,key2,key3`. `config.php` tách thành mảng `GEMINI_API_KEYS`; mỗi lần gọi Gemini dùng key kế tiếp, key bị 429/401/403 thì tự chuyển key khác. Key nên thuộc các project khác nhau vì hạn mức miễn phí tính theo project.
 - `GEMINI_MODEL` để trống thì dùng `gemini-2.5-flash`.
 - Các giới hạn khác là hằng trong `Gemini.php`:
 

@@ -17,7 +17,7 @@ Chỉ liệt kê tên biến. Không ghi giá trị thật vào tài liệu.
 
 | Tên biến | Bắt buộc | Mô tả |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | Có | Key lấy từ Google AI Studio. Thiếu thì API trả 500 "chưa cấu hình". |
+| `GEMINI_API_KEY` | Có | Key lấy từ Google AI Studio. Thiếu thì API trả 500 "chưa cấu hình". Ghi được nhiều key cách nhau bằng dấu phẩy (`key1,key2,key3`): mỗi lần gọi Gemini dùng key kế tiếp, key bị 429/401/403 (hoặc 400 "API key not valid") thì thử ngay key khác. Key nên thuộc các project khác nhau vì hạn mức miễn phí tính theo project. |
 | `GEMINI_MODEL` | Không | Để trống thì dùng `gemini-2.5-flash`. Chỉ chấp nhận chữ, số, dấu chấm, gạch ngang. |
 
 Tên biến được khai báo trong `BE/.env.example`. File `.env` thật không được commit.
@@ -120,7 +120,7 @@ Commit message gợi ý: `feat: chat AI Louis Dé Fule với tool tra sản ph�
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 | --- | --- | --- |
 | 500 "Trợ lý AI chưa được cấu hình" | Thiếu `GEMINI_API_KEY` | Đặt biến trong `BE/.env` |
-| 502 khi gửi nhiều câu liên tiếp | Gói miễn phí hết quota 5 request/phút | Đợi khoảng 1 phút, xem log `[ChatController]` |
+| 502 khi gửi nhiều câu liên tiếp | Mọi key đều hết quota gói miễn phí | Đợi khoảng 1 phút, hoặc thêm key thuộc project khác vào `GEMINI_API_KEY`. Log `[Gemini] Key số i/n lỗi HTTP 429` cho biết key thứ mấy hết lượt (không ghi key), `[ChatController]` ghi lỗi cuối cùng |
 | 500 "Không lưu được lịch sử" | Chưa chạy migration | Chạy migration `20261115_01` |
 | Trang `/fule-sing` báo "video chưa được tải lên" | Chưa có file mp4 | Đặt file đúng tên trong `assets/fule/songs/` |
 | Avatar hiện chữ "L" | Thiếu `BE/assets/system/fule.webp` hoặc sai đường dẫn | Kiểm tra file và URL base |

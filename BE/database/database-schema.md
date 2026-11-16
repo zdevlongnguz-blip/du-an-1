@@ -30,6 +30,9 @@ erDiagram
         enum role "admin|user"
         tinyint is_active
         int_unsigned token_version
+        varchar name "null, họ tên"
+        varchar phone "null, số điện thoại"
+        varchar address "null, địa chỉ"
     }
     categories {
         int id PK
@@ -187,7 +190,7 @@ Cột: id, category_id, code, name, slug, image, description, view_count, sales_
 
 | Bảng | Cột chính |
 |---|---|
-| `users` | id BIGINT UNSIGNED PK; email UNIQUE; password (hash); role ENUM('admin','user') default 'user'; is_active default 0; token_version INT UNSIGNED default 0; verification_token CHAR(64) UNIQUE; verification_expires_at; password_reset_token CHAR(64) UNIQUE; password_reset_expires_at; created_at; updated_at |
+| `users` | id BIGINT UNSIGNED PK; email UNIQUE; password (hash); role ENUM('admin','user') default 'user'; is_active default 0; token_version INT UNSIGNED default 0; name VARCHAR(100) NULL (họ tên); phone VARCHAR(20) NULL (số điện thoại); address VARCHAR(500) NULL (địa chỉ); verification_token CHAR(64) UNIQUE; verification_expires_at; password_reset_token CHAR(64) UNIQUE; password_reset_expires_at; created_at; updated_at |
 | `categories` | id INT PK; name; slug UNIQUE; created_at; updated_at |
 | `banners` | id INT UNSIGNED PK; title; image; content TEXT; CTA_link VARCHAR(2048); created_at; updated_at |
 | `product_images` | id INT UNSIGNED PK; product_id FK → products (CASCADE); image_path; sort_order default 0; created_at; updated_at. Index (product_id, sort_order) |
