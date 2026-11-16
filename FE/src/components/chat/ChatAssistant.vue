@@ -64,21 +64,12 @@ function refreshGreetingName() {
 // watch nhiều nguồn cùng lúc; immediate: true để chạy luôn 1 lần khi component vừa tạo.
 watch([() => props.authenticated, () => route.fullPath, isOpen], refreshGreetingName, { immediate: true })
 
-// Xóa lịch sử: true khi đang chờ khách bấm lần 2 để xác nhận; tự tắt sau 4 giây.
-const clearPending = ref(false)
 // true trong lúc gọi API xóa, để khóa nút tránh bấm lặp.
 const isClearing = ref(false)
-let clearTimer = null
 
-// Bấm nút xóa: lần 1 chuyển sang trạng thái xác nhận, lần 2 (trong 4 giây) mới gọi API xóa.
+// Bấm nút xóa: hỏi xác nhận bằng hộp thoại của trình duyệt, khách đồng ý thì mới gọi API xóa.
 async function handleClearHistory() {
-  if (!clearPending.value) {
-    clearPending.value = true
-    clearTimer = setTimeout(() => { clearPending.value = false }, 4000)
-    return
-  }
-  clearTimeout(clearTimer)
-  clearPending.value = false
+  if (!window.confirm('Xóa toàn bộ lịch sử trò chuyện với Louis Dé Fule? Không thể khôi phục.')) return
   isClearing.value = true
   const ok = await clearAllHistory()
   isClearing.value = false
@@ -273,20 +264,17 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
             <h2 class="chat-header-name">Louis Dé Fule</h2>
             <p class="chat-header-status">Trợ lý tư vấn · Đang hoạt động</p>
           </div>
-          <!-- Xóa toàn bộ lịch sử: bấm 1 lần để hỏi xác nhận, bấm lại trong 4 giây để xóa thật.
-               Không dùng confirm() vì trình duyệt/khung xem có thể chặn hộp thoại. -->
+          <!-- Xóa toàn bộ lịch sử: hỏi xác nhận bằng hộp thoại của trình duyệt rồi mới gọi API. -->
           <button
             v-if="authenticated && (messages.length > 0 || historyStatus === 'loaded')"
             type="button"
             class="chat-icon-button"
-            :class="{ 'chat-icon-button--danger': clearPending }"
-            :title="clearPending ? 'Bấm lại để xóa toàn bộ lịch sử' : 'Xóa toàn bộ lịch sử chat'"
-            :aria-label="clearPending ? 'Bấm lại để xác nhận xóa toàn bộ lịch sử chat' : 'Xóa toàn bộ lịch sử chat'"
+            title="Xóa toàn bộ lịch sử chat"
+            aria-label="Xóa toàn bộ lịch sử chat"
             :disabled="isSending || isClearing"
             @click="handleClearHistory"
           >
-            <svg v-if="!clearPending" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
-            <span v-else class="chat-clear-confirm">Xóa?</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
           </button>
           <button type="button" class="chat-icon-button" title="Thu nhỏ" aria-label="Thu nhỏ khung chat" @click="closeChat">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
@@ -647,21 +635,6 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
   margin: 0;
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.75);
-}
-
-/* Trạng thái chờ xác nhận xóa: nền đỏ nhạt để khách thấy bấm lần nữa sẽ xóa thật. */
-.chat-icon-button--danger {
-  width: auto;
-  padding: 0 0.5rem;
-  border-color: #ba1a1a;
-  background: #fdf1f0;
-  color: #93000a;
-}
-
-.chat-clear-confirm {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
 .chat-icon-button {

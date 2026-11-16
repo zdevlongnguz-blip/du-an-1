@@ -140,6 +140,6 @@ Xóa **toàn bộ** cuộc trò chuyện với trợ lý AI của user đang đ�
 | 401 / 405 / 500 | Thiếu token / sai method / lỗi DB |
 
 - Lệnh xóa luôn có `WHERE user_id = :user_id`. Các lượt trong `ai_messages` xóa theo `ON DELETE CASCADE`.
-- FE: nút xóa hỏi xác nhận bằng hai lần bấm trong 4 giây (không dùng `confirm()`). Sau khi xóa thành công thì xóa đơn nháp và màn hình chat.
+- FE: nút xóa hỏi xác nhận bằng hộp thoại `window.confirm()` của trình duyệt. Sau khi xóa thành công thì xóa đơn nháp và màn hình chat.
 - Không xóa khi đang gửi câu hỏi.
 
