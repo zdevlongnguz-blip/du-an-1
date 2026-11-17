@@ -61,7 +61,16 @@ A: Trang vẫn mở, ô SĐT để trống và được tô nổi để khách t
 A: Không. Trang giữ ID đơn vừa tạo, nút chính đổi thành "Thanh toán lại", chỉ gọi lại `api-order-payment`.
 
 **Q: Khách sửa số lượng trên trang rồi nhắn Louis thêm món, đơn mới có quay về số cũ không?**
-A: Không. Mỗi lần chat, FE gửi kèm đơn nháp đang mở (đã gồm chỉnh sửa). Server tra SKU trong DB rồi đưa danh sách vào system prompt của lượt đó, Louis lên đơn từ đúng trạng thái này. Thông tin người nhận khách sửa thì đi thẳng vào tool, AI không thấy. Đây là điểm tăng trải nghiệm: khách vừa bấm trên trang vừa nói với Louis mà không mất công sửa lại. → [11-dong-bo-don-nhap.md](11-dong-bo-don-nhap.md)
+A: Không. Mỗi lần chat, FE gửi kèm đơn nháp đang mở (đã gồm chỉnh sửa). Server tra SKU trong DB rồi đưa danh sách vào system prompt của lượt đó, gắn thêm một dòng ghi chú ngay sau câu khách, và truyền cho tool. Louis lên đơn từ đúng trạng thái này. Thông tin người nhận khách sửa thì FE tự giữ, không đi qua luồng AI. Đây là điểm tăng trải nghiệm: khách vừa bấm trên trang vừa nói với Louis mà không mất công sửa lại. → [11-dong-bo-don-nhap.md](11-dong-bo-don-nhap.md)
+
+**Q: Khách bấm lên 5 hộp rồi nhắn "thêm 5 hộp nữa", ai cộng ra 10: AI hay server?**
+A: Server. AI chỉ gửi lệnh `{op: "add", sku, quantity: 5}` (ý định "thêm 5"), tool lấy đơn khách đang thấy trên trang (5 hộp) làm gốc rồi áp lệnh ra 10. Trước đây AI phải tự gửi lại cả đơn nên lấy nhầm số 1 cũ trong lịch sử chat và ra 6. Nguyên tắc: AI giỏi hiểu ý câu nói, còn việc cần chính xác (giữ trạng thái, cộng trừ số lượng, tính tiền, kiểm tra kho) để server làm. → [11-dong-bo-don-nhap.md, mục 6.5-6.6](11-dong-bo-don-nhap.md)
+
+**Q: Vì sao tool nhận "lệnh" (add/set/subtract/remove) mà không nhận cả đơn?**
+A: Đây là chọn lựa thiết kế hệ thống. Đơn nháp chỉ có một nguồn đúng là trang (FE gửi kèm mỗi lượt); lịch sử chat chỉ là nhật ký. Nếu tool nhận cả đơn, AI phải tự dựng lại trạng thái từ nhật ký nên dễ sai số hoặc quên món. Nhận lệnh thì AI chỉ mô tả thay đổi, giống bấm +/− trên trang; món khách không nhắc tới server tự giữ. Nhờ vậy prompt ngắn hơn, logic tính toán nằm trong một hàm PHP test được bằng script.
+
+**Q: Gắn ghi chú đơn nháp vào câu khách thì lịch sử chat có hiện dòng đó không?**
+A: Không. Ghi chú chỉ có trong request gửi Gemini. Trước khi lưu `ai_messages`, `ChatController` gán lại đúng câu khách đã gõ. Vì vậy khách không thấy dòng ghi chú, và các lượt sau không đọc lại số lượng cũ trong ghi chú.
 
 **Q: Client gửi đơn nháp lên thì có chèn câu lệnh vào prompt được không?**
 A: Không. Server chỉ đưa vào prompt SKU có thật trong DB, tên món cũng lấy từ DB. Chuỗi lạ bị loại. Và đơn nháp chỉ gồm SKU + số lượng, không có thông tin cá nhân. → [08-bao-mat.md, R16](08-bao-mat.md)

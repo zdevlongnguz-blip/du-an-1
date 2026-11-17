@@ -21,6 +21,7 @@ Một nguồn duy nhất, gồm 3 phần:
 | `profileLoaded` | Đã lấy hồ sơ cho đơn này chưa | `ensureDraftRecipient` |
 
 Lưu trong **`sessionStorage`** (khóa `ai_checkout_draft`) kèm `userId`:
+
 - F5 vẫn còn; đóng tab thì mất; không dùng chung giữa các tab.
 - Khi đọc lại, nếu `userId` không khớp người đang đăng nhập thì bỏ qua.
 - Đơn nháp không đi lên URL, không đi qua AI.
@@ -53,6 +54,7 @@ Phần `recipient` **không** nằm trong lệnh từ BE. Hàm chỉ thay danh s
 ### 2.2. Người nhận: lấy từ hồ sơ một lần
 
 `ensureDraftRecipient()`, trang gọi khi mở:
+
 1. Nếu `profileLoaded` là `true`: không làm gì.
 2. Nếu chưa: gọi `api-profile`, điền vào các ô **đang trống**. Ô đã có giá trị (khách đã nhập) thì giữ nguyên.
 3. SĐT trong hồ sơ sai định dạng thì để trống cho khách nhập lại.
@@ -148,6 +150,7 @@ gantt
 ```
 
 Kỹ thuật:
+
 - `typeInto()` gõ từng ký tự bằng `setTimeout`; `Array.from(text)` tách đúng ký tự tiếng Việt.
 - `countUp()` nhảy số bằng `requestAnimationFrame` với ease-out, mỗi khung hình vẫn hiển thị qua `formatPrice`.
 - `runId`: mỗi lượt diễn có mã riêng. Rời trang hoặc diễn lại thì mã tăng, các vòng lặp cũ thấy mã đổi sẽ dừng (ném `CANCELLED`), không chồng hiệu ứng.

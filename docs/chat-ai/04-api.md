@@ -123,7 +123,7 @@ FE gửi kèm khi khách đang có đơn nháp (tính năng lên đơn nhanh), �
 }
 ```
 
-- `items`: 1-10 món, `sku` chuỗi 1-100 byte, `quantity` số nguyên 1-99. Server tra SKU trong DB, chỉ SKU có thật được đưa vào system prompt của lượt đó (không lưu lịch sử).
+- `items`: 1-10 món, `sku` chuỗi 1-100 byte, `quantity` số nguyên 1-99. Server tra SKU trong DB, chỉ SKU có thật được dùng: đưa vào system prompt của lượt đó, gắn ghi chú ngay sau câu khách (đều không lưu lịch sử), và làm gốc để tool `create_order_draft` áp lệnh của AI.
 - Không có thông tin người nhận: tên, SĐT, địa chỉ không đi qua `api-ai-chat`. Trường khác bị bỏ qua.
 - Sai định dạng: 400 `checkout_draft không hợp lệ`.
 - Chi tiết: [len-don-nhanh/11-dong-bo-don-nhap.md](len-don-nhanh/11-dong-bo-don-nhap.md).
@@ -142,4 +142,3 @@ Xóa **toàn bộ** cuộc trò chuyện với trợ lý AI của user đang đ�
 - Lệnh xóa luôn có `WHERE user_id = :user_id`. Các lượt trong `ai_messages` xóa theo `ON DELETE CASCADE`.
 - FE: nút xóa hỏi xác nhận bằng hộp thoại `window.confirm()` của trình duyệt. Sau khi xóa thành công thì xóa đơn nháp và màn hình chat.
 - Không xóa khi đang gửi câu hỏi.
-

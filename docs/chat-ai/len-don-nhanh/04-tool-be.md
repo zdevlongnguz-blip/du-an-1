@@ -17,29 +17,58 @@ Tool **chỉ lo món hàng**. Thông tin người nhận (tên, SĐT, địa ch�
 ### 2.1. `name()` và `description()`
 
 - Tên: `create_order_draft`.
-- Mô tả (AI đọc để quyết định khi nào gọi): lên đơn nháp khi khách muốn mua; cần SKU lấy từ `search_product`; thông tin nhận hàng do website tự điền trên trang từ hồ sơ, AI **không được hỏi** trong chat; tool **không** tạo đơn thật.
+- Mô tả (AI đọc để quyết định khi nào gọi): lên đơn nháp hoặc sửa đơn nháp đang mở; gửi danh sách **lệnh** mô tả thay đổi khách vừa yêu cầu, **không** gửi lại cả đơn và **không** tự cộng trừ; món khách không nhắc tới website tự giữ; cần SKU lấy từ `search_product` hoặc đơn nháp đang mở; thông tin nhận hàng do website tự điền, AI **không được hỏi** trong chat; tool **không** tạo đơn thật.
 
-### 2.2. `parameters()` (JSON Schema)
+### 2.2. `parameters()` (JSON Schema): thiết kế lệnh
+
+AI không gửi "đơn mới trông thế nào" (snapshot) mà gửi "khách muốn đổi gì" (command). Server lấy đơn nháp trên trang làm gốc rồi áp từng lệnh.
+
+> **Tóm tắt cần nhớ**
+>
+> - **Cũ:** Gemini vừa hiểu câu, vừa nhớ trạng thái, vừa tính toán, rồi điền thẳng kết quả. Một bước sai là cả đơn sai.
+> - **Mới:** Gemini chỉ dịch câu thành **nhãn + số khách nói**. Tool (BE) lấy **trạng thái đơn hiện tại ở FE** rồi áp nhãn để ra kết quả.
+>
+> Mỗi bên làm đúng phần mình giỏi: **Gemini giỏi hiểu ngôn ngữ, code PHP giỏi nhớ chính xác và tính toán.**
+>
+> Giải thích kèm sơ đồ và code mẫu: [13-giai-thich-de-hieu.md](13-giai-thich-de-hieu.md).
 
 ```json
 {
   "type": "object",
   "properties": {
-    "items": {
+    "ops": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
+          "op": { "type": "string", "enum": ["add", "set", "subtract", "remove"] },
           "sku": { "type": "string" },
           "quantity": { "type": "integer" }
         },
-        "required": ["sku", "quantity"]
+        "required": ["op", "sku"]
       }
     }
   },
-  "required": ["items"]
+  "required": ["ops"]
 }
 ```
+
+| `op` | Khách nói | `quantity` | Server làm |
+| --- | --- | --- | --- |
+| `add` | "mua 2 hộp", "thêm 5 hộp nữa" | Số thêm (không nói thì 1) | Số đang có (chưa có thì 0) + N |
+| `set` | "đổi thành 3", "lấy 3 hộp thôi" | Số cuối, bắt buộc | = N |
+| `subtract` | "bớt 2" | Số bớt, bắt buộc | Số đang có − N |
+| `remove` | "bỏ Vinh Râu" | Không cần | Xóa món |
+
+Ví dụ, trang có Claymation 5, Vinh Râu 3:
+
+| Khách nói | AI gửi | Kết quả |
+| --- | --- | --- |
+| "thêm 5 hộp Claymation" | `[{add, CLAYMATION, 5}]` | Claymation 10, Vinh Râu 3 (món không nhắc tới tự giữ) |
+| "bỏ Vinh Râu, thêm 1 Got2b, Claymation để 2 hộp thôi" | `[{remove, VINH-RAU}, {add, GOT2B, 1}, {set, CLAYMATION, 2}]` | Claymation 2, Got2b 1 |
+| "đổi Claymation sang hũ 56g" | `[{remove, CLAYMATION-113G}, {add, CLAYMATION, 5}]` | Claymation (56g) 5, Vinh Râu 3 |
+
+Vì sao không bắt AI gửi cả đơn như bản đầu: AI phải tự dựng lại trạng thái, nên hay lấy nhầm số cũ trong lịch sử chat (trang 5 hộp, "thêm 5" mà AI gửi 6 = 1 cũ + 5) hoặc quên món khách không nhắc tới. Xem [11-dong-bo-don-nhap.md](11-dong-bo-don-nhap.md) mục 6.6.
 
 - **Không có** tham số `user_id`: AI không có cách nào chọn khách.
 - **Không có** tham số tên, SĐT, địa chỉ: AI không có đường chuyển thông tin cá nhân vào đơn, nên cũng không có lý do để hỏi khách. AI có cố gửi `recipient_phone`... thì tool bỏ qua (đã test).
@@ -50,9 +79,11 @@ Tool **chỉ lo món hàng**. Thông tin người nhận (tên, SĐT, địa ch�
 flowchart TD
     S([execute args, context]) --> U{"context.user_id ≥ 1?"}
     U -- Không --> EU["RuntimeException<br/>lỗi lập trình, AI nhận thông báo chung"]
-    U -- Có --> RI["readItems(args.items)"]
+    U -- Có --> RI["readOps(args.ops)"]
     RI -->|sai| EI["InvalidArgumentException<br/>AI nhận thông báo rõ"]
-    RI -->|"danh sách {sku, quantity}"| Q["Product::getActiveVariantsBySkus<br/>map theo sku viết thường"]
+    RI -->|"danh sách lệnh {op, sku, quantity}"| AM["applyOps<br/>áp lần lượt lên context.checkout_draft"]
+    AM -->|"bớt quá / đơn rỗng / > 99 / > 10 món"| EI
+    AM -->|"danh sách {sku, quantity cuối cùng}"| Q["Product::getActiveVariantsBySkus<br/>map theo sku viết thường"]
     Q --> L["Duyệt từng món"]
     L --> L1{"Có phiên bản đang bán?"}
     L1 -- Không --> PR1["problems += Không tìm thấy hoặc đã ngừng bán"]
@@ -64,22 +95,53 @@ flowchart TD
     OKI --> L
     L -->|hết món| P{"problems rỗng?"}
     P -- Không --> RP["ready=false, problems<br/>không mở trang"]
-    P -- Có --> OK["ready=true, items tóm tắt, total_amount<br/>+ _action checkout-draft (món + tổng)"]
+    P -- Có --> OK["ready=true, items tóm tắt, total_amount<br/>+ notes nếu có lệnh bị bỏ qua<br/>+ _action checkout-draft (món + tổng)"]
 ```
 
 `user_id` vẫn được kiểm tra để chắc chắn tool chỉ chạy cho người đã đăng nhập, dù tool không còn đọc hồ sơ.
 
-## 4. `readItems()`: kiểm tra danh sách món
+## 4. `readOps()`: kiểm tra từng lệnh
 
 | Kiểm tra | Sai thì |
 | --- | --- |
-| `items` là mảng và không rỗng | "Thiếu danh sách món (items). Hãy tìm sản phẩm bằng search_product để lấy SKU trước." |
-| Không quá `Order::MAX_DIRECT_ITEMS` (10) món | "Một đơn tối đa 10 món." |
-| `sku` là chuỗi, sau `trim` không rỗng, ≤ 100 byte | "SKU không hợp lệ. Dùng đúng SKU trong kết quả search_product." |
-| `quantity` là số nguyên 1-99. Chấp nhận `2.0` (Gemini đôi khi gửi số thực) nhưng từ chối `2.5`. Thiếu thì mặc định 1 | "Số lượng mỗi món phải từ 1 đến 99." |
-| SKU trùng (không phân biệt hoa thường) | **Cộng dồn** số lượng (tối đa 99), vì khách có thể nói "thêm 1 hộp nữa" |
+| `ops` là mảng và không rỗng | "Thiếu danh sách lệnh (ops). Mỗi lệnh gồm op (add, set, subtract, remove), sku, quantity." |
+| Không quá 20 lệnh (`MAX_OPS`) | "Tối đa 20 lệnh mỗi lần." |
+| `op` thuộc allowlist `add`, `set`, `subtract`, `remove` | "op chỉ nhận add, set, subtract hoặc remove." |
+| `sku` là chuỗi, sau `trim` không rỗng, ≤ 100 byte | "SKU không hợp lệ. Dùng đúng SKU trong kết quả search_product hoặc trong đơn nháp đang mở." |
+| `quantity` (trừ `remove`) là số nguyên 1-99. Chấp nhận `2.0` (Gemini đôi khi gửi số thực) nhưng từ chối `2.5`. `add` thiếu số thì là 1; `set`, `subtract` bắt buộc | "Lệnh set cần quantity là số nguyên từ 1 đến 99." |
 
-Lỗi tham số ném `InvalidArgumentException`. `Gemini::runTool` gửi đúng thông báo đó cho AI để AI tự sửa (ví dụ gọi lại `search_product`).
+Lỗi tham số ném `InvalidArgumentException`. `Gemini::runTool` gửi đúng thông báo đó cho AI để AI tự sửa (ví dụ gọi lại `search_product`). Lịch sử chat cũ còn lời gọi tool dạng `items` (thiết kế trước); nếu AI bắt chước gửi `items` thì nhận lỗi "Thiếu danh sách lệnh (ops)" và gọi lại đúng dạng.
+
+### 4.1. `applyOps()`: áp lệnh lên đơn trên trang
+
+Gốc là đơn nháp khách đang thấy, lấy từ `context['checkout_draft']` (do `ChatController` truyền, đã tra DB). Chưa có đơn nháp thì gốc là đơn rỗng, nên lần mua đầu cũng chỉ là `add`/`set`.
+
+```php
+foreach ($ops as $op) {                         // áp đúng thứ tự khách nói
+    $current = $draft[$sku]['quantity'] ?? 0;   // chưa có thì 0
+    add      → $current + N
+    set      → N
+    subtract → $current - N   (kết quả < 1 thì lỗi)
+    remove   → xóa món
+}
+```
+
+| Trên trang | AI gửi | Kết quả |
+| --- | --- | --- |
+| Clay 5, Vinh 3 | `add Clay 5` | Clay 10, Vinh 3 |
+| Clay 5, Vinh 3 | `subtract Clay 2` | Clay 3, Vinh 3 |
+| Clay 5, Vinh 3 | `set Vinh 1` | Clay 5, Vinh 1 |
+| Clay 5, Vinh 3 | `remove Vinh` | Clay 5 |
+| (rỗng) | `add Clay 2`, `add Got2b 1` | Clay 2, Got2b 1 |
+| Clay 5, Vinh 3 | `remove XYZ` (không có) | Giữ nguyên, kèm `notes` "SKU XYZ không có trong đơn nên không cần bỏ." |
+| Clay 5 | `subtract Clay 7` | Lỗi cho AI: "đơn chỉ có 5, bớt 7 thì không còn. Hỏi lại khách; nếu khách muốn bỏ món thì dùng lệnh remove." |
+| Clay 5 | `subtract Got2b 1` | Lỗi cho AI: "không có trong đơn nháp nên không bớt được." |
+| Clay 5, Vinh 3 | `remove` cả hai | Lỗi cho AI: "đơn không còn món nào... hướng dẫn khách bấm nút 'Bỏ đơn nháp'." |
+| Clay 5 | `add Clay 95` | Lỗi cho AI: "tổng số lượng 100 vượt giới hạn 99 mỗi món." |
+
+- SKU so sánh không phân biệt hoa thường. Món cũ giữ cách viết SKU của trang (lấy từ DB) và giữ chỗ cũ; món mới nằm cuối.
+- Bớt quá số đang có thì **báo lỗi** chứ không tự hiểu là bỏ món: khách nói "bớt 7" khi chỉ có 5 thường là nói nhầm, nên để AI hỏi lại.
+- Hàm không có AI, không đọc DB, test được bằng script (xem [09-kiem-thu.md](09-kiem-thu.md) mục 1.7).
 
 ## 5. Hai dạng kết quả
 
@@ -109,9 +171,11 @@ Phần **AI nhận** (sau khi `Gemini::chat` tách `_action`):
     { "name": "Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g", "quantity": 2, "line_total": 900000 }
   ],
   "total_amount": 900000,
-  "message": "Đơn nháp đã mở trên website. Website tự điền thông tin nhận hàng từ hồ sơ của khách; khách kiểm tra, điền ô còn thiếu nếu có, có thể chỉnh số lượng, chọn cách thanh toán rồi tự bấm \"Xác nhận đặt hàng\". Đơn CHƯA được tạo. Không hỏi thông tin cá nhân trong chat."
+  "message": "Đơn nháp đã mở trên website với ĐÚNG các món và số lượng trong items (báo khách theo số này). Website tự điền thông tin nhận hàng từ hồ sơ của khách; khách kiểm tra, điền ô còn thiếu nếu có, có thể chỉnh số lượng, chọn cách thanh toán rồi tự bấm \"Xác nhận đặt hàng\". Đơn CHƯA được tạo. Không hỏi thông tin cá nhân trong chat."
 }
 ```
+
+`items` là số **cuối cùng** sau khi áp lệnh; `message` dặn AI báo khách đúng theo số này. Có lệnh bị bỏ qua (ví dụ `remove` món không có trong đơn) thì AI nhận thêm `notes`, ví dụ `["SKU XYZ không có trong đơn nên không cần bỏ."]`.
 
 Phần **FE nhận** (trong `actions` của response `api-ai-chat`):
 
@@ -178,8 +242,10 @@ flowchart LR
     H["Header Authorization: Bearer JWT"] --> M["AuthMiddleware::requireAuth<br/>xác minh chữ ký, hạn dùng"]
     M --> P["payload.sub"]
     P --> C["ChatController: userId = (int) payload.sub"]
-    C --> X["Gemini::chat(..., context = {user_id})"]
+    C --> X["Gemini::chat(..., context = {user_id, checkout_draft})"]
     X --> T["Tool: context['user_id']"]
 ```
 
-AI chỉ điền được `items`. Dù khách nhắn "lên đơn cho user 5", tool vẫn dùng ID trong token.
+AI chỉ điền được `ops`. Dù khách nhắn "lên đơn cho user 5", tool vẫn dùng ID trong token.
+
+`context['checkout_draft']` cũng do server đặt: là danh sách món trên trang **sau khi** `ChatController` kiểm tra định dạng và tra DB (`describeDraftItems`), không phải dữ liệu thô của client, và AI không sửa được.

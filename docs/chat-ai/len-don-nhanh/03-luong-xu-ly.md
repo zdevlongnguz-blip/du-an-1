@@ -42,7 +42,7 @@ sequenceDiagram
     AI-->>G: functionCall search_product {keyword: "Claymation"}
     G->>DB: tìm sản phẩm + phiên bản
     G->>AI: functionResponse {products, variants có sku}
-    AI-->>G: functionCall create_order_draft {items: [{sku: "CLAYMATION", quantity: 2}]}
+    AI-->>G: functionCall create_order_draft {ops: [{op: "add", sku: "CLAYMATION", quantity: 2}]}
     G->>Tool: execute(args, {user_id: 6})
     Tool->>DB: getActiveVariantsBySkus(["CLAYMATION"])
     Tool-->>G: {ready: true, items, total_amount, _action: {type: checkout-draft, draft: {items, total_amount}}}
@@ -76,12 +76,12 @@ sequenceDiagram
     participant BE as api-profile
 
     K->>AI: "mua 1 chai Got2b"
-    AI->>Tool: create_order_draft {items}
+    AI->>Tool: create_order_draft {ops}
     Tool-->>AI: {ready: true, items, total_amount} + _action (chỉ món)
     AI-->>K: "Đơn nháp đã mở, quý ông kiểm tra thông tin nhận hàng rồi bấm Xác nhận"
     Trang->>BE: GET api-profile
     BE-->>Trang: {name: "Lê Văn An", phone: null, address: null}
-    Trang->>K: hiệu ứng gõ tên, bỏ qua ô trống;<br/>ô trống viền đồng nét đứt + "Hồ sơ chưa có số điện thoại..."
+    Trang->>K: hiệu ứng gõ tên, bỏ qua ô trống,<br/>ô trống viền đồng nét đứt + "Hồ sơ chưa có số điện thoại..."
     K->>Trang: tự điền SĐT, địa chỉ
     Note over Trang: Thông tin đi thẳng form → api-order-checkout-items,<br/>không qua Gemini
 ```
@@ -101,7 +101,7 @@ sequenceDiagram
     BE-->>Trang: {phone: "0123"}
     Trang->>Trang: normalizeVietnamPhone("0123") → null → ô SĐT để trống
     Trang->>K: ô SĐT trống, nhắc điền
-    K->>Trang: nhập lại; validateVietnamPhone kiểm tra ngay dưới ô
+    K->>Trang: nhập lại, validateVietnamPhone kiểm tra ngay dưới ô
 ```
 
 Khách tự gõ SĐT vào chat: Louis không dùng, mời khách điền trên trang (prompt). Gemini vẫn đọc được câu đó vì là tin nhắn của khách, xem [08-bao-mat.md, mục 3](08-bao-mat.md).
@@ -117,10 +117,10 @@ sequenceDiagram
     participant DB
 
     K->>AI: "lấy 50 hũ Claymation"
-    AI->>Tool: create_order_draft {items: [{sku: CLAYMATION, quantity: 50}]}
+    AI->>Tool: create_order_draft {ops: [{op: add, sku: CLAYMATION, quantity: 50}]}
     Tool->>DB: getActiveVariantsBySkus → stock = 46
     Tool-->>AI: {ready: false, problems: [{sku, name, reason: "Không đủ số lượng, chỉ còn 46"}]}
-    Note over Tool: Kiểm tra món TRƯỚC thông tin giao hàng,<br/>không mở trang
+    Note over Tool: Món có vấn đề thì trả problems,<br/>không mở trang
     AI-->>K: "Claymation hiện chỉ còn 46 hũ, quý ông lấy 46 hay chọn loại khác?"
 ```
 

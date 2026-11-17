@@ -71,8 +71,9 @@ Lên đơn nhanh (tool create_order_draft):
 - Khách tự gõ số điện thoại, địa chỉ hay tên vào chat: không nhắc lại, không dùng; lịch sự mời khách điền vào ô tương ứng trên trang "Lên đơn nhanh".
 - Tool trả ready=false kèm problems: báo khách từng món gặp vấn đề (hết hàng, không đủ số lượng, không tìm thấy), gợi ý phiên bản khác hoặc giảm số lượng.
 - Tool trả ready=true: tóm tắt ngắn các món và tổng tiền, nói đơn nháp vừa mở trên trang "Lên đơn nhanh", khách kiểm tra thông tin nhận hàng (điền ô còn trống nếu có) rồi bấm "Xác nhận đặt hàng" để hoàn tất.
-- Khách muốn đổi món, đổi phiên bản, đổi số lượng hoặc thêm/bớt món sau khi đã có đơn nháp:
-  gọi lại create_order_draft với DANH SÁCH ĐẦY ĐỦ các món sau khi đổi (đơn nháp mới thay hoàn toàn đơn cũ).
+- Tool nhận danh sách LỆNH (ops), không nhận cả đơn:
+  "mua 2 hộp X" / "thêm 2 hộp X" → add X 2; "X lấy 3 thôi" / "đổi thành 3" → set X 3; "bớt 1 X" → subtract X 1; "bỏ X" → remove X.
+  Đổi phiên bản: remove phiên bản cũ rồi add phiên bản mới với số lượng khách muốn.
   Khách cũng có thể tự tăng/giảm số lượng và sửa thông tin nhận hàng ngay trên trang "Lên đơn nhanh".
 - Khách muốn bỏ/hủy đơn nháp: hướng dẫn khách bấm nút "Bỏ đơn nháp" ở cuối trang "Lên đơn nhanh" (có hỏi xác nhận).
   Đơn nháp chưa được lưu ở hệ thống, không giữ hàng; bấm nút là xóa hẳn đơn nháp trên máy khách. Không gọi tool nào cho việc này.
@@ -121,12 +122,40 @@ PROMPT;
 Đơn nháp khách ĐANG MỞ trên trang "Lên đơn nhanh" (đã gồm các chỉnh sửa số lượng khách làm trên trang, do website gửi kèm lượt này):
 {$list}
 Quy tắc khi có đơn nháp đang mở:
-- Đây là trạng thái MỚI NHẤT của đơn. Khi khách muốn thêm, bớt, đổi món hoặc đổi số lượng: lấy danh sách này làm gốc, KHÔNG dùng danh sách cũ trong lịch sử chat.
-- Khách muốn mua thêm món khác: giữ nguyên các món trên và thêm món mới, trừ khi khách nói rõ muốn bỏ hoặc thay món cũ.
-- Khách muốn bỏ một món: gọi create_order_draft với danh sách còn lại. Bỏ hết thì không gọi tool, hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang.
+- Đây là trạng thái MỚI NHẤT của đơn, mới hơn mọi số trong lịch sử chat.
+- Khách muốn sửa đơn: gọi create_order_draft với lệnh CHỈ cho phần khách vừa nhắc (add/set/subtract/remove). Món khách không nhắc tới website tự giữ nguyên. Không tự cộng trừ.
+- Khách nói chung chung ("giảm bớt", "thêm ít nữa") mà không có số: hỏi lại khách muốn bao nhiêu, chưa gọi tool.
+- Mọi thay đổi món hoặc số lượng PHẢI gọi create_order_draft. Chưa gọi tool thì KHÔNG được nói đã đổi. Số lượng và tổng tiền báo khách lấy từ kết quả tool.
+- Khách muốn bỏ hết: không gọi tool, hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang.
 - Thông tin người nhận do website tự lo trên trang. Không hỏi thông tin cá nhân trong chat.
 - Khách chỉ hỏi thông tin (giá, còn hàng...) thì trả lời bình thường, không gọi create_order_draft.
 PROMPT;
+    }
+
+    /**
+     * Ghi chú ngắn về đơn nháp, gắn ngay SAU câu khách vừa gửi (chỉ trong lượt gửi Gemini, không lưu DB).
+     *
+     * Vì sao cần thêm, dù system prompt đã có đơn nháp: thử thực tế thấy Gemini ưu tiên các câu ở gần cuối
+     * cuộc trò chuyện. Lịch sử chat có câu cũ như "đã lên đơn 1 hộp" nằm sát câu hỏi, nên AI lấy nhầm số đó.
+     * Đặt số mới nhất ngay cạnh câu khách nói thì AI đọc nó trước.
+     *
+     * @param array $lines Danh sách ['sku', 'name', 'quantity'] (sku, name lấy từ DB, không lấy từ client)
+     * @return string Đoạn nối vào cuối câu của khách; chuỗi rỗng nếu không có món nào
+     */
+    public static function checkoutDraftReminder($lines = [])
+    {
+        if (!is_array($lines) || $lines === []) {
+            return '';
+        }
+
+        $list = [];
+        foreach ($lines as $line) {
+            $list[] = 'SKU ' . $line['sku'] . ' (' . $line['name'] . ') x ' . (int)$line['quantity'];
+        }
+
+        return "\n\n[Website tự gửi kèm, khách không gõ dòng này] Đơn nháp trên trang LÚC NÀY: "
+            . implode('; ', $list)
+            . '. Số này mới hơn mọi số trong lịch sử chat. Sửa đơn thì chỉ gửi lệnh cho phần khách vừa nhắc, không tự cộng trừ.';
     }
 
     /**

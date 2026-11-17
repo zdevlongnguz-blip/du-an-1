@@ -3,6 +3,7 @@
 File này đi **trọn luồng** của tool lên đơn qua 3 kịch bản. Mỗi bước có một cây JSON và ghi rõ **ai gửi → ai nhận**, trường nào bị tách, bị ẩn, bị lưu.
 
 Quy ước:
+
 - Sản phẩm, giá, tồn kho, SKU lấy **đúng từ DB local** lúc viết tài liệu (`CLAYMATION`, `GOT2B-GLUED`).
 - Tên, SĐT, địa chỉ là **dữ liệu giả**.
 - `"..."` là chỗ rút gọn cho dễ đọc (ví dụ toàn văn system prompt).
@@ -62,9 +63,9 @@ Chưa có đơn nháp nên **không** có `checkout_draft`. Router gọi `requir
         "parameters": {
           "type": "object",
           "properties": {
-            "items": { "type": "array", "items": { "type": "object", "properties": { "sku": { "type": "string" }, "quantity": { "type": "integer" } }, "required": ["sku", "quantity"] } }
+            "ops": { "type": "array", "items": { "type": "object", "properties": { "op": { "type": "string", "enum": ["add", "set", "subtract", "remove"] }, "sku": { "type": "string" }, "quantity": { "type": "integer" } }, "required": ["op", "sku"] } }
           },
-          "required": ["items"]
+          "required": ["ops"]
         }
       }
     ]
@@ -120,6 +121,7 @@ Gemini chưa có SKU nên gọi `search_product`:
 ```
 
 `Gemini::chat` **tách `_action`**:
+
 - `actions` tạm thời = `[ { "type": "navigate", ... } ]`
 - Phần còn lại (không có `_action`) được gửi cho Gemini ở bước sau.
 
@@ -146,7 +148,7 @@ Khách nói "Claymation" không nói phiên bản → Gemini chọn bản `is_de
       "parts": [{
         "functionCall": {
           "name": "create_order_draft",
-          "args": { "items": [{ "sku": "CLAYMATION", "quantity": 2 }] }
+          "args": { "ops": [{ "op": "add", "sku": "CLAYMATION", "quantity": 2 }] }
         },
         "thoughtSignature": "CiQB..."
       }]
@@ -155,7 +157,7 @@ Khách nói "Claymation" không nói phiên bản → Gemini chọn bản `is_de
 }
 ```
 
-Chỉ có `items`: tool không nhận thông tin cá nhân từ AI, tự lấy từ trang/hồ sơ.
+Chỉ có `ops` (lệnh `add` vì chưa có đơn nháp): tool không nhận thông tin cá nhân từ AI, tự lấy từ trang/hồ sơ.
 
 ### Bước 1.7 — Tool `create_order_draft` chạy (trong server)
 
@@ -163,8 +165,8 @@ Chỉ có `items`: tool không nhận thông tin cá nhân từ AI, tự lấy t
 
 ```json
 {
-  "args": { "items": [{ "sku": "CLAYMATION", "quantity": 2 }] },
-  "context": { "user_id": 6 }
+  "args": { "ops": [{ "op": "add", "sku": "CLAYMATION", "quantity": 2 }] },
+  "context": { "user_id": 6, "checkout_draft": [] }
 }
 ```
 
@@ -179,7 +181,6 @@ Chỉ có `items`: tool không nhận thông tin cá nhân từ AI, tự lấy t
 ```
 
 Tool **không đọc hồ sơ**. Thông tin người nhận không đi vào đây.
-```
 
 Kết quả tool:
 
@@ -190,7 +191,7 @@ Kết quả tool:
     { "name": "Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g", "quantity": 2, "line_total": 900000 }
   ],
   "total_amount": 900000,
-  "message": "Đơn nháp đã mở trên website. Website tự điền thông tin nhận hàng từ hồ sơ của khách; khách kiểm tra, có thể chỉnh số lượng, chọn cách thanh toán rồi tự bấm \"Xác nhận đặt hàng\". Đơn CHƯA được tạo. Không hỏi thông tin cá nhân trong chat.",
+  "message": "Đơn nháp đã mở trên website với ĐÚNG các món và số lượng trong items (báo khách theo số này). Website tự điền thông tin nhận hàng từ hồ sơ của khách; khách kiểm tra, điền ô còn thiếu nếu có, có thể chỉnh số lượng, chọn cách thanh toán rồi tự bấm \"Xác nhận đặt hàng\". Đơn CHƯA được tạo. Không hỏi thông tin cá nhân trong chat.",
   "_action": {
     "type": "checkout-draft",
     "draft": {
@@ -270,7 +271,7 @@ Kết quả tool:
 | n+1 | user | `[{"text":"lấy cho anh 2 hũ Claymation"}]` |
 | n+2 | model | `[{"functionCall":{"name":"search_product","args":{"keyword":"Claymation"}},"thoughtSignature":"CiQB..."}]` |
 | n+3 | user | `[{"functionResponse":{"name":"search_product","response":{"products":[...]}}}]` |
-| n+4 | model | `[{"functionCall":{"name":"create_order_draft","args":{"items":[{"sku":"CLAYMATION","quantity":2}]}},"thoughtSignature":"CiQB..."}]` |
+| n+4 | model | `[{"functionCall":{"name":"create_order_draft","args":{"ops":[{"op":"add","sku":"CLAYMATION","quantity":2}]}},"thoughtSignature":"CiQB..."}]` |
 | n+5 | user | `[{"functionResponse":{"name":"create_order_draft","response":{"ready":true,"items":[...],"total_amount":900000,"message":"..."}}}]` |
 | n+6 | model | `[{"text":"Louis Dé Fule đã lên đơn nháp...\n[[GOI_Y: ...]]"}]` |
 
@@ -285,7 +286,7 @@ Không lượt nào chứa `_action` hay SĐT/địa chỉ của hồ sơ.
   "reply": "Louis Dé Fule đã lên đơn nháp 2 hũ Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g, tổng 900.000đ. Đơn nháp vừa mở trên trang \"Lên đơn nhanh\", quý ông kiểm tra rồi bấm \"Xác nhận đặt hàng\" để hoàn tất ạ.",
   "tool_calls": [
     { "name": "search_product", "args": { "keyword": "Claymation" } },
-    { "name": "create_order_draft", "args": { "items": [{ "sku": "CLAYMATION", "quantity": 2 }] } }
+    { "name": "create_order_draft", "args": { "ops": [{ "op": "add", "sku": "CLAYMATION", "quantity": 2 }] } }
   ],
   "actions": [{
     "type": "checkout-draft",
@@ -393,15 +394,15 @@ Khách user ID 7, hồ sơ chỉ có tên. Nhắn: **"mua 1 chai Got2b"**. (Bỏ
 ### Bước 2.1 — Gemini gọi tool
 
 ```json
-{ "functionCall": { "name": "create_order_draft", "args": { "items": [{ "sku": "GOT2B-GLUED", "quantity": 1 }] } } }
+{ "functionCall": { "name": "create_order_draft", "args": { "ops": [{ "op": "add", "sku": "GOT2B-GLUED", "quantity": 1 }] } } }
 ```
 
 ### Bước 2.2 — Tool: chỉ kiểm tra món (không đọc hồ sơ)
 
 ```json
 {
-  "args": { "items": [{ "sku": "GOT2B-GLUED", "quantity": 1 }] },
-  "context": { "user_id": 7 }
+  "args": { "ops": [{ "op": "add", "sku": "GOT2B-GLUED", "quantity": 1 }] },
+  "context": { "user_id": 7, "checkout_draft": [] }
 }
 ```
 
@@ -432,7 +433,7 @@ Gemini chỉ nhận món và tổng tiền. Không biết hồ sơ thiếu gì, 
   "status": "success",
   "conversation_id": 31,
   "reply": "Louis Dé Fule đã lên đơn nháp 1 chai Gel Vuốt Tóc Got2b Glued Spiking Wax, tổng 250.000đ. Hồ sơ của quý ông chưa có số điện thoại và địa chỉ, quý ông điền giúp Louis ngay trên trang \"Lên đơn nhanh\" rồi bấm \"Xác nhận đặt hàng\" nhé.",
-  "tool_calls": [{ "name": "create_order_draft", "args": { "items": [{ "sku": "GOT2B-GLUED", "quantity": 1 }] } }],
+  "tool_calls": [{ "name": "create_order_draft", "args": { "ops": [{ "op": "add", "sku": "GOT2B-GLUED", "quantity": 1 }] } }],
   "actions": [{
     "type": "checkout-draft",
     "draft": {
@@ -528,38 +529,46 @@ Khách bấm − ở Claymation (2 → 1) và sửa địa chỉ. `watch([quanti
 }
 ```
 
-Hai đường:
+Ba đường, cùng một danh sách `describeDraftItems`:
 
 ```json
 {
-  "systemInstruction_noi_them": "\n\nĐơn nháp khách ĐANG MỞ trên trang \"Lên đơn nhanh\" (...):\n- SKU CLAYMATION: Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g x 1\n- SKU GOT2B-GLUED: Gel Vuốt Tóc Got2b Glued Spiking Wax - Mặc định x 1\n\nQuy tắc khi có đơn nháp đang mở:\n- Đây là trạng thái MỚI NHẤT của đơn... ",
+  "systemInstruction_noi_them": "\n\nĐơn nháp khách ĐANG MỞ trên trang \"Lên đơn nhanh\" (...):\n- SKU CLAYMATION: Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g x 1\n- SKU GOT2B-GLUED: Gel Vuốt Tóc Got2b Glued Spiking Wax - Mặc định x 1\n\nQuy tắc khi có đơn nháp đang mở:\n- Đây là trạng thái MỚI NHẤT của đơn...\n- Khách muốn sửa đơn: gọi create_order_draft với lệnh CHỈ cho phần khách vừa nhắc (add/set/subtract/remove)... ",
+  "cau_gui_gemini": "thêm 1 chai Got2b nữa\n\n[Website tự gửi kèm, khách không gõ dòng này] Đơn nháp trên trang LÚC NÀY: SKU CLAYMATION (Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g) x 1; SKU GOT2B-GLUED (Gel Vuốt Tóc Got2b Glued Spiking Wax - Mặc định) x 1. Số này mới hơn mọi số trong lịch sử chat. Sửa đơn thì chỉ gửi lệnh cho phần khách vừa nhắc, không tự cộng trừ.",
   "context_cho_tool": {
-    "user_id": 6
+    "user_id": 6,
+    "checkout_draft": [
+      { "sku": "CLAYMATION", "name": "Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g", "quantity": 1 },
+      { "sku": "GOT2B-GLUED", "name": "Gel Vuốt Tóc Got2b Glued Spiking Wax - Mặc định", "quantity": 1 }
+    ]
   }
 }
 ```
 
-Đoạn nối vào system prompt chỉ có món; `context_cho_tool` chỉ có `user_id`, không gửi cho Gemini.
+- `systemInstruction_noi_them`: chỉ có món, không lưu.
+- `cau_gui_gemini`: câu khách + ghi chú, **chỉ** trong request gửi Gemini. Trước khi ghi `ai_messages`, `ChatController` trả lại đúng câu `"thêm 1 chai Got2b nữa"`.
+- `context_cho_tool`: không gửi cho Gemini, chỉ tool đọc.
 
-### Bước 3.4 — Gemini gọi tool với danh sách đầy đủ
+### Bước 3.4 — Gemini gọi tool với MỘT lệnh
 
-Lấy đơn đang mở làm gốc (Claymation 1, không phải 2 như lịch sử chat), cộng thêm 1 Got2b:
+Gemini chỉ dịch câu khách thành lệnh. Khách chỉ nhắc Got2b nên chỉ có một lệnh. Claymation **không** cần gửi: server tự giữ (1 trên trang, không phải 2 như lịch sử chat):
 
 ```json
 {
   "functionCall": {
     "name": "create_order_draft",
     "args": {
-      "items": [
-        { "sku": "CLAYMATION", "quantity": 1 },
-        { "sku": "GOT2B-GLUED", "quantity": 2 }
+      "ops": [
+        { "op": "add", "sku": "GOT2B-GLUED", "quantity": 1 }
       ]
     }
   }
 }
 ```
 
-### Bước 3.5 — Tool: chỉ món; người nhận vẫn nằm ở FE
+### Bước 3.5 — Tool áp lệnh; người nhận vẫn nằm ở FE
+
+`applyOps` lấy gốc từ `context_cho_tool.checkout_draft` = [Claymation 1, Got2b 1], áp `add Got2b 1` → [Claymation 1, Got2b **2**].
 
 Tool không đọc người nhận. Đơn mới từ Louis chỉ thay danh sách món; `recipient` và `profileLoaded` của đơn cũ được giữ ở FE. Kết quả:
 
@@ -571,7 +580,7 @@ Tool không đọc người nhận. Đơn mới từ Louis chỉ thay danh sách
     { "name": "Gel Vuốt Tóc Got2b Glued Spiking Wax - Mặc định", "quantity": 2, "line_total": 500000 }
   ],
   "total_amount": 950000,
-  "message": "Đơn nháp đã mở trên website... Đơn CHƯA được tạo.",
+  "message": "Đơn nháp đã mở trên website với ĐÚNG các món và số lượng trong items (báo khách theo số này)... Đơn CHƯA được tạo.",
   "_action": {
     "type": "checkout-draft",
     "draft": {
@@ -579,11 +588,13 @@ Tool không đọc người nhận. Đơn mới từ Louis chỉ thay danh sách
         { "sku": "CLAYMATION", "name": "Sáp Vuốt Tóc Hanz de Fuko Claymation", "variant_name": "Hũ 56g", "image": "default.jpg", "quantity": 1, "price": 450000, "original_price": 480000, "stock": 46 },
         { "sku": "GOT2B-GLUED", "name": "Gel Vuốt Tóc Got2b Glued Spiking Wax", "variant_name": "Mặc định", "image": "got2b.jpg", "quantity": 2, "price": 250000, "original_price": null, "stock": 30 }
       ],
-            "total_amount": 950000
+      "total_amount": 950000
     }
   }
 }
 ```
+
+`items` gửi Gemini là số cuối cùng, AI đọc lại cho khách. `_action` được `Gemini::chat` tách ra cho FE.
 
 Địa chỉ đã sửa trên trang được giữ ở FE, không đi qua server. FE nhận `checkout-draft` mới → `setCheckoutDraft` thay object → `watch(checkoutDraft)` của trang thấy object mới → diễn lại hiệu ứng.
 
@@ -624,7 +635,8 @@ FE: `checkoutError` = message → khối đỏ + toast, **không** gọi SePay, 
 | Dữ liệu | FE → BE | BE → Gemini | Lưu `ai_messages` | BE → FE |
 | --- | --- | --- | --- | --- |
 | `user_id` | Không (nằm trong JWT) | **Không** | Không | Không |
-| SKU + số lượng đơn đang mở | `checkout_draft.items` | Có (system prompt của lượt, tên từ DB) | **Không** | — |
+| SKU + số lượng đơn đang mở | `checkout_draft.items` | Có (system prompt của lượt + ghi chú sau câu khách, tên từ DB) | **Không** (câu khách được trả về bản gốc trước khi lưu) | — |
+| Số lượng trên trang cho tool (`context.checkout_draft`) | — | **Không** (chỉ tool đọc) | Không | — |
 | Tên/SĐT/địa chỉ khách sửa trên trang | Không đi (ở FE, sessionStorage) | **Không** | **Không** | — |
 | Tên/SĐT/địa chỉ từ hồ sơ | `GET api-profile` (FE tự gọi, 1 lần/đơn) | **Không** | **Không** | Có (response `api-profile`) |
 | Tên/SĐT/địa chỉ khách tự gõ trong chat (Louis không hỏi, không dùng) | `message` | Có | **Có** | — |

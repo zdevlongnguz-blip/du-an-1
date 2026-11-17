@@ -46,7 +46,47 @@ Trong một lần chat thật, Louis đã gọi `create_order_draft` và trả l
 
 ### 1.6. Đồng bộ đơn nháp
 
-Xem bảng S1-S11 ở [11-dong-bo-don-nhap.md, mục 9](11-dong-bo-don-nhap.md): kiểm tra định dạng `checkout_draft`, loại SKU dạng câu lệnh khỏi prompt, người nhận không đi qua luồng AI.
+Xem bảng S1-S13 ở [11-dong-bo-don-nhap.md, mục 9](11-dong-bo-don-nhap.md): kiểm tra định dạng `checkout_draft`, loại SKU dạng câu lệnh khỏi prompt, người nhận không đi qua luồng AI, sửa đơn bằng lệnh qua chat.
+
+### 1.7. Sửa đơn nháp bằng lệnh qua chat (ngày 2026-11-17)
+
+Lỗi gốc: mua 1 hộp → bấm + lên 5 → nhắn "thêm 5 hộp nữa" → Louis lên **6** (lấy số 1 cũ trong lịch sử + 5). Cách sửa: thiết kế lệnh, [11-dong-bo-don-nhap.md, mục 6.5-6.6](11-dong-bo-don-nhap.md).
+
+Script PHP gọi thẳng `readOps` + `applyOps` (không cần DB, không tốn request Gemini). Trang có Clay 5, Vinh 3, trừ dòng Q1:
+
+| # | Lệnh | Kết quả |
+| --- | --- | --- |
+| Q1 | Trang rỗng: `add Clay 2`, `add Got2b 1` | Clay 2, Got2b 1 |
+| Q2 | `add clay 5` (SKU viết thường) | Clay 10, Vinh 3 |
+| Q3 | `subtract Clay 2` | Clay 3, Vinh 3 |
+| Q4 | `set Vinh 1` | Clay 5, Vinh 1 |
+| Q5 | `remove Vinh` | Clay 5 |
+| Q6 | `remove Vinh`, `add Got2b 1`, `set Clay 2` | Clay 2, Got2b 1 |
+| Q7 | `remove Clay`, `add Clay-56g 5` (đổi phiên bản) | Vinh 3, Clay-56g 5 |
+| Q8 | `add Got2b` không có số / số `2.0` | Got2b 1 / Got2b 2 |
+| Q9 | `remove XYZ` (không có trong đơn) | Giữ nguyên, kèm `notes` cho AI |
+| Q10 | `subtract Clay 7` | Lỗi cho AI: đơn chỉ có 5, hỏi lại khách |
+| Q11 | `subtract Got2b 1` (không có) | Lỗi cho AI: không có trong đơn |
+| Q12 | `remove` cả hai món | Lỗi cho AI: hướng dẫn bấm "Bỏ đơn nháp" |
+| Q13 | `add Clay 95` | Lỗi cho AI: tổng 100 vượt 99 |
+| Q14 | `op: "double"` / `set` thiếu số / gửi dạng cũ `items` | Đều lỗi rõ cho AI |
+
+Chrome thật + Gemini thật (Puppeteer tự bấm, tài khoản test):
+
+| # | Bước | AI gửi | Đơn mới |
+| --- | --- | --- | --- |
+| C1 | "Tôi muốn mua 1 hộp sáp Hanz de Fuko phiên bản Hũ 113 gam" | `set Hanz-113g 1` | Hanz 1 |
+| C2 | Bấm + trên trang đến 5 | — | Hanz 5 |
+| C3 | "thêm 5 hộp nữa" | `add 5` | Hanz **10** |
+| C4 | "bớt 3 hộp" | `subtract 3` | Hanz **7** |
+| C5 | "lấy thêm 1 hộp Pomade Layrite Original Hold" | `add Layrite 1` | Hanz (giữ nguyên) + Layrite 1 |
+| C6 | "Layrite lấy 2 hộp thôi" | `set Layrite 2` | Hanz (giữ nguyên) + Layrite 2 |
+| C7 | "bỏ Layrite đi" | `remove Layrite` | Hanz (giữ nguyên) |
+| C8 | "thêm 2 hộp Pomade Suavecito Original Hold, còn sáp Hanz để 3 hộp thôi" | `add Suavecito 2`, `set Hanz 3` | Hanz 3, Suavecito 2 |
+
+C1-C4 và C5-C8 chạy ở hai lượt khác nhau, vì có lượt Gemini báo quá tải (502) đúng ở bước C3, C4. Ở C5-C8, Hanz đang là 5 do lượt đó C3, C4 lỗi, và mọi bước đều giữ đúng số 5 của món không được nhắc tới.
+
+Chưa đạt, ngoài phạm vi: "đổi sáp Hanz sang phiên bản hũ 56 gam". AI gọi `search_product` với từ khóa có tên phiên bản, tìm kiếm không ra, AI trả lời nhầm là không có. Lỗi nằm ở cách tìm sản phẩm; cơ chế đổi phiên bản đã đúng ở Q7.
 
 ## 2. Chưa kiểm tra, cần test tay
 
