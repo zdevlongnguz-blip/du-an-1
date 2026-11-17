@@ -29,6 +29,23 @@ class GeminiToolCreateOrderDraft extends GeminiTool
     const OPS = ['add', 'set', 'subtract', 'remove'];
 
     /**
+     * Đơn LÀM VIỆC của lượt chat hiện tại: null = chưa có lần gọi nào thành công, dùng đơn trên trang làm gốc.
+     *
+     * Vì sao cần: trong một lượt, Gemini có thể gọi tool nhiều lần (gọi song song "thêm B", "thêm C",
+     * hoặc gọi lại sau khi nhận lỗi). Nếu lần nào cũng tính lại từ đơn trên trang thì lần sau xóa mất
+     * kết quả lần trước (chỉ đơn của lần cuối được gửi cho FE). Nên mỗi lần gọi THÀNH CÔNG thì ghi nhận
+     * vào đây, lần sau áp lệnh tiếp lên đơn này. Gọi lỗi thì không ghi nhận gì.
+     *
+     * An toàn: ChatController tạo tool mới cho mỗi request, nên đơn này chỉ sống trong một lượt của một khách.
+     *
+     * @var array|null Danh sách ['sku', 'name', 'quantity'] cùng dạng với $context['checkout_draft']
+     */
+    private $workingDraft = null;
+
+    // Đã báo AI về các món trên trang bị loại (ngừng bán) chưa. Chỉ báo một lần mỗi lượt.
+    private $droppedReported = false;
+
+    /**
      * Tên tool. Gemini dùng tên này khi yêu cầu gọi.
      * Giữ tên cũ để lịch sử chat và tài liệu không phải đổi theo.
      *
@@ -103,7 +120,8 @@ class GeminiToolCreateOrderDraft extends GeminiTool
      * @param array $args    Tham số Gemini gửi lên: ops
      * @param array $context Ngữ cảnh server. 'user_id' (lấy từ JWT, không lấy từ AI) để chắc chắn tool chỉ chạy
      *                       cho người đã đăng nhập. 'checkout_draft' (không bắt buộc): các món ['sku', 'name', 'quantity']
-     *                       khách đang thấy trên trang, ChatController đã kiểm tra với DB; không có thì gốc là đơn rỗng
+     *                       khách đang thấy trên trang, ChatController đã kiểm tra với DB; không có thì gốc là đơn rỗng.
+     *                       'checkout_draft_dropped' (không bắt buộc): số món trên trang bị loại vì ngừng bán/không tìm thấy
      * @return array Kết quả cho Gemini (và _action cho FE khi đơn đã sẵn sàng)
      * @throws InvalidArgumentException Khi lệnh sai, bớt quá số đang có, đơn rỗng hoặc vượt giới hạn
      * @throws RuntimeException Khi thiếu user_id trong context (lỗi lập trình, không phải lỗi của khách)
@@ -117,9 +135,13 @@ class GeminiToolCreateOrderDraft extends GeminiTool
             throw new RuntimeException('Thiếu user_id trong context của tool create_order_draft.');
         }
 
-        // Gốc để áp lệnh: đơn nháp khách đang thấy trên trang (rỗng nếu chưa có).
-        $pageDraft = is_array($context['checkout_draft'] ?? null) ? $context['checkout_draft'] : [];
-        $applied = $this->applyOps($this->readOps($args['ops'] ?? null), $pageDraft);
+        // Gốc để áp lệnh: đơn làm việc của lượt này nếu đã có lần gọi thành công,
+        // ngược lại là đơn nháp khách đang thấy trên trang (rỗng nếu chưa có).
+        $baseDraft = $this->workingDraft;
+        if ($baseDraft === null) {
+            $baseDraft = is_array($context['checkout_draft'] ?? null) ? $context['checkout_draft'] : [];
+        }
+        $applied = $this->applyOps($this->readOps($args['ops'] ?? null), $baseDraft);
         $items = $applied['items'];
 
         // Tra giá và tồn kho thật từ DB. Map theo SKU viết thường vì cột sku không phân biệt hoa thường.
@@ -184,6 +206,27 @@ class GeminiToolCreateOrderDraft extends GeminiTool
             ];
         }
 
+        // Ghi nhận đơn làm việc: lần gọi tool sau trong cùng lượt sẽ áp lệnh tiếp lên đơn này.
+        // Chỉ ghi nhận khi lên đơn thành công (đã qua kiểm tra kho), lỗi thì giữ nguyên gốc cũ.
+        $this->workingDraft = [];
+        foreach ($draftItems as $draftItem) {
+            $this->workingDraft[] = [
+                'sku' => $draftItem['sku'],
+                'name' => $draftItem['name'] . ' - ' . $draftItem['variant_name'],
+                'quantity' => $draftItem['quantity'],
+            ];
+        }
+
+        // Món trên trang bị loại (ngừng bán hoặc không tìm thấy) thì không có trong đơn mới.
+        // Không để món biến mất âm thầm: báo AI để AI nói lại với khách. Chỉ báo SỐ LƯỢNG món,
+        // không chép SKU do client gửi vào kết quả (tránh khách chèn câu lệnh qua trường sku).
+        $dropped = (int)($context['checkout_draft_dropped'] ?? 0);
+        if ($dropped > 0 && !$this->droppedReported) {
+            array_unshift($applied['notes'], $dropped . ' món trong đơn nháp trên trang đã ngừng bán hoặc không còn tìm thấy, '
+                . 'nên không có trong đơn mới. Báo khách biết và gợi ý chọn sản phẩm khác.');
+            $this->droppedReported = true;
+        }
+
         $result = [
             'ready' => true,
             'items' => $summary,
@@ -194,7 +237,7 @@ class GeminiToolCreateOrderDraft extends GeminiTool
                 . 'Đơn CHƯA được tạo. Không hỏi thông tin cá nhân trong chat.',
         ];
         if ($applied['notes'] !== []) {
-            // Lệnh bị bỏ qua (ví dụ bỏ món không có trong đơn): báo AI để AI nói lại với khách nếu cần.
+            // Ghi chú cho AI: món bị loại vì ngừng bán, lệnh bị bỏ qua (bỏ món không có trong đơn)...
             $result['notes'] = $applied['notes'];
         }
         $result[Gemini::ACTION_KEY] = [
@@ -304,9 +347,15 @@ class GeminiToolCreateOrderDraft extends GeminiTool
                     throw new InvalidArgumentException('SKU ' . $op['sku'] . ' không có trong đơn nháp nên không bớt được.');
                 }
                 $quantity = $current - $op['quantity'];
-                if ($quantity < 1) {
-                    throw new InvalidArgumentException('SKU ' . $op['sku'] . ': đơn chỉ có ' . $current . ', bớt '
-                        . $op['quantity'] . ' thì không còn. Hỏi lại khách; nếu khách muốn bỏ món thì dùng lệnh remove.');
+                // Bớt QUÁ số đang có (có 5 mà "bớt 7") thường là khách nói nhầm: báo lỗi để AI hỏi lại.
+                if ($quantity < 0) {
+                    throw new InvalidArgumentException('SKU ' . $op['sku'] . ': đơn chỉ có ' . $current . ', không bớt được '
+                        . $op['quantity'] . '. Hỏi lại khách muốn bớt bao nhiêu.');
+                }
+                // Bớt ĐÚNG bằng số đang có ("có 2, bớt 2") nghĩa là hết món: bỏ món, giống lệnh remove.
+                if ($quantity === 0) {
+                    unset($draft[$key]);
+                    continue;
                 }
             }
 

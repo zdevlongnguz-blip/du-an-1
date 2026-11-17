@@ -114,14 +114,14 @@ Lỗi tham số ném `InvalidArgumentException`. `Gemini::runTool` gửi đúng 
 
 ### 4.1. `applyOps()`: áp lệnh lên đơn trên trang
 
-Gốc là đơn nháp khách đang thấy, lấy từ `context['checkout_draft']` (do `ChatController` truyền, đã tra DB). Chưa có đơn nháp thì gốc là đơn rỗng, nên lần mua đầu cũng chỉ là `add`/`set`.
+Gốc là đơn nháp khách đang thấy, lấy từ `context['checkout_draft']` (do `ChatController` truyền, đã tra DB). Chưa có đơn nháp thì gốc là đơn rỗng, nên lần mua đầu cũng chỉ là `add`/`set`. Nếu trong cùng lượt đã có lần gọi tool thành công thì gốc là **đơn làm việc** của lượt đó (mục 4.2).
 
 ```php
 foreach ($ops as $op) {                         // áp đúng thứ tự khách nói
     $current = $draft[$sku]['quantity'] ?? 0;   // chưa có thì 0
     add      → $current + N
     set      → N
-    subtract → $current - N   (kết quả < 1 thì lỗi)
+    subtract → $current - N   (= 0 thì bỏ món; < 0 thì lỗi)
     remove   → xóa món
 }
 ```
@@ -134,14 +134,47 @@ foreach ($ops as $op) {                         // áp đúng thứ tự khách 
 | Clay 5, Vinh 3 | `remove Vinh` | Clay 5 |
 | (rỗng) | `add Clay 2`, `add Got2b 1` | Clay 2, Got2b 1 |
 | Clay 5, Vinh 3 | `remove XYZ` (không có) | Giữ nguyên, kèm `notes` "SKU XYZ không có trong đơn nên không cần bỏ." |
-| Clay 5 | `subtract Clay 7` | Lỗi cho AI: "đơn chỉ có 5, bớt 7 thì không còn. Hỏi lại khách; nếu khách muốn bỏ món thì dùng lệnh remove." |
+| Clay 2, Vinh 3 | `subtract Clay 2` (bớt đúng bằng số đang có) | Vinh 3 (bỏ Clay, giống `remove`) |
+| Clay 5 | `subtract Clay 7` | Lỗi cho AI: "đơn chỉ có 5, không bớt được 7. Hỏi lại khách muốn bớt bao nhiêu." |
 | Clay 5 | `subtract Got2b 1` | Lỗi cho AI: "không có trong đơn nháp nên không bớt được." |
 | Clay 5, Vinh 3 | `remove` cả hai | Lỗi cho AI: "đơn không còn món nào... hướng dẫn khách bấm nút 'Bỏ đơn nháp'." |
 | Clay 5 | `add Clay 95` | Lỗi cho AI: "tổng số lượng 100 vượt giới hạn 99 mỗi món." |
 
 - SKU so sánh không phân biệt hoa thường. Món cũ giữ cách viết SKU của trang (lấy từ DB) và giữ chỗ cũ; món mới nằm cuối.
-- Bớt quá số đang có thì **báo lỗi** chứ không tự hiểu là bỏ món: khách nói "bớt 7" khi chỉ có 5 thường là nói nhầm, nên để AI hỏi lại.
+- `subtract` có nghĩa nhất quán: bớt **đúng bằng** số đang có ("có 2, bớt 2") là hết món, nên bỏ món. Bớt **quá** số đang có ("có 5, bớt 7") thường là khách nói nhầm, nên **báo lỗi** để AI hỏi lại. Bỏ món mà đơn rỗng thì vẫn báo lỗi "đơn không còn món nào".
 - Hàm không có AI, không đọc DB, test được bằng script (xem [09-kiem-thu.md](09-kiem-thu.md) mục 1.7).
+
+### 4.2. Đơn làm việc của một lượt chat (gọi tool nhiều lần)
+
+Trong một lượt, Gemini có thể gọi tool **nhiều lần**: gọi song song ("thêm 1 B" và "thêm 1 C" thành 2 lời gọi), hoặc gọi lại sau khi nhận lỗi. `Gemini::chat` chỉ gửi cho FE đơn của **lần gọi cuối**.
+
+Nếu lần nào cũng tính lại từ đơn trên trang, lần sau sẽ xóa mất kết quả lần trước:
+
+| Trang: A 2 | Không có đơn làm việc (lỗi cũ) | Có đơn làm việc (hiện tại) |
+| --- | --- | --- |
+| Lần 1: `add B 1` | A 2, B 1 | A 2, B 1 → **ghi nhận** |
+| Lần 2: `add C 1` | A 2, C 1 (**mất B**) | A 2, B 1, C 1 |
+| FE nhận | A 2, C 1 ✗ | A 2, B 1, C 1 ✓ |
+
+Cách làm (thuộc tính `$workingDraft` của class tool):
+
+```php
+$base = $this->workingDraft ?? $context['checkout_draft'];   // lần đầu: đơn trên trang
+$items = $this->applyOps($ops, $base);
+// ... tra kho, giá; có problems thì return (KHÔNG ghi nhận) ...
+$this->workingDraft = /* đơn vừa lên thành công */;            // lần sau áp tiếp lên đây
+```
+
+- Chỉ ghi nhận khi lên đơn **thành công**. Lần gọi lỗi (lệnh sai, thiếu kho) không làm đổi gốc.
+- `ChatController` tạo tool **mới cho mỗi request**, nên đơn làm việc chỉ sống trong một lượt của một khách, không lẫn sang lượt sau hay người khác.
+
+### 4.3. Món trên trang bị loại vì ngừng bán
+
+`describeDraftItems` chỉ giữ SKU còn bán. Món vừa bị admin tắt sẽ không có trong gốc, nên không có trong đơn mới. Để món **không biến mất âm thầm**:
+
+- `ChatController` đếm số món bị loại và truyền `context['checkout_draft_dropped']`.
+- Lần đầu lên đơn thành công trong lượt, tool thêm vào `notes` cho AI: "N món trong đơn nháp trên trang đã ngừng bán hoặc không còn tìm thấy, nên không có trong đơn mới. Báo khách biết...". Chỉ báo một lần mỗi lượt.
+- Chỉ truyền **số lượng món**, không truyền SKU: SKU là chuỗi client gửi, chép vào kết quả tool có thể bị lợi dụng để chèn câu lệnh cho AI.
 
 ## 5. Hai dạng kết quả
 
@@ -242,7 +275,7 @@ flowchart LR
     H["Header Authorization: Bearer JWT"] --> M["AuthMiddleware::requireAuth<br/>xác minh chữ ký, hạn dùng"]
     M --> P["payload.sub"]
     P --> C["ChatController: userId = (int) payload.sub"]
-    C --> X["Gemini::chat(..., context = {user_id, checkout_draft})"]
+    C --> X["Gemini::chat(..., context = {user_id, checkout_draft, checkout_draft_dropped})"]
     X --> T["Tool: context['user_id']"]
 ```
 

@@ -70,6 +70,14 @@ Script PHP gọi thẳng `readOps` + `applyOps` (không cần DB, không tốn r
 | Q12 | `remove` cả hai món | Lỗi cho AI: hướng dẫn bấm "Bỏ đơn nháp" |
 | Q13 | `add Clay 95` | Lỗi cho AI: tổng 100 vượt 99 |
 | Q14 | `op: "double"` / `set` thiếu số / gửi dạng cũ `items` | Đều lỗi rõ cho AI |
+| Q15 | `subtract Clay 2` khi trang có Clay 2, Layrite 1 | Bỏ Clay: Layrite 1 (bớt đúng bằng số đang có = bỏ món) |
+| Q16 | Gọi tool 2 lần trong một lượt (trang Clay 2): `add Layrite 1` rồi `add Suavecito 1` | Lần 2 ra Clay 2, Layrite 1, Suavecito 1 (áp tiếp lên đơn làm việc) |
+| Q17 | Lần 1 `add Clay 90` (kho 17, lỗi), lần 2 `add Layrite 1` | Lần 2 ra Clay 2, Layrite 1 (lần lỗi không được ghi nhận) |
+| Q18 | Tool mới (lượt chat mới) | Không mang đơn làm việc của lượt trước |
+| Q19 | `checkout_draft_dropped = 1`, gọi tool 2 lần | Lần 1 có `notes` báo 1 món ngừng bán; lần 2 không lặp lại |
+| Q20 | `ChatController` nhận 3 món, trong đó 1 SKU không có và 1 SKU dạng câu lệnh | Còn 1 món, `checkout_draft_dropped = 2`; SKU dạng câu lệnh không lọt vào đâu |
+
+Q15-Q19 chạy `execute()` thật với DB local (chỉ đọc). Q20 gọi `readCheckoutDraft` + `describeDraftItems` của `ChatController`.
 
 Chrome thật + Gemini thật (Puppeteer tự bấm, tài khoản test):
 
