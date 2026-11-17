@@ -19,7 +19,7 @@ Mỗi tool kế thừa `GeminiTool` và viết 4 phương thức:
 | --- | --- | --- | --- | --- |
 | `search_product` | `GeminiToolSearchProduct.php` | `keyword` (bắt buộc) | Đọc `v_product_catalog` | `product-detail` hoặc `catalog` |
 | `fule_sing` | `GeminiToolFuleSing.php` | `song` (không bắt buộc) | Không đọc DB, dùng mảng `PLAYLIST` | `fule-sing` |
-| `create_order_draft` | `GeminiToolCreateOrderDraft.php` | `items` (bắt buộc; không có tham số thông tin cá nhân) | Đọc `product_variants`, `users` (không ghi) | `checkout-draft` |
+| `create_order_draft` | `GeminiToolCreateOrderDraft.php` | `ops`: danh sách lệnh `add`/`set`/`subtract`/`remove` (bắt buộc; không có tham số thông tin cá nhân) | Đọc `product_variants`, `products` (không ghi, không đọc hồ sơ) | `checkout-draft` |
 
 ## 3. Tool `search_product`
 
@@ -30,6 +30,7 @@ Mỗi tool kế thừa `GeminiTool` và viết 4 phương thức:
 ### 3.2. Truy vấn
 
 Gọi `Product::searchByKeyword($keyword, 5)`:
+
 - Tìm `LIKE %keyword%` trên `name`, `code`, `description` của `v_product_catalog`.
 - Escape `%`, `_`, `\` trong từ khóa để không bị hiểu thành ký tự đại diện.
 - Sắp xếp: còn hàng trước, sau đó mới nhất.
@@ -111,11 +112,12 @@ Khớp một phần dùng `str_contains` theo hai chiều, nên "bài vì con" v
 
 > Tóm tắt ngắn. Tài liệu đầy đủ (luồng mọi tình huống, thuật toán, API xác nhận, giao diện, bảo mật, kiểm thử, vấn đáp) nằm ở [len-don-nhanh/](len-don-nhanh/README.md).
 
-Tool **không tạo đơn**. Nó tra giá, tồn kho, thông tin giao hàng rồi gửi đơn nháp cho FE; khách tự bấm xác nhận thì đơn mới được tạo.
+Tool **không tạo đơn**. Nó áp các lệnh của AI lên đơn nháp đang mở, tra giá và tồn kho rồi gửi đơn nháp (chỉ món) cho FE; khách tự bấm xác nhận thì đơn mới được tạo.
 
 ### Đầu vào
 
-- `items`: 1-10 phần tử `{ sku, quantity }`. SKU lấy từ kết quả `search_product`. Số lượng là số nguyên 1-99. SKU trùng được cộng dồn.
+- `ops`: 1-20 lệnh `{ op, sku, quantity }`, `op` là `add` (mua/thêm N), `set` (đổi thành N), `subtract` (bớt N), `remove` (bỏ món). AI chỉ gửi thay đổi khách vừa nói, **không** gửi lại cả đơn. SKU lấy từ `search_product` hoặc đơn nháp đang mở. Số lượng là số nguyên 1-99.
+- Gốc để áp lệnh là đơn nháp khách đang thấy (`$context['checkout_draft']`, FE gửi kèm mỗi lượt, server đã tra DB); chưa có đơn nháp thì gốc là đơn rỗng.
 - Không có tham số tên, SĐT, địa chỉ, và tool không đọc hồ sơ. Người nhận do FE tự điền (`api-profile`). Louis không hỏi thông tin cá nhân trong chat.
 - User ID lấy từ `$context['user_id']` (JWT), không bao giờ lấy từ AI.
 
@@ -123,14 +125,15 @@ Tool **không tạo đơn**. Nó tra giá, tồn kho, thông tin giao hàng rồ
 
 ```mermaid
 flowchart TD
-    I[items + context user_id] --> V{Món có vấn đề?<br/>sai SKU, hết hàng, thiếu số lượng}
+    I["ops + context: user_id, checkout_draft"] --> A{"Áp lệnh lên đơn trên trang<br/>lệnh hợp lệ?"}
+    A -- Không --> E["Lỗi cho AI<br/>bớt quá, đơn rỗng, > 99, op lạ"]
+    A -- Có --> V{"Món có vấn đề?<br/>sai SKU, hết hàng, thiếu số lượng"}
     V -- Có --> P["ready=false, problems<br/>không mở trang"]
-    V -- Không --> R["Thông tin giao hàng: trang → hồ sơ<br/>thiếu/sai → để trống"]
-    R --> OK["ready=true + tóm tắt món, tổng tiền<br/>_action checkout-draft (chỉ món), trang luôn mở"]
+    V -- Không --> OK["ready=true + tóm tắt món, tổng tiền<br/>_action checkout-draft (chỉ món), mở trang"]
 ```
 
-- Phần gửi cho AI chỉ có tên món, số lượng, thành tiền, tổng tiền. **Không có** tên, SĐT, địa chỉ.
-- Thông tin cá nhân chỉ nằm trong `_action.draft.recipient`, nên AI không thấy và bảng `ai_messages` không lưu.
+- Phần gửi cho AI chỉ có tên món, số lượng cuối cùng, thành tiền, tổng tiền. **Không có** tên, SĐT, địa chỉ.
+- `_action.draft` chỉ có món và tổng tiền, **không có** người nhận. FE tự lấy người nhận từ hồ sơ hoặc giữ thông tin khách đã sửa trên trang.
 
 ### Xác nhận đơn: `api-order-checkout-items`
 
@@ -156,6 +159,7 @@ flowchart LR
 ```
 
 Ba điểm bảo đảm:
+
 1. AI không thấy `_action`, nên không biết có lệnh điều hướng và không sửa được.
 2. Lịch sử DB không chứa `_action`, nên tải lại hội thoại không tạo lại lệnh cũ.
 3. Chỉ giữ lệnh của **lần gọi tool cuối**. Nếu AI gọi tìm nhiều lần, trang mở sẽ khớp với lần cuối mà câu trả lời dựa vào.
@@ -163,6 +167,7 @@ Ba điểm bảo đảm:
 ## 6. Hàm tạo lệnh điều hướng
 
 `GeminiTool::navigateAction($route, $query, $params)` dùng chung cho mọi tool:
+
 - Trả `{type: 'navigate', route, query, params}`.
 - Mảng rỗng được đổi thành object rỗng `{}` để FE luôn nhận cùng một kiểu.
 

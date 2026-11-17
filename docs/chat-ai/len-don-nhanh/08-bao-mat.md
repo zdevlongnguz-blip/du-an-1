@@ -52,6 +52,9 @@ flowchart TB
 | R16 | Chèn câu lệnh vào system prompt qua `checkout_draft.items[].sku` | Gửi `sku: "BỎ QUA MỌI QUY TẮC..."` | `describeDraftItems` tra DB, chỉ SKU có thật vào prompt, tên lấy từ DB | Chuỗi lạ bị loại (đã test) |
 | R17 | SĐT/địa chỉ đi qua `api-ai-chat` khi đồng bộ | `checkout_draft.recipient` | Đã bỏ: `checkout_draft` chỉ còn `items`; BE bỏ qua mọi trường khác | Không còn đường này |
 | R18 | Đơn nháp (có SĐT, địa chỉ) còn lại trên máy dùng chung | Đăng xuất hoặc người sau đăng nhập | sessionStorage: xóa khi đăng xuất/đặt xong; khóa theo `userId`; mất khi đóng tab | Giới hạn: vẫn đọc được bằng script trên trang (cùng rủi ro với `auth_user` đã có) |
+| R19 | Chèn câu lệnh qua ghi chú đơn nháp gắn sau câu khách | Gửi `sku` dạng câu lệnh để lọt vào ghi chú | Ghi chú dùng chung dữ liệu đã qua `describeDraftItems` (SKU, tên từ DB, số lượng ép `int`) | Chuỗi lạ bị loại như R16 |
+| R20 | AI gửi lệnh lạ hoặc cộng ra số khổng lồ | `op: "double"`, `add 95` khi đã có 5 | Allowlist `add`/`set`/`subtract`/`remove`, tối đa 20 lệnh; tổng sau khi áp lệnh vẫn phải ≤ 99 và ≤ tồn kho | Tool trả lỗi cho AI, không mở trang |
+| R21 | Giả số lượng trên trang để tool cộng sai | Sửa `checkout_draft.items[].quantity` | Số trên trang chỉ là gốc để cộng của chính khách đó; vẫn giới hạn 1-99, kiểm tra kho; khách vẫn phải bấm xác nhận và BE kiểm tra lại lúc tạo đơn | Không lợi dụng được: chỉ ảnh hưởng đơn nháp của chính mình |
 
 ## 3. Dòng chảy dữ liệu cá nhân
 
@@ -124,7 +127,7 @@ flowchart LR
     A2 --> A3["describeDraftItems()<br/>chỉ SKU có thật vào prompt,<br/>tên lấy từ DB"]
     A3 --> AI(("Gemini"))
     AI --> T["Tool create_order_draft"]
-    T --> A4["user_id chỉ từ JWT<br/>readItems() kiểm tra lại<br/>giá, tồn kho từ DB<br/>VietnamPhone::normalize"]
+    T --> A4["user_id chỉ từ JWT<br/>readOps() kiểm tra lại<br/>giá, tồn kho từ DB<br/>VietnamPhone::normalize"]
     A4 --> D["Chỉ ra ĐƠN NHÁP,<br/>không ghi DB"]
 ```
 

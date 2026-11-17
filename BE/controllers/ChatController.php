@@ -118,8 +118,12 @@ class ChatController
             } catch (Throwable $catalogError) {
                 error_log('[ChatController] Không đọc được danh mục cho prompt: ' . $catalogError->getMessage());
             }
+            // Danh sách món trên trang (SKU, tên lấy từ DB). Dùng cho 2 việc: mô tả trong prompt,
+            // và truyền xuống tool create_order_draft làm GỐC để áp lệnh của AI (add/set/subtract/remove).
+            $draftLines = [];
             if ($checkoutDraft !== null) {
-                $systemPrompt .= GeminiPrompt::checkoutDraftContext($this->describeDraftItems($checkoutDraft['items']));
+                $draftLines = $this->describeDraftItems($checkoutDraft['items']);
+                $systemPrompt .= GeminiPrompt::checkoutDraftContext($draftLines);
             }
 
             $result = (new Gemini($systemPrompt))
@@ -129,7 +133,13 @@ class ChatController
                 // Tool lên đơn nháp: đọc hồ sơ của chính user đang chat (user_id trong $context, lấy từ JWT).
                 // Chỉ tạo đơn nháp cho FE hiển thị, không ghi DB; đơn thật do khách bấm xác nhận trên trang.
                 ->addTool(new GeminiToolCreateOrderDraft())
-                ->chat($message, $history, ['user_id' => $userId]);
+                // Câu gửi Gemini = câu của khách + ghi chú đơn nháp (nếu có), để AI thấy số mới nhất ngay cạnh câu hỏi.
+                // checkout_draft trong $context đã qua readCheckoutDraft + đối chiếu DB ở trên, không phải dữ liệu thô của client.
+                ->chat(
+                    $message . GeminiPrompt::checkoutDraftReminder($draftLines),
+                    $history,
+                    ['user_id' => $userId, 'checkout_draft' => $draftLines]
+                );
         } catch (Throwable $e) {
             // Ghi chi tiết vào log cho dev xem, client chỉ nhận thông báo chung
             // để không lộ thông tin cấu hình hay lỗi nội bộ.
@@ -149,6 +159,12 @@ class ChatController
         // Gemini trả về toàn bộ lịch sử (cũ + mới). Phần cũ đã có trong DB nên chỉ lấy phần mới để lưu.
         // Số phần cũ bằng số lượt đã gửi đi, vì getRecent() đã lọc theo đúng điều kiện của Gemini::cleanHistory.
         $newTurns = array_slice($result['history'], count($history));
+        // Lượt mới đầu tiên là câu của khách, đang kèm ghi chú đơn nháp gửi cho Gemini.
+        // Trả lại đúng câu khách gõ trước khi lưu, để lịch sử hiển thị không có dòng ghi chú
+        // và các lượt sau không đọc lại số lượng cũ trong ghi chú này.
+        if (($newTurns[0]['role'] ?? '') === 'user') {
+            $newTurns[0]['parts'] = [['text' => $message]];
+        }
 
         try {
             // Cuộc hội thoại mới (conversation_id = 0) được tạo cùng transaction với các lượt,

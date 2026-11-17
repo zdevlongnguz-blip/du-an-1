@@ -22,6 +22,7 @@ Bộ tài liệu riêng cho tính năng **trợ lý AI Louis Dé Fule lên đơn
 | [10-van-dap.md](10-van-dap.md) | Câu hỏi thường gặp khi bảo vệ, trả lời ngắn | Chuẩn bị vấn đáp |
 | [11-dong-bo-don-nhap.md](11-dong-bo-don-nhap.md) | **Đồng bộ đơn nháp giữa trang và Louis** để tăng trải nghiệm: khách sửa trên trang thì Louis biết ở lượt sau | Muốn hiểu vì sao Louis nhớ chỉnh sửa của khách |
 | [12-mo-phong-json.md](12-mo-phong-json.md) | **Mô phỏng JSON từng bước** qua 3 kịch bản (lên đơn + COD, thiếu SĐT, sửa trên trang + giá đổi 409): request/response, payload Gemini, kết quả tool, lượt lưu DB | Cần chỉ ra chính xác dữ liệu nào đi đâu |
+| [13-giai-thich-de-hieu.md](13-giai-thich-de-hieu.md) | **Giải thích dễ hiểu** tool lên đơn: ví von quán ăn, sơ đồ một lượt chat, code mẫu từng bước, bảng lệnh `add`/`set`/`subtract`/`remove`, so với tool tìm sản phẩm | **Người mới: đọc file này trước** |
 
 ## Tóm tắt một đoạn
 
@@ -37,7 +38,7 @@ flowchart LR
     GM <-->|function calling| AI(("Gemini AI"))
     GM -->|gọi tool| T1["search_product<br/>lấy SKU"]
     GM -->|gọi tool| T2["create_order_draft<br/>lên đơn nháp"]
-    T2 -->|đọc| DB[("MySQL<br/>product_variants, users")]
+    T2 -->|đọc| DB[("MySQL<br/>product_variants, products")]
     T2 -->|_action checkout-draft| CC
     CC -->|actions| CHAT
     CHAT -->|setCheckoutDraft| STORE["checkoutDraft.js<br/>bộ nhớ"]

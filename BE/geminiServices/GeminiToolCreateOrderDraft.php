@@ -13,11 +13,24 @@
  * Tool CHỈ lo món hàng. Thông tin người nhận (tên, SĐT, địa chỉ) tách hẳn khỏi AI và tool:
  * FE tự lấy từ hồ sơ qua api-profile (hoặc giữ thông tin khách đã sửa trên trang) để điền form.
  * Nhờ vậy luồng AI không bao giờ đụng tới thông tin cá nhân.
+ *
+ * Thiết kế LỆNH (command): AI không gửi "đơn mới trông thế nào" mà gửi "khách muốn đổi gì",
+ * ví dụ [{op: add, sku: X, quantity: 5}]. Server lấy đơn nháp khách đang thấy trên trang làm gốc
+ * rồi áp từng lệnh. Vì sao: nếu bắt AI tự dựng lại cả đơn, AI hay lấy nhầm số cũ trong lịch sử chat
+ * (trang 5 hộp, khách nói "thêm 5", AI gửi 6 = 1 cũ + 5) hoặc quên món khách không nhắc tới.
+ * AI giỏi hiểu ý câu nói; còn cộng trừ và giữ trạng thái là việc server làm chính xác hơn.
  */
 class GeminiToolCreateOrderDraft extends GeminiTool
 {
+    // Số lệnh tối đa trong một lần gọi, chặn AI gửi danh sách quá dài.
+    const MAX_OPS = 20;
+
+    // Các loại lệnh hợp lệ (allowlist). Lệnh khác bị từ chối.
+    const OPS = ['add', 'set', 'subtract', 'remove'];
+
     /**
      * Tên tool. Gemini dùng tên này khi yêu cầu gọi.
+     * Giữ tên cũ để lịch sử chat và tài liệu không phải đổi theo.
      *
      * @return string
      */
@@ -27,24 +40,26 @@ class GeminiToolCreateOrderDraft extends GeminiTool
     }
 
     /**
-     * Mô tả để Gemini biết lúc nào nên gọi tool.
+     * Mô tả để Gemini biết lúc nào nên gọi tool và gửi lệnh gì.
      *
      * @return string
      */
     public function description()
     {
-        return 'Lên đơn nháp cho khách khi khách muốn mua, đặt hàng hoặc chốt đơn. '
-            . 'Cần SKU của từng phiên bản (lấy từ kết quả search_product) và số lượng. '
-            . 'Thông tin nhận hàng (tên, số điện thoại, địa chỉ) do website tự điền trên trang từ hồ sơ của khách, '
-            . 'tool không cần và AI không được hỏi các thông tin này trong chat. '
-            . 'Tool KHÔNG tạo đơn thật: website mở trang để khách kiểm tra, điền thông tin còn thiếu và tự bấm xác nhận.';
+        return 'Lên đơn nháp hoặc sửa đơn nháp đang mở, khi khách muốn mua, đặt hàng, thêm/bớt/đổi/bỏ món. '
+            . 'Gửi danh sách LỆNH mô tả thay đổi khách vừa yêu cầu, KHÔNG gửi lại cả đơn và KHÔNG tự cộng trừ: '
+            . 'add = mua/thêm N (website cộng vào số đang có), set = đổi thành đúng N, subtract = bớt N, remove = bỏ món. '
+            . 'Món khách không nhắc tới thì không cần gửi, website tự giữ nguyên. '
+            . 'Cần SKU của từng phiên bản (lấy từ search_product hoặc đơn nháp đang mở). '
+            . 'Thông tin nhận hàng do website tự điền, AI không được hỏi trong chat. '
+            . 'Tool KHÔNG tạo đơn thật: website mở trang để khách kiểm tra và tự bấm xác nhận.';
     }
 
     /**
-     * Khai báo tham số theo JSON Schema: chỉ có danh sách món.
+     * Khai báo tham số theo JSON Schema: một danh sách lệnh.
      *
-     * Cố ý KHÔNG có tham số tên, SĐT, địa chỉ: thông tin người nhận do FE tự lo, AI không có đường
-     * chuyển thông tin cá nhân vào đơn nên cũng không có lý do để hỏi khách trong chat.
+     * Cố ý KHÔNG có tham số tên, SĐT, địa chỉ, user: AI không có đường chuyển thông tin cá nhân vào đơn
+     * và không chọn được khách khác.
      *
      * @return array
      */
@@ -53,35 +68,44 @@ class GeminiToolCreateOrderDraft extends GeminiTool
         return [
             'type' => 'object',
             'properties' => [
-                'items' => [
+                'ops' => [
                     'type' => 'array',
-                    'description' => 'Các món khách muốn đặt, mỗi SKU chỉ xuất hiện một lần',
+                    'description' => 'Các thay đổi khách vừa yêu cầu, theo đúng thứ tự khách nói',
                     'items' => [
                         'type' => 'object',
                         'properties' => [
-                            'sku' => ['type' => 'string', 'description' => 'SKU của phiên bản, lấy đúng từ search_product'],
-                            'quantity' => ['type' => 'integer', 'description' => 'Số lượng, mặc định 1 nếu khách không nói'],
+                            'op' => [
+                                'type' => 'string',
+                                'enum' => self::OPS,
+                                'description' => 'add: mua/thêm N. set: đổi thành đúng N. subtract: bớt N. remove: bỏ món',
+                            ],
+                            'sku' => ['type' => 'string', 'description' => 'SKU của phiên bản'],
+                            'quantity' => [
+                                'type' => 'integer',
+                                'description' => 'Số khách nói (N). add không nói số thì 1. remove không cần',
+                            ],
                         ],
-                        'required' => ['sku', 'quantity'],
+                        'required' => ['op', 'sku'],
                     ],
                 ],
             ],
-            'required' => ['items'],
+            'required' => ['ops'],
         ];
     }
 
     /**
-     * Kiểm tra món hàng (SKU, đang bán, đủ tồn kho) rồi trả đơn nháp. Không đọc thông tin người nhận.
+     * Áp các lệnh của AI vào đơn nháp trên trang, kiểm tra món hàng (SKU, đang bán, đủ tồn kho) rồi trả đơn nháp mới.
      *
      * Hai kết quả có thể có:
      * - Món hàng có vấn đề (sai SKU, hết hàng, không đủ số lượng): ready=false + problems, không mở trang.
      * - Món hàng ổn: ready=true + tóm tắt đơn cho AI, kèm _action 'checkout-draft' (chỉ có món và tổng tiền) cho FE.
      *
-     * @param array $args    Tham số Gemini gửi lên: items
-     * @param array $context Ngữ cảnh server, cần 'user_id' (lấy từ JWT, không lấy từ AI) để chắc chắn tool
-     *                       chỉ chạy cho người đã đăng nhập
+     * @param array $args    Tham số Gemini gửi lên: ops
+     * @param array $context Ngữ cảnh server. 'user_id' (lấy từ JWT, không lấy từ AI) để chắc chắn tool chỉ chạy
+     *                       cho người đã đăng nhập. 'checkout_draft' (không bắt buộc): các món ['sku', 'name', 'quantity']
+     *                       khách đang thấy trên trang, ChatController đã kiểm tra với DB; không có thì gốc là đơn rỗng
      * @return array Kết quả cho Gemini (và _action cho FE khi đơn đã sẵn sàng)
-     * @throws InvalidArgumentException Khi tham số sai kiểu, rỗng hoặc vượt giới hạn
+     * @throws InvalidArgumentException Khi lệnh sai, bớt quá số đang có, đơn rỗng hoặc vượt giới hạn
      * @throws RuntimeException Khi thiếu user_id trong context (lỗi lập trình, không phải lỗi của khách)
      */
     public function execute($args = [], $context = [])
@@ -93,7 +117,10 @@ class GeminiToolCreateOrderDraft extends GeminiTool
             throw new RuntimeException('Thiếu user_id trong context của tool create_order_draft.');
         }
 
-        $items = $this->readItems($args['items'] ?? null);
+        // Gốc để áp lệnh: đơn nháp khách đang thấy trên trang (rỗng nếu chưa có).
+        $pageDraft = is_array($context['checkout_draft'] ?? null) ? $context['checkout_draft'] : [];
+        $applied = $this->applyOps($this->readOps($args['ops'] ?? null), $pageDraft);
+        $items = $applied['items'];
 
         // Tra giá và tồn kho thật từ DB. Map theo SKU viết thường vì cột sku không phân biệt hoa thường.
         $variants = [];
@@ -145,10 +172,9 @@ class GeminiToolCreateOrderDraft extends GeminiTool
             ];
         }
 
-
         $totalAmount = $totalCents / 100;
 
-        // Phần gửi cho AI: chỉ tóm tắt món hàng và tổng tiền.
+        // Phần gửi cho AI: chỉ tóm tắt món hàng và tổng tiền (đã là số cuối cùng, AI đọc lại cho khách).
         $summary = [];
         foreach ($draftItems as $draftItem) {
             $summary[] = [
@@ -158,64 +184,148 @@ class GeminiToolCreateOrderDraft extends GeminiTool
             ];
         }
 
-        return [
+        $result = [
             'ready' => true,
             'items' => $summary,
             'total_amount' => $totalAmount,
-            'message' => 'Đơn nháp đã mở trên website. Website tự điền thông tin nhận hàng từ hồ sơ của khách; '
-                . 'khách kiểm tra, điền ô còn thiếu nếu có, có thể chỉnh số lượng, chọn cách thanh toán rồi tự bấm '
-                . '"Xác nhận đặt hàng". Đơn CHƯA được tạo. Không hỏi thông tin cá nhân trong chat.',
-            Gemini::ACTION_KEY => [
-                'type' => 'checkout-draft',
-                // Chỉ có món và tổng tiền. Người nhận do FE tự lấy (api-profile) hoặc giữ từ trang.
-                'draft' => [
-                    'items' => $draftItems,
-                    'total_amount' => $totalAmount,
-                ],
+            'message' => 'Đơn nháp đã mở trên website với ĐÚNG các món và số lượng trong items (báo khách theo số này). '
+                . 'Website tự điền thông tin nhận hàng từ hồ sơ của khách; khách kiểm tra, điền ô còn thiếu nếu có, '
+                . 'có thể chỉnh số lượng, chọn cách thanh toán rồi tự bấm "Xác nhận đặt hàng". '
+                . 'Đơn CHƯA được tạo. Không hỏi thông tin cá nhân trong chat.',
+        ];
+        if ($applied['notes'] !== []) {
+            // Lệnh bị bỏ qua (ví dụ bỏ món không có trong đơn): báo AI để AI nói lại với khách nếu cần.
+            $result['notes'] = $applied['notes'];
+        }
+        $result[Gemini::ACTION_KEY] = [
+            'type' => 'checkout-draft',
+            // Chỉ có món và tổng tiền. Người nhận do FE tự lấy (api-profile) hoặc giữ từ trang.
+            'draft' => [
+                'items' => $draftItems,
+                'total_amount' => $totalAmount,
             ],
         ];
+
+        return $result;
     }
 
     /**
-     * Kiểm tra danh sách món AI gửi lên: đúng kiểu, không rỗng, không trùng SKU, số lượng trong giới hạn.
+     * Kiểm tra danh sách lệnh AI gửi lên: đúng kiểu, loại lệnh trong allowlist, SKU và số lượng hợp lệ.
+     * Chỉ kiểm tra từng lệnh; việc áp lệnh vào đơn do applyOps làm.
      *
-     * @param mixed $rawItems Giá trị 'items' từ AI
-     * @return array Danh sách ['sku' => string, 'quantity' => int]
+     * @param mixed $rawOps Giá trị 'ops' từ AI
+     * @return array Danh sách ['op' => string, 'sku' => string, 'quantity' => int] (remove có quantity = 0)
      * @throws InvalidArgumentException Khi dữ liệu sai
      */
-    private function readItems($rawItems = null)
+    private function readOps($rawOps = null)
     {
-        if (!is_array($rawItems) || $rawItems === []) {
-            throw new InvalidArgumentException('Thiếu danh sách món (items). Hãy tìm sản phẩm bằng search_product để lấy SKU trước.');
+        if (!is_array($rawOps) || $rawOps === []) {
+            throw new InvalidArgumentException('Thiếu danh sách lệnh (ops). Mỗi lệnh gồm op (add, set, subtract, remove), sku, quantity.');
         }
-        if (count($rawItems) > Order::MAX_DIRECT_ITEMS) {
+        if (count($rawOps) > self::MAX_OPS) {
+            throw new InvalidArgumentException('Tối đa ' . self::MAX_OPS . ' lệnh mỗi lần.');
+        }
+
+        $ops = [];
+        foreach ($rawOps as $rawOp) {
+            $rawOp = is_array($rawOp) ? $rawOp : [];
+
+            $op = $rawOp['op'] ?? null;
+            if (!in_array($op, self::OPS, true)) {
+                throw new InvalidArgumentException('op chỉ nhận add, set, subtract hoặc remove.');
+            }
+
+            $sku = is_string($rawOp['sku'] ?? null) ? trim($rawOp['sku']) : '';
+            if ($sku === '' || strlen($sku) > 100) {
+                throw new InvalidArgumentException('SKU không hợp lệ. Dùng đúng SKU trong kết quả search_product hoặc trong đơn nháp đang mở.');
+            }
+
+            $quantity = 0;
+            if ($op !== 'remove') {
+                // "mua Claymation" không nói số thì hiểu là 1. set/subtract bắt buộc có số.
+                $rawQuantity = $rawOp['quantity'] ?? ($op === 'add' ? 1 : null);
+                // Gemini đôi khi gửi số dạng 2.0 (float); chỉ nhận khi là số nguyên đúng nghĩa.
+                $quantity = is_int($rawQuantity) ? $rawQuantity
+                    : (is_float($rawQuantity) && floor($rawQuantity) === $rawQuantity ? (int)$rawQuantity : 0);
+                if ($quantity < 1 || $quantity > Order::MAX_ITEM_QUANTITY) {
+                    throw new InvalidArgumentException('Lệnh ' . $op . ' cần quantity là số nguyên từ 1 đến ' . Order::MAX_ITEM_QUANTITY . '.');
+                }
+            }
+
+            $ops[] = ['op' => $op, 'sku' => $sku, 'quantity' => $quantity];
+        }
+
+        return $ops;
+    }
+
+    /**
+     * Áp lần lượt từng lệnh vào đơn nháp trên trang, ra danh sách món cuối cùng.
+     *
+     * Ví dụ trang có [Claymation 5, Vinh Râu 3]:
+     * - [add Claymation 5]                 → Claymation 10, Vinh Râu 3 (món không nhắc tới giữ nguyên)
+     * - [remove Vinh Râu, set Claymation 2] → Claymation 2
+     *
+     * @param array $ops       Kết quả readOps
+     * @param array $pageDraft Các món trên trang ['sku', 'name', 'quantity'] (rỗng nếu chưa có đơn nháp)
+     * @return array ['items' => [['sku', 'quantity']], 'notes' => [chuỗi ghi chú cho AI]]
+     * @throws InvalidArgumentException Khi bớt quá số đang có, đơn không còn món, quá số món hoặc quá 99 mỗi món
+     */
+    private function applyOps($ops = [], $pageDraft = [])
+    {
+        // Đơn đang làm việc, key là SKU viết thường (cột sku không phân biệt hoa thường).
+        // Mảng PHP giữ thứ tự thêm vào, nên món cũ giữ chỗ cũ, món mới nằm cuối.
+        $draft = [];
+        foreach ($pageDraft as $line) {
+            if (is_array($line) && is_string($line['sku'] ?? null) && (int)($line['quantity'] ?? 0) > 0) {
+                $draft[mb_strtolower($line['sku'], 'UTF-8')] = ['sku' => $line['sku'], 'quantity' => (int)$line['quantity']];
+            }
+        }
+
+        $notes = [];
+        // Thứ tự quan trọng: áp đúng thứ tự khách nói, ví dụ "bỏ hết Claymation rồi lấy lại 2" là remove rồi add.
+        foreach ($ops as $op) {
+            $key = mb_strtolower($op['sku'], 'UTF-8');
+            $current = $draft[$key]['quantity'] ?? 0;
+
+            if ($op['op'] === 'remove') {
+                if ($current === 0) {
+                    $notes[] = 'SKU ' . $op['sku'] . ' không có trong đơn nên không cần bỏ.';
+                }
+                unset($draft[$key]);
+                continue;
+            }
+
+            if ($op['op'] === 'add') {
+                $quantity = $current + $op['quantity'];
+            } elseif ($op['op'] === 'set') {
+                $quantity = $op['quantity'];
+            } else { // subtract
+                if ($current === 0) {
+                    throw new InvalidArgumentException('SKU ' . $op['sku'] . ' không có trong đơn nháp nên không bớt được.');
+                }
+                $quantity = $current - $op['quantity'];
+                if ($quantity < 1) {
+                    throw new InvalidArgumentException('SKU ' . $op['sku'] . ': đơn chỉ có ' . $current . ', bớt '
+                        . $op['quantity'] . ' thì không còn. Hỏi lại khách; nếu khách muốn bỏ món thì dùng lệnh remove.');
+                }
+            }
+
+            if ($quantity > Order::MAX_ITEM_QUANTITY) {
+                throw new InvalidArgumentException('SKU ' . $op['sku'] . ': tổng số lượng ' . $quantity
+                    . ' vượt giới hạn ' . Order::MAX_ITEM_QUANTITY . ' mỗi món. Báo khách giảm bớt.');
+            }
+            // Giữ cách viết SKU của đơn trên trang (lấy từ DB); món mới thì dùng SKU AI gửi, DB sẽ tra lại.
+            $draft[$key] = ['sku' => $draft[$key]['sku'] ?? $op['sku'], 'quantity' => $quantity];
+        }
+
+        if ($draft === []) {
+            throw new InvalidArgumentException('Sau khi áp lệnh, đơn không còn món nào. Không gọi lại tool; '
+                . 'hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang nếu muốn bỏ hẳn.');
+        }
+        if (count($draft) > Order::MAX_DIRECT_ITEMS) {
             throw new InvalidArgumentException('Một đơn tối đa ' . Order::MAX_DIRECT_ITEMS . ' món.');
         }
 
-        $items = [];
-        foreach ($rawItems as $rawItem) {
-            $sku = is_array($rawItem) && is_string($rawItem['sku'] ?? null) ? trim($rawItem['sku']) : '';
-            if ($sku === '' || strlen($sku) > 100) {
-                throw new InvalidArgumentException('SKU không hợp lệ. Dùng đúng SKU trong kết quả search_product.');
-            }
-
-            // Gemini đôi khi gửi số dạng 2.0 (float); chỉ nhận khi là số nguyên đúng nghĩa.
-            $rawQuantity = $rawItem['quantity'] ?? 1;
-            $quantity = is_int($rawQuantity) ? $rawQuantity
-                : (is_float($rawQuantity) && floor($rawQuantity) === $rawQuantity ? (int)$rawQuantity : 0);
-            if ($quantity < 1 || $quantity > Order::MAX_ITEM_QUANTITY) {
-                throw new InvalidArgumentException('Số lượng mỗi món phải từ 1 đến ' . Order::MAX_ITEM_QUANTITY . '.');
-            }
-
-            // Trùng SKU thì cộng dồn số lượng thay vì báo lỗi, vì khách có thể nói "thêm 1 hộp nữa".
-            $key = mb_strtolower($sku, 'UTF-8');
-            if (isset($items[$key])) {
-                $items[$key]['quantity'] = min(Order::MAX_ITEM_QUANTITY, $items[$key]['quantity'] + $quantity);
-            } else {
-                $items[$key] = ['sku' => $sku, 'quantity' => $quantity];
-            }
-        }
-
-        return array_values($items);
+        return ['items' => array_values($draft), 'notes' => $notes];
     }
 }

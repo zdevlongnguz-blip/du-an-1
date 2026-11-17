@@ -25,7 +25,7 @@ File: `BE/geminiServices/GeminiPrompt.php`. System prompt là đoạn chỉ dẫ
 
 | Khách muốn | Louis làm |
 | --- | --- |
-| Đổi món, phiên bản, số lượng, thêm/bớt món | Gọi lại tool với **danh sách đầy đủ** sau khi đổi (đơn mới thay hẳn đơn cũ); nhắc khách cũng tự chỉnh được trên trang |
+| Đổi món, phiên bản, số lượng, thêm/bớt món | Gọi lại tool với **lệnh** cho đúng phần khách nói: "thêm 2 X" → `add X 2`, "X lấy 3 thôi" → `set X 3`, "bớt 1 X" → `subtract X 1`, "bỏ X" → `remove X`; đổi phiên bản → `remove` bản cũ + `add` bản mới. Món không nhắc tới server tự giữ. Nhắc khách cũng tự chỉnh được trên trang |
 | Bỏ/hủy đơn nháp | Hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang (có hỏi xác nhận); đơn nháp chưa lưu ở hệ thống, không giữ hàng. **Không** gọi tool nào |
 
 ## 4. Những câu cấm nói
@@ -57,12 +57,16 @@ Khi FE gửi kèm `checkout_draft`, `GeminiPrompt::checkoutDraftContext()` nối
 | Quy tắc | Lý do |
 | --- | --- |
 | Danh sách này là trạng thái mới nhất, dùng làm gốc thay cho lịch sử chat | Lịch sử chat không có chỉnh sửa trên trang |
-| Mua thêm món khác: giữ món cũ, thêm món mới, trừ khi khách nói rõ bỏ/thay | Khách đang xây dần một đơn |
-| Bỏ một món: gọi tool với danh sách còn lại; bỏ hết: không gọi tool | Không có tool hủy đơn nháp |
+| Sửa đơn: chỉ gửi lệnh cho phần khách vừa nhắc (`add`/`set`/`subtract`/`remove`), món không nhắc tới website tự giữ, KHÔNG tự cộng trừ | AI hay lấy nhầm số gốc trong lịch sử; để server áp lệnh lên đơn trên trang (thiết kế lệnh, xem [04-tool-be.md](04-tool-be.md)) |
+| Khách nói chung chung ("giảm bớt") mà không có số: hỏi lại, chưa gọi tool | Tránh AI tự đoán số lượng |
+| Mọi thay đổi món/số lượng phải gọi tool; chưa gọi thì không được nói "đã đổi"; số lượng và tổng tiền lấy từ kết quả tool | Đã gặp lỗi: AI trả lời "đã giảm còn 14 hộp" nhưng không gọi tool, trang vẫn 15 |
+| Bỏ hết: không gọi tool, hướng dẫn khách bấm "Bỏ đơn nháp" trên trang | Không có tool hủy đơn nháp; tool cũng báo lỗi nếu lệnh làm đơn rỗng |
 | Thông tin người nhận do website tự lo (FE, không đi qua AI) | Không có tham số trong tool; không hỏi lại trong chat |
 | Chỉ hỏi thông tin thì không gọi tool | Có đơn nháp không có nghĩa là mọi câu đều là lệnh mua |
 
 Đoạn này không được lưu vào lịch sử chat. Nội dung đầy đủ: [11-dong-bo-don-nhap.md, mục 6.3](11-dong-bo-don-nhap.md).
+
+Ngoài system prompt, `GeminiPrompt::checkoutDraftReminder()` còn gắn một dòng ghi chú "Đơn nháp trên trang LÚC NÀY: ..." **ngay sau câu khách** trong request gửi Gemini. Lý do: Gemini ưu tiên các câu gần cuối cuộc trò chuyện hơn system prompt. `ChatController` trả lại câu gốc trước khi lưu, nên ghi chú không nằm trong lịch sử. Chi tiết: [11-dong-bo-don-nhap.md, mục 6.4](11-dong-bo-don-nhap.md).
 
 ## 5c. Danh mục và sản phẩm sinh tự động từ DB
 
@@ -92,7 +96,7 @@ Prompt chỉ giúp AI **cư xử đúng**. Mọi giới hạn quan trọng đề
 | Nếu AI làm sai | Code chặn ở đâu |
 | --- | --- |
 | Gửi SKU bịa | Tool trả `problems`, không mở trang |
-| Gửi số lượng 1000 | `readItems` từ chối |
+| Gửi số lượng 1000 | `readOps` từ chối |
 | Hỏi rồi cố truyền SĐT/địa chỉ vào tool | Tool không có tham số này, bỏ qua |
 | Cố lên đơn cho người khác | Tool chỉ dùng `user_id` từ JWT |
 | Nói "đã đặt hàng" | Không có đơn nào được tạo; khách vẫn phải bấm xác nhận |
