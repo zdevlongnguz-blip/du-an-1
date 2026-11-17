@@ -1,8 +1,8 @@
-<!-- dựng thêm 1 api lấy về full danh sách categories từ Database
-cả 2 api products và categories đều không cần chặn middleware auth (tức là không bắt người dùng đăng nhập mới xem được danh sách sản phẩm và danh mục) -->
-
-
 <?php
+/**
+ * Model bảng categories (danh mục sản phẩm). API danh sách danh mục (api-categories) là công khai,
+ * không cần đăng nhập, giống API danh sách sản phẩm.
+ */
 class Category extends BaseModel
 {
     protected $table = 'categories';
