@@ -17,6 +17,7 @@
 ## 2. Vì sao state nằm ngoài component
 
 `chatAssistant.js` khai báo `messages`, `conversationId`, `isOpen` bằng `ref` ở cấp module, không nằm trong component. Nhờ vậy:
+
 - Chuyển trang không làm mất hội thoại, vì popup nằm trong `App.vue` và không bị hủy khi đổi route.
 - Trang `/fule-sing` mở được popup và đọc cùng state.
 
@@ -56,6 +57,7 @@ Lưu ý: bấm ra ngoài panel **không** đóng popup. Đây là quyết địn
 ## 5. Trạng thái khi chưa đăng nhập
 
 Panel hiện:
+
 - Avatar Louis, tiêu đề "Đăng nhập để trò chuyện cùng Louis".
 - Nút "Đăng nhập": lưu đường dẫn hiện tại bằng `saveReturnUrl` rồi chuyển sang `/login`. Sau khi đăng nhập, `pushToReturnUrl` đưa khách về đúng trang cũ.
 - Link "Chưa có tài khoản? Đăng ký".
@@ -121,12 +123,13 @@ flowchart TD
     PL --> LOAD{Video tải được?}
     LOAD -- Không --> ERR["Thông báo 'video chưa được tải lên'"]
     LOAD -- Có --> COV["Màn chờ: nút Nghe Louis hát"]
-    COV --> PLAY{video.play() thành công?}
+    COV --> PLAY{"video.play() thành công?"}
     PLAY -- Không --> PE["Nhắc bấm lại"]
     PLAY -- Có --> PLY["Đang phát: đĩa xoay, sóng nhạc chạy, hiện điều khiển"]
 ```
 
 Bố cục:
+
 - Desktop: đĩa nhạc bên trái (tối đa 300px), video bên phải. Khoảng cách 40px.
 - Mobile (dưới 768px): video ở trên, đĩa ở dưới (tối đa 240px).
 - Đĩa xoay 8 giây mỗi vòng. Nếu người dùng bật "giảm chuyển động" thì đĩa đứng yên.
@@ -159,7 +162,7 @@ Luồng khi tool `create_order_draft` trả `ready=true`:
 5. Bấm "Xác nhận đặt hàng": gọi `api-order-checkout-items` với SKU, số lượng, người nhận, phương thức thanh toán và `expected_total`. Chọn SePay thì tiếp tục `startOnlinePayment()`.
 
 Vì sao không đưa đơn nháp lên URL hay localStorage:
+
 - Đơn nháp có tên, số điện thoại, địa chỉ. Đưa lên URL thì lộ ở thanh địa chỉ, lịch sử trình duyệt, log server và header `Referer`.
 - `checkoutDraft.js` giữ đơn trong `ref` cấp module: còn khi chuyển trang trong web, mất khi tải lại trang. Trang không có đơn nháp thì hiện màn "Chưa có đơn nháp" kèm nút mở chat.
 - Đơn nháp bị xóa khi đặt hàng thành công và khi đăng xuất (watch `authenticated` trong `ChatAssistant.vue`).
-

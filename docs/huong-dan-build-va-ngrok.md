@@ -30,13 +30,17 @@ Build xong phải thấy dòng `✓ built in ...` và không có lỗi.
 `APP_URL` là địa chỉ công khai, dùng để tạo link trong mail và chuyển hướng về FE khi đang chia sẻ qua ngrok.
 
 - **Khi chạy local (không chia sẻ):** để dòng `APP_URL` ở dạng comment:
-  ```
+
+  ```bash
   # APP_URL=https://...
   ```
+
 - **Khi chạy ngrok:** bỏ dấu `#` và điền đúng URL ngrok hiện tại, không có dấu `/` ở cuối:
-  ```
+
+  ```bash
   APP_URL=https://<ten-ngrok>.ngrok-free.dev
   ```
+
 - Khi ngrok đổi URL, phải sửa lại dòng này.
 - Khi tắt ngrok, comment lại dòng này để local không bị trỏ về ngrok.
 
@@ -84,6 +88,7 @@ Thay `<ngrok>` bằng URL của bạn:
 Khi mở trang lần đầu, ngrok có thể hiện trang cảnh báo. Bấm **Visit Site** để tiếp tục.
 
 Để test mail:
+
 1. Mở `https://<ngrok>/` và đăng ký bằng email bạn có thể mở được.
 2. Link xác minh trong mail phải bắt đầu bằng `https://<ngrok>/BE/?action=api-verify-email&token=...`.
 3. Bấm link, phải chuyển về trang FE trên ngrok.

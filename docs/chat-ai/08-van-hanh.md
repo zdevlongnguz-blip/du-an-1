@@ -78,9 +78,11 @@ Mỗi thành viên cần tự chạy migration trên DB của mình. Nếu thi�
 
 1. Chép file video vào `BE/assets/fule/songs/`. Tên file chỉ dùng chữ không dấu, số, `.`, `-`, `_`, đuôi mp4 hoặc webm.
 2. Thêm dòng vào `PLAYLIST` trong `GeminiToolFuleSing.php`:
+
    ```php
    'Tên bài' => 'ten-file.mp4',
    ```
+
 3. Không cần sửa FE. Tool đọc mảng khi chạy.
 
 ## 6. Cách thêm tool mới

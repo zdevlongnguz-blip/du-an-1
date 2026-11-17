@@ -13,7 +13,7 @@ Trạng thái hiện tại: **mới có khung**. Endpoint chat chạy được, 
 
 ## 2. Cấu trúc file
 
-```
+```text
 BE/
 ├── controllers/ChatController.php   # Nhận request HTTP, validate, gọi service, trả JSON
 └── geminiServices/
@@ -34,7 +34,7 @@ Các thay đổi đi kèm:
 
 Service nằm **dưới controller**, ngang cấp với model. Router không gọi thẳng service.
 
-```
+```text
 routes/index.php → ChatController → Gemini (service) → GeminiToolXxx → Model → MySQL
                                          ↕
                                   Google Gemini API
@@ -47,7 +47,7 @@ routes/index.php → ChatController → Gemini (service) → GeminiToolXxx → M
 
 Thêm vào `BE/.env` (không commit file này):
 
-```
+```bash
 GEMINI_API_KEY=<key lấy tại https://aistudio.google.com/apikey>
 GEMINI_MODEL=
 ```
