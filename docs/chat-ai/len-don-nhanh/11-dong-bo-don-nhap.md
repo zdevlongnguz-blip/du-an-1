@@ -226,6 +226,8 @@ Chi tiết quan trọng:
 | Lệnh lạ do AI gửi | Allowlist `add`/`set`/`subtract`/`remove`, tối đa 20 lệnh; sai thì trả lỗi cho AI |
 | SĐT/địa chỉ lọt vào luồng AI | Không gửi: `getCheckoutDraftForChat` chỉ có món; BE bỏ qua mọi trường khác |
 | Dùng `checkout_draft` để lên đơn cho người khác | Không có trường user; tool vẫn dùng `user_id` từ JWT |
+| Món trên trang vừa ngừng bán biến mất âm thầm khỏi đơn mới | `ChatController` đếm số món bị loại (`checkout_draft_dropped`), tool báo AI qua `notes`; chỉ truyền **số món**, không chép SKU client gửi |
+| Gemini gọi tool nhiều lần trong một lượt, lần sau xóa kết quả lần trước | Đơn làm việc của lượt (`$workingDraft`): lần gọi thành công được ghi nhận, lần sau áp tiếp lên đó; tool tạo mới mỗi request nên không lẫn giữa các lượt, các khách |
 
 ## 9. Đã kiểm tra
 
@@ -244,6 +246,7 @@ Chi tiết quan trọng:
 | S11 | Như S10: bớt quá, bớt món không có, bỏ hết, vượt 99, `op` lạ, `set` thiếu số, gửi dạng cũ `items` | Đều trả lỗi rõ cho AI |
 | S12 | Chrome thật + Gemini thật (Puppeteer): mua 1 → bấm + lên 5 → "thêm 5 hộp nữa" → "bớt 3 hộp" | AI gửi `add 5` → **10**, rồi `subtract 3` → **7** |
 | S13 | Như S12, tiếp: "lấy thêm 1 Layrite" → "Layrite lấy 2 hộp thôi" → "bỏ Layrite đi" → "thêm 2 Suavecito, còn sáp Hanz để 3 hộp thôi" | AI gửi `add`, `set`, `remove`, rồi 2 lệnh `add` + `set` trong một câu; mỗi bước món không nhắc tới đều được giữ nguyên |
+| S14 | Sau code review: `execute()` thật với DB local. Bớt đúng bằng số đang có; gọi tool 2 lần một lượt; lần gọi lỗi rồi gọi lại; món ngừng bán | Bỏ món; lần 2 áp tiếp lên lần 1 (đủ 3 món); lần lỗi không ghi nhận; `notes` báo đúng 1 lần (chi tiết [09-kiem-thu.md](09-kiem-thu.md) Q15-Q20) |
 
 Chưa test trên trình duyệt: khách sửa địa chỉ trên trang rồi nhắn đổi món; đơn mới phải giữ địa chỉ đã sửa.
 
