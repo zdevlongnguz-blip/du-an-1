@@ -166,7 +166,7 @@ Chỉ có `ops` (lệnh `add` vì chưa có đơn nháp): tool không nhận th�
 ```json
 {
   "args": { "ops": [{ "op": "add", "sku": "CLAYMATION", "quantity": 2 }] },
-  "context": { "user_id": 6, "checkout_draft": [] }
+  "context": { "user_id": 6, "checkout_draft": [], "checkout_draft_dropped": 0 }
 }
 ```
 
@@ -402,7 +402,7 @@ Khách user ID 7, hồ sơ chỉ có tên. Nhắn: **"mua 1 chai Got2b"**. (Bỏ
 ```json
 {
   "args": { "ops": [{ "op": "add", "sku": "GOT2B-GLUED", "quantity": 1 }] },
-  "context": { "user_id": 7, "checkout_draft": [] }
+  "context": { "user_id": 7, "checkout_draft": [], "checkout_draft_dropped": 0 }
 }
 ```
 
@@ -540,7 +540,8 @@ Ba đường, cùng một danh sách `describeDraftItems`:
     "checkout_draft": [
       { "sku": "CLAYMATION", "name": "Sáp Vuốt Tóc Hanz de Fuko Claymation - Hũ 56g", "quantity": 1 },
       { "sku": "GOT2B-GLUED", "name": "Gel Vuốt Tóc Got2b Glued Spiking Wax - Mặc định", "quantity": 1 }
-    ]
+    ],
+    "checkout_draft_dropped": 0
   }
 }
 ```

@@ -138,7 +138,8 @@ $result = (new Gemini($systemPrompt))
     ->chat(
         $message . GeminiPrompt::checkoutDraftReminder($draftLines),   // ghi chú gắn ngay sau câu khách
         $history,
-        ['user_id' => $userId, 'checkout_draft' => $draftLines]        // context: tool dùng làm GỐC
+        ['user_id' => $userId, 'checkout_draft' => $draftLines,        // context: tool dùng làm GỐC
+         'checkout_draft_dropped' => $draftDropped]                    // số món trên trang đã ngừng bán (mục 5b)
     );
 ```
 
@@ -223,7 +224,7 @@ foreach ($ops as $op) {                              // áp đúng thứ tự kh
 
     if ($op['op'] === 'add')      $draft[$op['sku']] = $current + $op['quantity'];   // 5 + 5 = 10
     if ($op['op'] === 'set')      $draft[$op['sku']] = $op['quantity'];
-    if ($op['op'] === 'subtract') $draft[$op['sku']] = $current - $op['quantity'];   // < 1 thì báo lỗi
+    if ($op['op'] === 'subtract') $draft[$op['sku']] = $current - $op['quantity'];   // = 0 thì bỏ món, < 0 thì báo lỗi
     if ($op['op'] === 'remove')   unset($draft[$op['sku']]);
 }
 // Kiểm tra sau cùng: đơn không rỗng, mỗi món ≤ 99, tối đa 10 món.
@@ -237,9 +238,10 @@ flowchart TD
     L --> K{"op là gì?"}
     K -- add --> A["số mới = số đang có + N"]
     K -- set --> SE["số mới = N"]
-    K -- subtract --> SU{"số đang có − N ≥ 1?"}
-    SU -- Có --> SU2["số mới = số đang có − N"]
-    SU -- Không --> E1["Lỗi cho AI: bớt quá, hỏi lại khách"]
+    K -- subtract --> SU{"số đang có − N?"}
+    SU -- "> 0" --> SU2["số mới = số đang có − N"]
+    SU -- "= 0" --> R
+    SU -- "< 0" --> E1["Lỗi cho AI: bớt quá, hỏi lại khách"]
     K -- remove --> R["xóa món"]
     A --> C{"≤ 99?"}
     SE --> C
@@ -275,6 +277,27 @@ if (action?.type === 'checkout-draft') {
 }
 ```
 
+### Bước 5b. Hai trường hợp đặc biệt trong một lượt
+
+**Gemini gọi tool 2 lần trong cùng một lượt.** Ví dụ khách nói "thêm 1 Layrite và 1 Suavecito", Gemini có thể gửi 2 lời gọi riêng. FE chỉ nhận đơn của **lần gọi cuối**, nên lần 2 phải áp tiếp lên kết quả lần 1, không quay lại đơn trên trang:
+
+```php
+private $workingDraft = null;   // đơn làm việc của lượt này
+
+$base = $this->workingDraft ?? $context['checkout_draft'];   // lần đầu: đơn trên trang
+// ... applyOps, tra kho ...
+$this->workingDraft = /* đơn vừa lên thành công */;            // lần sau áp tiếp lên đây
+```
+
+| Trang: Clay 2 | Lần 1: `add Layrite 1` | Lần 2: `add Suavecito 1` | FE nhận |
+| --- | --- | --- | --- |
+| Không có đơn làm việc | Clay 2, Layrite 1 | Clay 2, Suavecito 1 | **mất Layrite** ✗ |
+| Có đơn làm việc | Clay 2, Layrite 1 → ghi nhận | Clay 2, Layrite 1, Suavecito 1 | đủ 3 món ✓ |
+
+Lần gọi lỗi (thiếu kho, lệnh sai) **không** được ghi nhận. Tool được tạo mới mỗi request nên đơn làm việc không lẫn sang lượt sau.
+
+**Món trên trang vừa ngừng bán.** `ChatController` chỉ giữ món còn bán, nên món đó không có trong đơn mới. Để món không biến mất âm thầm, tool báo AI bằng `notes`: "1 món trong đơn nháp trên trang đã ngừng bán... Báo khách biết". Chỉ báo **số món**, không chép SKU do client gửi vào kết quả.
+
 ## 6. Bảng lệnh và ví dụ
 
 | Lệnh | Khách nói | `quantity` |
@@ -294,6 +317,7 @@ Trang đang có **Claymation 5, Vinh Râu 3**:
 | "bỏ Vinh Râu" | `remove Vinh Râu` | Claymation 5 |
 | "bỏ Vinh Râu, thêm 1 Got2b, Claymation để 2 thôi" | `remove Vinh Râu`, `add Got2b 1`, `set Claymation 2` | Claymation 2, Got2b 1 |
 | "đổi Claymation sang hũ 56g" | `remove Claymation-113g`, `add Claymation-56g 5` | Claymation 56g 5, Vinh Râu 3 |
+| "bớt 5 Claymation" (bớt hết) | `subtract Claymation 5` | Vinh Râu 3 (bỏ Claymation) |
 | "bớt 7 Claymation" | `subtract Claymation 7` | **Lỗi** cho AI: đơn chỉ có 5, hỏi lại khách |
 
 Chưa có đơn nháp thì gốc là đơn rỗng: "lấy 2 Claymation" → `add Claymation 2` → Claymation 2.
@@ -349,6 +373,8 @@ Khác biệt nằm ở **một dòng**: tool lên đơn cần `$context['checkou
 3. Gemini gửi `subtract Claymation 7` khi chỉ có 5 thì sao? → Tool trả lỗi, Gemini hỏi lại khách. Trang không đổi.
 4. Đơn nháp có được lưu vào DB không? → Không. Đơn thật chỉ tạo khi khách bấm "Xác nhận đặt hàng".
 5. Vì sao tool hát không cần thiết kế lệnh? → Mỗi lần hát độc lập, không có trạng thái để nhớ.
+6. Có 2 hộp, khách nói "bớt 2" thì sao? → Bớt đúng bằng số đang có nghĩa là hết món, tool bỏ món đó. Chỉ bớt **quá** số đang có mới báo lỗi.
+7. Gemini gọi tool 2 lần trong một lượt thì lần 2 tính từ đâu? → Từ đơn làm việc mà lần 1 đã ghi nhận, không quay về đơn trên trang.
 
 ## 10. Đọc tiếp
 

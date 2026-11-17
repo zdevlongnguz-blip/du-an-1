@@ -55,6 +55,8 @@ flowchart TB
 | R19 | Chèn câu lệnh qua ghi chú đơn nháp gắn sau câu khách | Gửi `sku` dạng câu lệnh để lọt vào ghi chú | Ghi chú dùng chung dữ liệu đã qua `describeDraftItems` (SKU, tên từ DB, số lượng ép `int`) | Chuỗi lạ bị loại như R16 |
 | R20 | AI gửi lệnh lạ hoặc cộng ra số khổng lồ | `op: "double"`, `add 95` khi đã có 5 | Allowlist `add`/`set`/`subtract`/`remove`, tối đa 20 lệnh; tổng sau khi áp lệnh vẫn phải ≤ 99 và ≤ tồn kho | Tool trả lỗi cho AI, không mở trang |
 | R21 | Giả số lượng trên trang để tool cộng sai | Sửa `checkout_draft.items[].quantity` | Số trên trang chỉ là gốc để cộng của chính khách đó; vẫn giới hạn 1-99, kiểm tra kho; khách vẫn phải bấm xác nhận và BE kiểm tra lại lúc tạo đơn | Không lợi dụng được: chỉ ảnh hưởng đơn nháp của chính mình |
+| R22 | Chèn câu lệnh qua thông báo "món ngừng bán" | Gửi SKU lạ dạng câu lệnh trong `checkout_draft` để nó bị loại rồi được nhắc lại cho AI | Chỉ truyền **số món** bị loại (`checkout_draft_dropped`), không chép SKU client gửi vào kết quả tool | Chuỗi lạ không tới được AI (đã test Q20) |
+| R23 | Đơn làm việc lẫn giữa các khách | Một khách thấy món của khách khác | `$workingDraft` nằm trong instance tool, `ChatController` tạo tool mới mỗi request | Chỉ sống trong một lượt của một khách |
 
 ## 3. Dòng chảy dữ liệu cá nhân
 

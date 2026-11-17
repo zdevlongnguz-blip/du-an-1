@@ -121,8 +121,12 @@ class ChatController
             // Danh sách món trên trang (SKU, tên lấy từ DB). Dùng cho 2 việc: mô tả trong prompt,
             // và truyền xuống tool create_order_draft làm GỐC để áp lệnh của AI (add/set/subtract/remove).
             $draftLines = [];
+            // Số món trên trang bị loại vì ngừng bán/không tìm thấy trong DB. Tool báo số này cho AI
+            // để món không biến mất âm thầm khỏi đơn mới (chỉ truyền SỐ, không truyền SKU do client gửi).
+            $draftDropped = 0;
             if ($checkoutDraft !== null) {
                 $draftLines = $this->describeDraftItems($checkoutDraft['items']);
+                $draftDropped = max(0, count($checkoutDraft['items']) - count($draftLines));
                 $systemPrompt .= GeminiPrompt::checkoutDraftContext($draftLines);
             }
 
@@ -130,7 +134,7 @@ class ChatController
                 ->addTool(new GeminiToolSearchProduct())
                 // Tool giải trí: Louis hát tặng một bài, mở trang /fule-sing. Không đọc dữ liệu riêng của user.
                 ->addTool(new GeminiToolFuleSing())
-                // Tool lên đơn nháp: đọc hồ sơ của chính user đang chat (user_id trong $context, lấy từ JWT).
+                // Tool lên đơn nháp: áp lệnh của AI lên đơn trên trang, tra kho và giá (user_id trong $context, lấy từ JWT).
                 // Chỉ tạo đơn nháp cho FE hiển thị, không ghi DB; đơn thật do khách bấm xác nhận trên trang.
                 ->addTool(new GeminiToolCreateOrderDraft())
                 // Câu gửi Gemini = câu của khách + ghi chú đơn nháp (nếu có), để AI thấy số mới nhất ngay cạnh câu hỏi.
@@ -138,7 +142,7 @@ class ChatController
                 ->chat(
                     $message . GeminiPrompt::checkoutDraftReminder($draftLines),
                     $history,
-                    ['user_id' => $userId, 'checkout_draft' => $draftLines]
+                    ['user_id' => $userId, 'checkout_draft' => $draftLines, 'checkout_draft_dropped' => $draftDropped]
                 );
         } catch (Throwable $e) {
             // Ghi chi tiết vào log cho dev xem, client chỉ nhận thông báo chung
