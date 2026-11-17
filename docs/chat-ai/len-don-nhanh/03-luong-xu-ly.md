@@ -233,7 +233,7 @@ sequenceDiagram
 
 Khóa theo thứ tự `id` tăng dần ở mọi transaction để không bị deadlock (hai giao dịch chờ nhau mãi).
 
-## 9. Khách tải lại trang hoặc đăng xuất
+## 9. Khách tải lại trang, bỏ đơn nháp hoặc đăng xuất
 
 ```mermaid
 sequenceDiagram
@@ -243,10 +243,16 @@ sequenceDiagram
     participant Kho
     participant Chat
 
-    alt F5 / mở link trực tiếp
+    alt F5 khi đang có đơn nháp
         K->>Trang: tải lại /ai-checkout
-        Note over Kho: Bộ nhớ JS bị xóa → checkoutDraft = null
+        Kho->>Kho: đọc sessionStorage, userId khớp → giữ đơn nháp
+        Trang->>K: hiện lại đơn và thông tin đã sửa (không gọi lại api-profile)
+    else Mở link khi chưa có đơn nháp / đã đóng tab
         Trang->>K: màn "Chưa có đơn nháp" + nút "Trò chuyện với Louis"
+    else Bấm "Bỏ đơn nháp"
+        K->>Trang: bấm nút, chọn OK ở hộp thoại xác nhận
+        Trang->>Kho: clearCheckoutDraft() (xóa cả sessionStorage)
+        Trang->>K: toast "Đã bỏ đơn nháp." → chuyển sang trang sản phẩm
     else Đăng xuất
         K->>Chat: đăng xuất (authenticated = false)
         Chat->>Chat: forgetChat()

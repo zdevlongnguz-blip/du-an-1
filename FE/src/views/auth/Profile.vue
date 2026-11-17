@@ -226,6 +226,7 @@ const handleLogout = async () => {
 					v-model="form.phone"
 					type="tel"
 					class="auth-input"
+					maxlength="20"
 					autocomplete="tel"
 					placeholder="Ví dụ: 0901234567"
 					:aria-invalid="Boolean(errors.phone)"

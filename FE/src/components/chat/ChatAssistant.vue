@@ -82,11 +82,12 @@ async function handleClearHistory() {
 }
 
 // Gợi ý mặc định khi chưa có câu trả lời nào, hoặc khi AI không sinh gợi ý.
-// Mỗi chip ứng với một việc trợ lý làm được: hát (tool fule_sing), xem 1 sản phẩm, xem danh sách (tool search_product).
+// Mỗi chip ứng với một việc trợ lý làm được: hát (tool fule_sing), xem 1 sản phẩm (tool search_product),
+// lên đơn nháp cho 1 phiên bản cụ thể (search_product rồi create_order_draft).
 const DEFAULT_SUGGESTIONS = [
-  'Hát 1 bài',
-  'Tôi muốn xem sản phẩm "sáp Vinh Râu"',
-  'Tôi muốn xem các sản phẩm Sáp',
+  'Hát 1 bài đi anh Fule',
+  'Tôi muốn xem sản phẩm "Vinh Râu"',
+  'Tôi muốn mua sáp Hanz de Fuko phiên bản Hũ 113 gam',
 ]
 
 // computed: lấy gợi ý của câu trả lời mới nhất (AI sinh theo ngữ cảnh), không có thì dùng gợi ý mặc định.

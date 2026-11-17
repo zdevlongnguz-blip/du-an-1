@@ -56,12 +56,15 @@ Xem bảng S1-S11 ở [11-dong-bo-don-nhap.md, mục 9](11-dong-bo-don-nhap.md):
 | U2 | Tài khoản thiếu SĐT trong hồ sơ, chat mua hàng | Louis **không hỏi** SĐT; trang mở, hiệu ứng bỏ qua ô SĐT, ô viền đồng nét đứt + "Hồ sơ chưa có số điện thoại...", dòng trạng thái màu đồng; điền xong mới xác nhận được |
 | U16 | F5 trên `/ai-checkout` sau khi khách đã sửa địa chỉ | Đơn và địa chỉ đã sửa còn nguyên; không gọi lại `api-profile` |
 | U17 | Đóng tab rồi mở lại | Đơn nháp mất (sessionStorage) |
+| U18 | Bấm "Bỏ đơn nháp", chọn Hủy ở hộp thoại | Đơn nháp giữ nguyên |
+| U19 | Bấm "Bỏ đơn nháp", chọn OK | Toast "Đã bỏ đơn nháp.", về trang sản phẩm; mở lại `/ai-checkout` thấy "Chưa có đơn nháp" |
+| U20 | Chọn SePay, đơn tạo xong nhưng chuyển cổng lỗi | Nút "Bỏ đơn nháp" không còn hiện; nút chính là "Thanh toán lại" |
 | U3 | Tăng số lượng tới tồn kho | Nút + bị khóa |
 | U4 | Xóa trống tên, bấm xác nhận | Lỗi dưới ô tên, không gọi API |
 | U5 | Xác nhận COD | Đơn mới trong "Đơn hàng của tôi", tồn kho giảm đúng, giỏ hàng **không đổi** |
 | U6 | Xác nhận SePay | Chuyển sang trang SePay |
 | U7 | Đổi giá trong admin giữa lúc xem, rồi bấm xác nhận | Khối đỏ "Giá sản phẩm vừa thay đổi. Tổng mới là ..." |
-| U8 | F5 trên `/ai-checkout` | Màn "Chưa có đơn nháp" |
+| U8 | Mở `/ai-checkout` khi chưa có đơn nháp | Màn "Chưa có đơn nháp" |
 | U9 | Đăng xuất rồi đăng nhập tài khoản khác, mở `/ai-checkout` | Màn "Chưa có đơn nháp" |
 | U10 | Đang ở trang lên đơn, nhắn Louis "đổi thành 3 hũ" | Trang diễn lại với đơn mới |
 | U11 | Checkout từ **giỏ hàng** như cũ | Vẫn đặt được (kiểm tra `insertOrderRows` sau khi tách) |

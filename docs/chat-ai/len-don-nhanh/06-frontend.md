@@ -213,8 +213,15 @@ Body gửi đi chỉ có `sku` + `quantity` cho từng món, không có giá. `e
 | Đang gửi | Nút "Đang gửi đơn...", khóa |
 | Lỗi 409/422/mạng | Khối đỏ trong cột phải + toast đỏ, form giữ nguyên |
 | Đang chuyển SePay | Nút "Đang chuyển sang SePay..." |
-| SePay lỗi | Khối đỏ, nút "Thanh toán lại" |
+| SePay lỗi | Khối đỏ, nút "Thanh toán lại"; nút "Bỏ đơn nháp" bị ẩn vì đơn thật đã tạo |
 | 401 | Interceptor tự chuyển về trang đăng nhập |
+
+### 4.8. Nút "Bỏ đơn nháp"
+
+- Nằm trong cụm nút bên phải, viền và chữ đỏ (màu lỗi của dự án).
+- Bấm → hộp thoại `window.confirm()` của trình duyệt → OK thì `clearCheckoutDraft()` (xóa cả sessionStorage), toast "Đã bỏ đơn nháp.", chuyển sang trang sản phẩm.
+- Không gọi API: đơn nháp chưa được lưu ở server.
+- Khóa khi đang gửi đơn; **ẩn** khi đơn thật đã tạo (`createdOrder`, ví dụ chuyển SePay lỗi), để không báo "đã bỏ" trong khi đơn thật vẫn tồn tại.
 
 ## 5. Route
 

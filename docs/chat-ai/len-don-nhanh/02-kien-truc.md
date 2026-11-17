@@ -88,7 +88,7 @@ Cách cũ của tool hát dùng query (`/fule-sing?song=...`) vì dữ liệu c�
 ### 4.4. Vì sao đơn nháp nằm trong `checkoutDraft.js`, không nằm trong `App.vue`
 
 - Biến khai báo ở **cấp module** (ngoài mọi hàm) của một file JS chỉ được tạo **một lần**, mọi nơi import dùng chung. Khung chat ghi vào, trang lên đơn đọc ra, không cần truyền qua `App.vue`.
-- Về thời gian sống, hai cách như nhau (mất khi F5). Khác ở chỗ: để trong `App.vue` phải truyền xuống qua `provide`/props, phải sửa file dùng chung, và trái quy định "không nhồi logic màn hình vào `App.vue`".
+- Về thời gian sống, hai cách như nhau (cùng đọc lại từ sessionStorage khi F5). Khác ở chỗ: để trong `App.vue` phải truyền xuống qua `provide`/props, phải sửa file dùng chung, và trái quy định "không nhồi logic màn hình vào `App.vue`".
 - Tách file riêng (không để trong `chatAssistant.js`) để **mỗi file một việc**: người mới mở `checkoutDraft.js` là biết đơn nháp nằm đâu, ai ghi, ai xóa.
 
 ### 4.5. Vì sao thông tin giao hàng do FE tự lấy, tách hẳn khỏi tool

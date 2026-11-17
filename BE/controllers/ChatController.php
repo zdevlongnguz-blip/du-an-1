@@ -111,6 +111,13 @@ class ChatController
             // để Louis lên đơn tiếp từ đúng số lượng khách đang thấy. System prompt không được lưu vào ai_messages,
             // nên đoạn này không nằm lại trong lịch sử.
             $systemPrompt = GeminiPrompt::system();
+            // Danh mục + tên sản phẩm đang bán, đọc từ DB mỗi lượt để Louis luôn biết đúng phạm vi cửa hàng.
+            // Lỗi đọc DB ở bước này không làm hỏng cả lượt chat: ghi log rồi chat tiếp với prompt gốc.
+            try {
+                $systemPrompt .= GeminiPrompt::catalogContext((new Product())->getCatalogOverview());
+            } catch (Throwable $catalogError) {
+                error_log('[ChatController] Không đọc được danh mục cho prompt: ' . $catalogError->getMessage());
+            }
             if ($checkoutDraft !== null) {
                 $systemPrompt .= GeminiPrompt::checkoutDraftContext($this->describeDraftItems($checkoutDraft['items']));
             }

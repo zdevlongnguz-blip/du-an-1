@@ -1,5 +1,3 @@
-<!-- hoang -->
-
 <?php
 
 class CategoryController

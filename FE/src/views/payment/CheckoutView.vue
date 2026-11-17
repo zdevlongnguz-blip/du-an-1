@@ -2,14 +2,13 @@
 // Trang đặt hàng: xem giỏ, nhập thông tin nhận hàng, chọn COD hoặc thanh toán online qua SePay.
 // Bố cục theo màn "Thông tin giao hàng & đặt hàng" của Stitch, dựng bằng style/breakpoint của dự án (xem trang Giỏ hàng).
 // Gọi api-cart (giỏ), api-order-checkout (tạo đơn) và api-order-payment (chuyển sang SePay khi chọn online).
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import api from '@/helpers/api/client'
 import { refreshCartCount } from '@/helpers/cart/cartCount'
 import { formatPrice } from '@/helpers/format/price'
 import { validateVietnamPhone } from '@/helpers/format/phone'
 import { startOnlinePayment } from '@/helpers/orders/orderActions'
-import { getUser } from '@/helpers/auth/session'
 import { fetchProfile } from '@/helpers/auth/profile'
 import { showToast } from '@/helpers/ui/toast'
 import OrderPanel from '@/components/orders/OrderPanel.vue'
@@ -139,42 +138,62 @@ async function submitCheckout() {
 }
 
 // Tải giỏ một lần khi người dùng mở trang đặt hàng.
-// Giá trị mà trang đã tự điền vào từng ô. Dùng để biết khách đã sửa ô hay chưa:
-// ô còn đúng giá trị tự điền (hoặc đang trống) thì được thay bằng dữ liệu mới hơn; ô khách đã sửa thì giữ nguyên.
-const autoFilled = { name: '', phone: '', address: '' }
+// true trong lúc đang tải hồ sơ: khóa 3 ô nhận hàng và nút đặt hàng để khách không nhập trước khi hồ sơ về.
+const profileLoading = ref(true)
+// true khi khách đã rời trang. Kết quả hồ sơ về muộn sẽ bị bỏ qua, để toast không bật lên ở trang khác.
+let leftPage = false
 
-// Điền thông tin nhận hàng từ một hồ sơ (name/phone/address có thể null). Chỉ ghi vào ô khách chưa tự sửa.
-// Khách vẫn sửa được các ô này; thay đổi chỉ áp dụng cho đơn hàng, không ghi ngược vào hồ sơ.
-function prefillRecipient(profile = {}) {
+// Thời gian tối đa chờ api-profile. Quá lâu thì thôi, khách tự nhập; không dùng localStorage thay thế
+// vì dữ liệu đó có thể đã cũ. Đặt ở đây thay vì sửa api client dùng chung.
+const PROFILE_TIMEOUT_MS = 5000
+
+// Điền vào các ô đang trống từ hồ sơ. Ô khách đã gõ thì giữ nguyên.
+// Thay đổi chỉ áp dụng cho đơn hàng này, không ghi ngược vào hồ sơ.
+function fillEmptyRecipient(profile = {}) {
   const fields = [
     { key: 'name', input: recipientName },
     { key: 'phone', input: recipientPhone },
     { key: 'address', input: shippingAddress },
   ]
   for (const { key, input } of fields) {
-    const untouched = input.value === '' || input.value === autoFilled[key]
-    if (untouched && profile[key]) {
+    if (input.value === '' && profile[key]) {
       input.value = profile[key]
-      autoFilled[key] = profile[key]
     }
   }
 }
 
-// Điền 2 bước: (1) lấy ngay từ localStorage (auth_user) để ô có dữ liệu tức thì;
-// (2) gọi GET api-profile lấy bản mới nhất từ server (helper cũng cập nhật lại localStorage).
-// Lỗi ở bước 2 không chặn việc đặt hàng: khách vẫn tự nhập được, nên chỉ ghi log, không hiện toast gây nhiễu.
-async function prefillRecipientFromProfile() {
-  prefillRecipient(getUser() || {})
+// Gọi GET api-profile một lần khi mở trang, có giới hạn thời gian.
+// Lỗi hoặc quá thời gian: báo nhẹ bằng toast để khách biết cần tự điền thông tin giao hàng.
+async function loadRecipientFromProfile() {
+  profileLoading.value = true
+  let timer = null
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Hết thời gian chờ hồ sơ')), PROFILE_TIMEOUT_MS)
+  })
   try {
-    prefillRecipient(await fetchProfile())
+    // API api-profile (GET, cần đăng nhập): { status, user: { name, phone, address, ... } }.
+    const profile = await Promise.race([fetchProfile(), timeout])
+    if (!leftPage) fillEmptyRecipient(profile)
   } catch (error) {
     console.error('Không tải được hồ sơ để điền sẵn thông tin giao hàng:', error)
+    // Không báo khi khách đã rời trang, hoặc khi lỗi 401: interceptor đã chuyển về trang đăng nhập,
+    // báo thêm "tự nhập thông tin" sẽ thành hai thông báo trái nhau.
+    if (!leftPage && error.response?.status !== 401) {
+      showToast('Chưa tải được thông tin hồ sơ, quý khách vui lòng tự nhập thông tin giao hàng.', 'warning')
+    }
+  } finally {
+    clearTimeout(timer)
+    // Mở khóa sau khi có hồ sơ, hoặc sau khi hết thời gian chờ / lỗi.
+    profileLoading.value = false
   }
 }
 
+// onBeforeUnmount: chạy khi khách rời trang; đánh dấu để bỏ qua kết quả hồ sơ về muộn.
+onBeforeUnmount(() => { leftPage = true })
+
 // onMounted: chạy 1 lần khi trang vừa hiện ra; điền sẵn thông tin và tải giỏ hàng song song.
 onMounted(() => {
-  prefillRecipientFromProfile()
+  loadRecipientFromProfile()
   loadCart()
 })
 </script>
@@ -238,6 +257,7 @@ onMounted(() => {
                 v-model="recipientName"
                 class="form-control"
                 :class="{ 'is-invalid': fieldErrors.recipientName }"
+                :disabled="profileLoading"
                 type="text"
                 maxlength="100"
                 autocomplete="name"
@@ -253,6 +273,7 @@ onMounted(() => {
                 v-model="recipientPhone"
                 class="form-control"
                 :class="{ 'is-invalid': fieldErrors.recipientPhone }"
+                :disabled="profileLoading"
                 type="tel"
                 maxlength="20"
                 autocomplete="tel"
@@ -271,6 +292,7 @@ onMounted(() => {
               v-model="shippingAddress"
               class="form-control"
               :class="{ 'is-invalid': fieldErrors.shippingAddress }"
+              :disabled="profileLoading"
               rows="3"
               maxlength="500"
               autocomplete="street-address"
@@ -331,7 +353,7 @@ onMounted(() => {
             <strong>{{ formatPrice(Number(cart?.total_amount || 0)) }}</strong>
           </p>
 
-          <button class="btn btn-primary w-100 checkout-submit" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem">
+          <button class="btn btn-primary w-100 checkout-submit" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem || profileLoading">
             {{ submitting ? 'Đang tạo đơn...' : paymentMethod === 'sepay' ? 'Đặt hàng và thanh toán' : 'Đặt hàng' }}
           </button>
         </OrderPanel>

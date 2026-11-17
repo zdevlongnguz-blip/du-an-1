@@ -203,6 +203,43 @@ class Product extends BaseModel
     }
 
     /**
+     * Lấy danh mục và tên sản phẩm cửa hàng đang có, để đưa vào system prompt của trợ lý AI.
+     * Chỉ tính sản phẩm còn ít nhất một phiên bản đang bán (variant_count > 0 trong v_product_catalog).
+     * Không lấy giá hay tồn kho: những thông tin đó AI vẫn phải tra bằng tool search_product để có số mới nhất.
+     *
+     * Dùng bảng categories qua JOIN thay vì model Category, vì hiện file Category.php có đoạn chữ nằm trước
+     * thẻ <?php, nạp vào sẽ in chữ đó ra đầu response JSON của API chat.
+     *
+     * @param int $maxPerCategory Số tên sản phẩm tối đa mỗi danh mục (1-50), tránh prompt quá dài
+     * @return array Danh sách ['category' => tên danh mục, 'products' => [tên sản phẩm...]], theo thứ tự id danh mục
+     */
+    public function getCatalogOverview($maxPerCategory = 30)
+    {
+        $maxPerCategory = min(50, max(1, (int)$maxPerCategory));
+
+        // LEFT JOIN: danh mục chưa có sản phẩm nào vẫn hiện (products rỗng), để AI biết danh mục đó tồn tại.
+        $sql = 'SELECT `c`.`id` AS `category_id`, `c`.`name` AS `category_name`, `v`.`name` AS `product_name`
+                FROM `categories` AS `c`
+                LEFT JOIN `v_product_catalog` AS `v` ON `v`.`category_id` = `c`.`id` AND `v`.`variant_count` > 0
+                ORDER BY `c`.`id` ASC, `v`.`name` ASC';
+        $rows = $this->pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+        // Gom theo danh mục và cắt bớt ở PHP cho dễ đọc với người mới.
+        $groups = [];
+        foreach ($rows as $row) {
+            $id = (int)$row['category_id'];
+            if (!isset($groups[$id])) {
+                $groups[$id] = ['category' => $row['category_name'], 'products' => []];
+            }
+            if ($row['product_name'] !== null && count($groups[$id]['products']) < $maxPerCategory) {
+                $groups[$id]['products'][] = $row['product_name'];
+            }
+        }
+
+        return array_values($groups);
+    }
+
+    /**
      * Lấy các biến thể ĐANG BÁN theo danh sách SKU, kèm tên và ảnh của sản phẩm cha.
      * Dùng cho tool AI create_order_draft: AI chỉ biết SKU (lấy từ search_product), server tự tra giá và tồn kho.
      * Chỉ đọc để lên đơn nháp, không khóa dòng; lúc khách xác nhận, Order::checkoutItems sẽ khóa và kiểm tra lại.

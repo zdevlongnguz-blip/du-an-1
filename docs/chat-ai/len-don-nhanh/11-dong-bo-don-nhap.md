@@ -132,7 +132,7 @@ Sinh đoạn nối vào cuối system prompt:
 Quy tắc khi có đơn nháp đang mở:
 - Đây là trạng thái MỚI NHẤT của đơn. Khi khách muốn thêm, bớt, đổi món hoặc đổi số lượng: lấy danh sách này làm gốc, KHÔNG dùng danh sách cũ trong lịch sử chat.
 - Khách muốn mua thêm món khác: giữ nguyên các món trên và thêm món mới, trừ khi khách nói rõ muốn bỏ hoặc thay món cũ.
-- Khách muốn bỏ một món: gọi create_order_draft với danh sách còn lại. Bỏ hết thì không gọi tool, nói khách chỉ cần không bấm xác nhận.
+- Khách muốn bỏ một món: gọi create_order_draft với danh sách còn lại. Bỏ hết thì không gọi tool, hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang.
 - Thông tin người nhận do website tự lo trên trang. Không hỏi thông tin cá nhân trong chat.
 - Khách chỉ hỏi thông tin (giá, còn hàng...) thì trả lời bình thường, không gọi create_order_draft.
 ```

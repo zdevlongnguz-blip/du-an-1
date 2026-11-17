@@ -16,8 +16,20 @@ class VietnamPhone
      */
     public static function normalize(string $phone = ''): ?string
     {
-        // Bỏ các ký tự người dùng hay gõ để dễ đọc: khoảng trắng (\s), dấu chấm, gạch ngang, ngoặc.
-        $digits = preg_replace('/[\s.\-()]/', '', trim($phone));
+        // Bỏ các ký tự người dùng hay gõ để dễ đọc: khoảng trắng, dấu chấm, gạch ngang, ngoặc.
+        // Khoảng trắng gồm cả loại Unicode hay dính vào khi copy số từ Zalo/web (khoảng trắng không ngắt U+00A0,
+        // khoảng trắng hẹp U+2009...). Liệt kê tường minh để khớp đúng tập mà \s của JavaScript bỏ ở FE;
+        // \s của PHP chỉ khớp khoảng trắng ASCII, nếu chỉ dùng \s thì FE nhận số còn BE trả 422.
+        // Cờ /u: đọc chuỗi theo UTF-8 để so được các ký tự Unicode ở trên.
+        $digits = preg_replace(
+            '/[\s\x{00A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}.\-()]/u',
+            '',
+            trim($phone)
+        );
+        // preg_replace trả null khi chuỗi không phải UTF-8 hợp lệ: coi như số không hợp lệ.
+        if ($digits === null) {
+            return null;
+        }
 
         // Đổi mã quốc gia về số 0 đầu: +84xxxxxxxxx hoặc 84xxxxxxxxx (11 chữ số) thành 0xxxxxxxxx.
         if (strncmp($digits, '+84', 3) === 0) {
