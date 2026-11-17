@@ -86,6 +86,37 @@ Không đổi action, method, field, response shape, yêu cầu đăng nhập ho
 - Không sửa BE dưới bất kỳ hình thức nào; nếu phát hiện lỗi contract/BE thì báo admin/owner BE kèm bằng chứng.
 - Không sửa hoặc ghi đè task brief này. Sau khi hoàn tất, ghi báo cáo thực tế vào `vibecoder/week-3/mission-completed/tuananh.md`; nếu folder chưa tồn tại trên branch thì tạo folder trước. Log gồm task/branch, file đã đổi, kết quả test của cả hai task, build/browser, lỗi còn lại và vấn đề đã báo admin. Chỉ ghi nhận điều đã kiểm chứng.
 
+## Task Bổ Sung: Gộp Trạng Thái Loading / Lỗi / Trống Thành Component
+
+Ngày giao: 17/11/2026. Đây là task riêng, không thay thế task thêm giỏ nhanh ở trên. Làm sau khi hoàn tất task product card hoặc xin admin cho phép làm song song.
+
+### Mục tiêu
+Tạo `FE/src/components/StateBlock.vue` dùng chung cho các trạng thái loading, lỗi (có nút thử lại) và trống, rồi áp dụng cho 4 trang: `OrderList.vue`, `OrderDetail.vue`, `CheckoutView.vue`, `CartView.vue`.
+
+Kế hoạch chi tiết (props, thứ tự ưu tiên, các bước, checklist): `FE/docs/ke-hoach-state-component.md`. Đọc hết file này trước khi code.
+
+### Điều kiện bắt đầu
+- Chạy SQL đầy đủ theo phần Điều Kiện Bắt Đầu ở trên trước khi code. Thiếu file SQL hoặc chạy lỗi thì dừng và báo admin.
+- Xác nhận với admin trước khi bắt đầu: 4 trang trên chưa có ai đang sửa (theo mục 10 của `FE/CLAUDE.md`). `CheckoutView.vue` và `CartView.vue` không nằm trong task product card.
+- Branch đề xuất: `feature/week3-tuananh-state-block`, tạo từ `origin/dev` mới nhất. Không dùng chung branch với task product card.
+
+### Phạm vi
+- Tạo `StateBlock.vue` theo kế hoạch, có comment tiếng Việt đầy đủ.
+- Chỉ sửa phần `<template>` và `<style scoped>` của 4 trang; giữ nguyên `<script setup>`, API call và tên biến hiện có, trừ khi cần truyền prop mới.
+- Không sửa `FE/src/helpers/api/client.js`, `router/index.js`, `App.vue`, `style.css`, `BE/`, contract hoặc schema.
+- Không đụng `ProductDetail.vue`, `HomeView.vue`, `Profile.vue`, `catalog.vue` (ngoài phạm vi).
+- Giữ nguyên nội dung thông báo tiếng Việt của từng trang.
+
+### Tiêu chí nghiệm thu
+- Lỗi API không bao giờ hiện là trạng thái trống.
+- Mỗi trang có đủ 4 trường hợp: có dữ liệu, rỗng, lỗi API (có nút thử lại và bấm lại được), loading.
+- `npm run build` trong `FE/` pass; ghi kết quả thật vào báo cáo.
+- Kiểm tra thủ công trên trình duyệt ở ~400px và desktop; ghi rõ phần nào chưa kiểm tra được.
+- `git diff`: chỉ có file trong phạm vi, không có URL cứng mới.
+
+### Báo cáo
+Ghi vào `vibecoder/week-3/mission-completed/tuananh.md` (mục riêng cho task này): file đã đổi, kết quả build, kết quả kiểm tra từng trang, việc còn lại. Chỉ ghi điều đã kiểm chứng.
+
 ## Chuẩn Bị MCP Thiết Kế Cho Task Sau
 
 - Task hiện tại không cần tham khảo Stitch/Figma; không để việc cấu hình MCP làm chậm hoặc chặn code/test.
