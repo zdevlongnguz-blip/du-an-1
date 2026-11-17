@@ -55,7 +55,7 @@ class GeminiToolSearchProduct extends GeminiTool
             'properties' => [
                 'keyword' => [
                     'type' => 'string',
-                    'description' => 'Từ khóa khách hỏi, ví dụ: sáp, gôm, dầu gội',
+                    'description' => 'Từ khóa khách hỏi, ví dụ: sáp, gel, pomade',
                 ],
             ],
             'required' => ['keyword'],

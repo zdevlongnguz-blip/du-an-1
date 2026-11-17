@@ -17,7 +17,8 @@ Mục tiêu: khách chỉ cần **nói** "lấy cho anh 2 hũ Claymation", Louis
 | 5 | Trang tự điền thông tin giao hàng từ hồ sơ (`api-profile`) hoặc giữ thông tin khách đã sửa; thiếu thì để trống, khách **tự điền trên trang** | Khách đã điền hồ sơ thì không phải gõ lại. |
 | 5b | Thông tin người nhận **tách hẳn khỏi luồng AI**: tool không đọc, không nhận, không trả; Louis không hỏi trong chat | Thông tin cá nhân không đi qua AI ở bất kỳ đường nào do hệ thống chủ động. |
 | 6 | Thông tin khách điền trên trang **chỉ dùng cho đơn này**, không ghi đè hồ sơ | Sửa hồ sơ là việc khách tự làm ở trang Hồ sơ. |
-| 7 | Đơn nháp không giữ hàng, không lưu lâu | Không làm mất hàng của khách khác; không để dữ liệu cá nhân nằm lại trên máy. |
+| 7 | Đơn nháp không giữ hàng, chỉ sống trong tab đang mở (sessionStorage) | Không làm mất hàng của khách khác; đóng tab, đăng xuất hoặc đặt xong là mất, không để dữ liệu cá nhân nằm lại lâu trên máy. |
+| 7b | Khách bỏ đơn nháp bằng nút "Bỏ đơn nháp" trên trang (có hỏi xác nhận); Louis không có tool xóa đơn nháp | Thao tác xóa dữ liệu do chính khách bấm, AI không tự xóa nhầm. |
 | 8 | Không đụng tới giỏ hàng | Giỏ có thể đang chứa món khác khách chưa muốn mua. |
 | 9 | Khách chọn phương thức thanh toán trên trang, không chọn trong chat | Nút chọn rõ ràng hơn, tránh AI hiểu nhầm. |
 | 10 | Chỉnh sửa trên trang được gửi kèm lượt chat sau | **Tăng trải nghiệm**: khách kết hợp bấm trên trang và nói với Louis mà không bên nào ghi đè công sức của bên kia. |
@@ -40,8 +41,10 @@ Mục tiêu: khách chỉ cần **nói** "lấy cho anh 2 hũ Claymation", Louis
 | UC10 | Chuyển sang SePay bị lỗi | Đơn giữ nguyên, nút đổi thành "Thanh toán lại", không tạo đơn thứ hai |
 | UC11 | Giá đổi giữa lúc xem và lúc bấm | Báo lỗi kèm tổng mới, không tạo đơn |
 | UC12 | Có người mua hết món cuối trước khi khách bấm | Báo lỗi hết hàng, không tạo đơn |
-| UC13 | Khách tải lại trang (F5) hoặc mở link trực tiếp | Trang hiện "Chưa có đơn nháp", mời trò chuyện với Louis |
-| UC14 | Khách muốn bỏ đơn nháp | Louis nói chỉ cần không bấm xác nhận |
+| UC13 | Khách tải lại trang (F5) khi đang có đơn nháp | Đơn nháp và thông tin khách đã sửa còn nguyên (sessionStorage), không gọi lại `api-profile` |
+| UC13b | Khách mở link `/ai-checkout` khi chưa có đơn nháp (hoặc đã đóng tab) | Trang hiện "Chưa có đơn nháp", mời trò chuyện với Louis |
+| UC14 | Khách muốn bỏ đơn nháp | Khách bấm "Bỏ đơn nháp" trên trang, xác nhận hộp thoại → đơn nháp bị xóa, về trang sản phẩm. Hỏi Louis thì Louis hướng dẫn bấm nút này |
+| UC14b | Đơn thật đã tạo nhưng chuyển SePay lỗi | Nút "Bỏ đơn nháp" bị ẩn (không còn đơn nháp để bỏ); khách bấm "Thanh toán lại" hoặc hủy đơn ở trang chi tiết đơn |
 | UC15 | Khách đăng xuất | Đơn nháp bị xóa khỏi bộ nhớ |
 | UC16 | Khách chỉ hỏi giá, chưa muốn mua | Louis **không** lên đơn, chỉ tra cứu |
 
@@ -79,12 +82,14 @@ stateDiagram-v2
     CoDonNhap --> CoDonNhap: Louis lên đơn nháp mới (thay đơn cũ)
     CoDonNhap --> ChuaCo: đặt hàng thành công
     CoDonNhap --> ChuaCo: đăng xuất / token hết hạn
-    CoDonNhap --> ChuaCo: tải lại trang (F5), đóng tab
+    CoDonNhap --> CoDonNhap: tải lại trang (F5), đọc lại sessionStorage
+    CoDonNhap --> ChuaCo: bấm "Bỏ đơn nháp" (có xác nhận)
+    CoDonNhap --> ChuaCo: đóng tab
     ChuaCo: Chưa có đơn nháp
     CoDonNhap: Có đơn nháp
     note right of CoDonNhap
-        Không giữ hàng, không lưu DB,
-        không lưu localStorage, không lên URL
+        Không giữ hàng, không lưu DB, không lên URL.
+        Lưu sessionStorage, gắn user ID
     end note
 ```
 

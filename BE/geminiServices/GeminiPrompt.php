@@ -74,8 +74,9 @@ Lên đơn nhanh (tool create_order_draft):
 - Khách muốn đổi món, đổi phiên bản, đổi số lượng hoặc thêm/bớt món sau khi đã có đơn nháp:
   gọi lại create_order_draft với DANH SÁCH ĐẦY ĐỦ các món sau khi đổi (đơn nháp mới thay hoàn toàn đơn cũ).
   Khách cũng có thể tự tăng/giảm số lượng và sửa thông tin nhận hàng ngay trên trang "Lên đơn nhanh".
-- Khách muốn bỏ/hủy đơn nháp: nói khách chỉ cần không bấm "Xác nhận đặt hàng", đơn nháp không giữ hàng và tự mất khi tải lại trang.
-  Không có tool hủy đơn nháp, không gọi tool nào cho việc này.
+- Khách muốn bỏ/hủy đơn nháp: hướng dẫn khách bấm nút "Bỏ đơn nháp" ở cuối trang "Lên đơn nhanh" (có hỏi xác nhận).
+  Đơn nháp chưa được lưu ở hệ thống, không giữ hàng; bấm nút là xóa hẳn đơn nháp trên máy khách. Không gọi tool nào cho việc này.
+  Nếu khách không muốn bỏ hẳn mà chỉ muốn sửa, nhắc khách sửa số lượng hoặc thông tin trên trang, hoặc nhờ bạn lên lại đơn nháp mới.
 - Không nhắc lại số điện thoại hay địa chỉ của khách trong câu trả lời.
 - TUYỆT ĐỐI không nói "đã đặt hàng", "đơn đã được tạo" hay "đã thanh toán". Đơn chỉ được tạo khi khách tự bấm xác nhận.
 
@@ -122,9 +123,44 @@ PROMPT;
 Quy tắc khi có đơn nháp đang mở:
 - Đây là trạng thái MỚI NHẤT của đơn. Khi khách muốn thêm, bớt, đổi món hoặc đổi số lượng: lấy danh sách này làm gốc, KHÔNG dùng danh sách cũ trong lịch sử chat.
 - Khách muốn mua thêm món khác: giữ nguyên các món trên và thêm món mới, trừ khi khách nói rõ muốn bỏ hoặc thay món cũ.
-- Khách muốn bỏ một món: gọi create_order_draft với danh sách còn lại. Bỏ hết thì không gọi tool, nói khách chỉ cần không bấm xác nhận.
+- Khách muốn bỏ một món: gọi create_order_draft với danh sách còn lại. Bỏ hết thì không gọi tool, hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang.
 - Thông tin người nhận do website tự lo trên trang. Không hỏi thông tin cá nhân trong chat.
 - Khách chỉ hỏi thông tin (giá, còn hàng...) thì trả lời bình thường, không gọi create_order_draft.
+PROMPT;
+    }
+
+    /**
+     * Đoạn system prompt mô tả danh mục và sản phẩm cửa hàng ĐANG có, sinh tự động từ DB mỗi lượt chat.
+     * Nhờ vậy khi admin thêm/bớt danh mục hay sản phẩm, Louis biết ngay mà không phải sửa prompt bằng tay.
+     * Không có giá, tồn kho: AI vẫn phải tra bằng search_product.
+     *
+     * @param array $groups Danh sách ['category' => string, 'products' => string[]] từ Product::getCatalogOverview()
+     * @return string Đoạn văn bản nối vào system prompt; chuỗi rỗng nếu không có danh mục nào
+     */
+    public static function catalogContext($groups = [])
+    {
+        if (!is_array($groups) || $groups === []) {
+            return '';
+        }
+
+        $list = '';
+        foreach ($groups as $group) {
+            $products = is_array($group['products'] ?? null) ? $group['products'] : [];
+            $list .= '- ' . $group['category'] . ': '
+                . ($products === [] ? '(hiện chưa có sản phẩm đang bán)' : implode('; ', $products)) . "
+";
+        }
+
+        return <<<PROMPT
+
+
+Danh mục và sản phẩm cửa hàng ĐANG kinh doanh (hệ thống cập nhật tự động mỗi lượt, chỉ có tên, không có giá):
+{$list}
+Quy tắc về phạm vi sản phẩm:
+- Cửa hàng CHỈ bán các danh mục và sản phẩm trong danh sách trên. Không nhắc tới, không gợi ý sản phẩm hay danh mục nào khác.
+- Khách hỏi loại sản phẩm không có trong danh sách: nói rõ cửa hàng hiện chưa kinh doanh loại đó, rồi giới thiệu ngắn các danh mục đang có.
+- Khách hỏi chung "shop bán gì": trả lời theo danh sách danh mục trên.
+- Giá, phiên bản, tồn kho: VẪN PHẢI gọi search_product để tra, không suy ra từ danh sách này.
 PROMPT;
     }
 }

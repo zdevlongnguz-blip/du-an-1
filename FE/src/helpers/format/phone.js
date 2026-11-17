@@ -13,8 +13,11 @@ const VN_MOBILE_PATTERN = /^0[35789][0-9]{8}$/
  * @returns {string|null} Số đã chuẩn hóa, hoặc null nếu không hợp lệ.
  */
 export function normalizeVietnamPhone(value = '') {
-  // Bỏ các ký tự người dùng hay gõ để dễ đọc: khoảng trắng (\s), dấu chấm, gạch ngang, ngoặc.
-  let digits = (value ?? '').trim().replace(/[\s.\-()]/g, '')
+  // Bỏ các ký tự người dùng hay gõ để dễ đọc: khoảng trắng, dấu chấm, gạch ngang, ngoặc.
+  // Khoảng trắng gồm cả loại Unicode hay dính vào khi copy số từ Zalo/web (U+00A0, U+2009...).
+  // Liệt kê tường minh giống hệt BE/extensions/VietnamPhone.php để hai bên luôn cho cùng kết quả.
+  let digits = (value ?? '').trim()
+    .replace(/[\s\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF.\-()]/g, '')
 
   // Đổi mã quốc gia về số 0 đầu: +84xxxxxxxxx hoặc 84xxxxxxxxx (11 chữ số) thành 0xxxxxxxxx.
   if (digits.startsWith('+84')) {

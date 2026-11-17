@@ -11,7 +11,7 @@ A: Khách nói muốn mua trong khung chat, Louis lên đơn nháp với giá, t
 A: AI có thể hiểu sai hoặc bị khách gài câu lệnh, mà tạo đơn là trừ kho ngay. Để khách bấm xác nhận thì mọi đơn do chính khách quyết định, AI làm sai tối đa là mở một trang xem trước. → [02-kien-truc.md, 4.2](02-kien-truc.md)
 
 **Q: Khách hủy đơn nháp thế nào?**
-A: Không cần làm gì: không bấm xác nhận là xong. Đơn nháp không nằm trong DB, không giữ hàng, mất khi tải lại trang hoặc đăng xuất.
+A: Bấm nút "Bỏ đơn nháp" trên trang, xác nhận hộp thoại là xong. Đơn nháp không nằm trong DB, không giữ hàng; chỉ lưu sessionStorage nên cũng tự mất khi đóng tab hoặc đăng xuất. Louis không có tool xóa đơn nháp, chỉ hướng dẫn khách bấm nút.
 
 **Q: Có ảnh hưởng giỏ hàng không?**
 A: Không. API xác nhận tạo đơn từ danh sách SKU, không đọc và không xóa giỏ.
@@ -34,7 +34,7 @@ A: Qua key `_action` trong kết quả tool. `Gemini::chat` tách key này ra tr
 A: Đơn nháp có SĐT, địa chỉ. Lên URL là lộ ở thanh địa chỉ, lịch sử, log server, header `Referer`, và khách sửa URL được. → [08-bao-mat.md, R7](08-bao-mat.md)
 
 **Q: Đơn nháp lưu ở đâu? Sao không để trong `App.vue`?**
-A: Trong một `ref` ở cấp module của `checkoutDraft.js`. File JS chỉ chạy một lần nên mọi nơi import dùng chung một biến, còn khi chuyển trang, mất khi F5. Để trong `App.vue` cũng sống y vậy, nhưng phải truyền xuống qua props/provide và sửa file dùng chung. → [02-kien-truc.md, 4.4](02-kien-truc.md)
+A: Trong một `ref` ở cấp module của `checkoutDraft.js`. File JS chỉ chạy một lần nên mọi nơi import dùng chung một biến, còn khi chuyển trang; F5 thì đọc lại từ sessionStorage (khóa theo user ID). Để trong `App.vue` cũng sống y vậy, nhưng phải truyền xuống qua props/provide và sửa file dùng chung. → [02-kien-truc.md, 4.4](02-kien-truc.md)
 
 **Q: Nếu giá đổi đúng lúc khách bấm thì sao?**
 A: FE gửi `expected_total`. BE tính lại trong transaction, lệch thì rollback và trả 409 kèm tổng mới; khách thấy giá mới trước khi bị tính tiền. → [05-api-xac-nhan.md](05-api-xac-nhan.md)

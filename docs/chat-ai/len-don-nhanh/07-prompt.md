@@ -26,7 +26,7 @@ File: `BE/geminiServices/GeminiPrompt.php`. System prompt là đoạn chỉ dẫ
 | Khách muốn | Louis làm |
 | --- | --- |
 | Đổi món, phiên bản, số lượng, thêm/bớt món | Gọi lại tool với **danh sách đầy đủ** sau khi đổi (đơn mới thay hẳn đơn cũ); nhắc khách cũng tự chỉnh được trên trang |
-| Bỏ/hủy đơn nháp | Nói chỉ cần không bấm xác nhận; đơn nháp không giữ hàng, mất khi tải lại trang. **Không** gọi tool nào |
+| Bỏ/hủy đơn nháp | Hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang (có hỏi xác nhận); đơn nháp chưa lưu ở hệ thống, không giữ hàng. **Không** gọi tool nào |
 
 ## 4. Những câu cấm nói
 
@@ -63,6 +63,27 @@ Khi FE gửi kèm `checkout_draft`, `GeminiPrompt::checkoutDraftContext()` nối
 | Chỉ hỏi thông tin thì không gọi tool | Có đơn nháp không có nghĩa là mọi câu đều là lệnh mua |
 
 Đoạn này không được lưu vào lịch sử chat. Nội dung đầy đủ: [11-dong-bo-don-nhap.md, mục 6.3](11-dong-bo-don-nhap.md).
+
+## 5c. Danh mục và sản phẩm sinh tự động từ DB
+
+Mỗi lượt chat, `ChatController` gọi `Product::getCatalogOverview()` rồi nối `GeminiPrompt::catalogContext()` vào cuối system prompt:
+
+```text
+Danh mục và sản phẩm cửa hàng ĐANG kinh doanh (hệ thống cập nhật tự động mỗi lượt, chỉ có tên, không có giá):
+- Gel, Sáp vuốt tóc: Gel Vuốt Tóc Got2b Glued Spiking Wax; Sáp Vuốt Tóc Hanz de Fuko Claymation; ...
+- Pomade: Pomade Reuzel Blue Strong Hold; ...
+```
+
+| Quy tắc | Lý do |
+| --- | --- |
+| Chỉ bán các danh mục, sản phẩm trong danh sách | Louis không bịa sản phẩm, không gợi ý loại cửa hàng không bán |
+| Khách hỏi loại không có: nói chưa kinh doanh, giới thiệu danh mục đang có | Trả lời rõ ràng thay vì gọi tool tìm vô ích |
+| Giá, phiên bản, tồn kho vẫn phải gọi `search_product` | Danh sách chỉ có tên, số liệu phải lấy mới nhất |
+
+- Chỉ tính sản phẩm còn ít nhất một phiên bản đang bán; tối đa 30 tên mỗi danh mục để prompt không quá dài.
+- Admin thêm/bớt danh mục hay sản phẩm thì Louis biết ngay ở lượt sau, không phải sửa prompt bằng tay.
+- Đọc DB lỗi thì bỏ qua đoạn này (ghi log), lượt chat vẫn chạy với prompt gốc.
+- Đoạn này nằm trong system prompt nên không lưu vào `ai_messages`.
 
 ## 6. Prompt không phải lớp bảo mật
 

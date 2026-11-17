@@ -322,6 +322,18 @@ function handleEdit() {
   openChat()
 }
 
+// Bấm "Bỏ đơn nháp": xóa đơn nháp trong trình duyệt, không đụng DB (đơn nháp chưa được lưu ở server).
+// Hỏi xác nhận bằng hộp thoại của trình duyệt trước khi xóa.
+// Khi đơn thật đã được tạo (createdOrder, ví dụ chuyển SePay lỗi) thì không còn đơn nháp để bỏ:
+// nút bị ẩn và hàm dừng ngay, tránh báo "đã bỏ" trong khi đơn thật vẫn tồn tại.
+function handleDiscard() {
+  if (createdOrder.value || submitting.value) return
+  if (!window.confirm('Bỏ đơn nháp này? Đơn chưa được đặt, Louis có thể lên lại sau.')) return
+  clearCheckoutDraft()
+  showToast('Đã bỏ đơn nháp.', 'info')
+  router.push({ name: 'catalog' })
+}
+
 // watch: Louis gửi đơn nháp mới trong lúc khách đang ở trang này (cùng route nên trang không tải lại)
 // thì diễn lại với đơn mới. Bỏ qua khi đơn nháp bị xóa (null) để trang vẫn hiển thị bản chụp.
 // watch: khách tăng/giảm số lượng hoặc sửa thông tin người nhận thì ghi lại vào đơn nháp dùng chung,
@@ -362,7 +374,7 @@ onBeforeUnmount(() => { runId++ })
       <div v-if="!draft" class="qo-card qo-empty">
         <p class="qo-empty-title">Chưa có đơn nháp nào</p>
         <p class="qo-empty-text">
-          Đơn nháp chỉ được giữ trong lúc quý ông đang dùng trang, tải lại trang sẽ mất.
+          Đơn nháp được giữ trong lúc quý ông còn mở tab này và sẽ mất khi đóng tab, đăng xuất hoặc đặt hàng xong.
           Quý ông nhắn cho Louis sản phẩm muốn mua, Louis sẽ lên đơn ngay.
         </p>
         <div class="qo-empty-actions">
@@ -425,6 +437,7 @@ onBeforeUnmount(() => { runId++ })
                   class="qo-input"
                   :class="{ 'is-filling': activeField === 'phone', 'is-invalid': fieldErrors.phone, 'is-missing': isMissing('phone') }"
                   :readonly="!editable"
+                  maxlength="20"
                   autocomplete="tel"
                   @input="clearError('phone')"
                 >
@@ -554,6 +567,8 @@ onBeforeUnmount(() => { runId++ })
                 @click="handleConfirm"
               >{{ confirmLabel }}</button>
               <button type="button" class="btn-outline-navy" :disabled="submitting" @click="handleEdit">Nhờ Louis sửa đơn</button>
+              <!-- Chỉ hiện khi đơn thật chưa được tạo; đơn đã tạo thì hủy ở trang chi tiết đơn -->
+              <button v-if="!createdOrder" type="button" class="btn-outline-danger" :disabled="submitting" @click="handleDiscard">Bỏ đơn nháp</button>
             </div>
 
             <p class="qo-note">Khi xác nhận, cửa hàng sẽ kiểm tra lại giá và tồn kho trước khi tạo đơn.</p>
@@ -1198,6 +1213,28 @@ onBeforeUnmount(() => { runId++ })
 .btn-outline-navy:hover {
   background: #131e2a;
   color: #ffffff;
+}
+
+/* Nút hành động xóa (Bỏ đơn nháp): viền và chữ đỏ theo bảng màu lỗi của dự án, nền đỏ nhạt khi rê chuột. */
+.btn-outline-danger {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #ba1a1a;
+  border-radius: 6px;
+  background: transparent;
+  color: #93000a;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-outline-danger:hover:not(:disabled) {
+  background: #fdf1f0;
+}
+
+.btn-outline-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .btn-outline-navy:disabled {
