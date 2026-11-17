@@ -14,6 +14,10 @@ session_start();
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 require_once __DIR__ . '/configs/config.php';
 require_once __DIR__ . '/configs/helper.php';
+// Ghi log mọi API (FE gửi gì, BE trả gì, thành công hay lỗi). Bắt đầu sau khi xử lý OPTIONS ở trên.
+require_once __DIR__ . '/extensions/ApiLogger.php';
+ApiLogger::start();
+register_shutdown_function([ApiLogger::class, 'finish']);
 require_once __DIR__ . '/configs/mail_helper.php';
 // require_once __DIR__ . '/extensions/VipUpload.php';
 
