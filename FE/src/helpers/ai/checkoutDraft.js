@@ -124,6 +124,20 @@ export function syncCheckoutDraft({ quantities = [], recipient = {} } = {}) {
   save()
 }
 
+// Bỏ hẳn một món khỏi đơn nháp (khách bấm nút xóa món trên trang).
+// Sửa mảng items tại chỗ (splice), không thay object, nên trang không diễn lại hiệu ứng.
+// Không cho bỏ món cuối cùng: đơn rỗng thì khách dùng nút "Bỏ đơn nháp".
+// Trả true nếu đã bỏ, false nếu không có đơn, sai vị trí hoặc chỉ còn 1 món.
+export function removeCheckoutDraftItem(index = -1) {
+  const draft = checkoutDraft.value
+  if (!draft || !Number.isInteger(index) || index < 0 || index >= draft.items.length) return false
+  if (draft.items.length <= 1) return false
+
+  draft.items.splice(index, 1)
+  save()
+  return true
+}
+
 // Lấy người nhận từ hồ sơ, chỉ MỘT LẦN cho mỗi đơn nháp.
 // Điền vào các ô đang trống; ô đã có giá trị (khách đã nhập) thì giữ nguyên.
 // Gọi api-profile lỗi thì không đánh dấu đã tải, lần mở trang sau sẽ thử lại.

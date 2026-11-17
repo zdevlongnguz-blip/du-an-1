@@ -13,7 +13,7 @@ import { validateVietnamPhone } from '@/helpers/format/phone'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
 import { startOnlinePayment } from '@/helpers/orders/orderActions'
 import { openChat } from '@/helpers/ai/chatAssistant'
-import { clearCheckoutDraft, ensureDraftRecipient, syncCheckoutDraft, useCheckoutDraft } from '@/helpers/ai/checkoutDraft'
+import { clearCheckoutDraft, ensureDraftRecipient, removeCheckoutDraftItem, syncCheckoutDraft, useCheckoutDraft } from '@/helpers/ai/checkoutDraft'
 import { showToast } from '@/helpers/ui/toast'
 
 const router = useRouter()
@@ -225,6 +225,18 @@ function changeQuantity(index, delta) {
   const item = items.value[index]
   quantities.value[index] = Math.min(Math.max(1, quantities.value[index] + delta), Math.max(1, item.stock))
   checkoutError.value = ''
+}
+
+// Bấm nút xóa của một món: bỏ hẳn món đó khỏi đơn nháp.
+// Bỏ trong đơn nháp dùng chung trước, rồi bỏ số lượng cùng vị trí, để hai mảng vẫn khớp thứ tự với nhau.
+// Lần chat sau, Louis nhận đơn không còn món này. Còn 1 món thì nút bị khóa (dùng "Bỏ đơn nháp").
+function removeItem(index) {
+  if (!editable.value || items.value.length <= 1) return
+  const name = items.value[index]?.name || 'món'
+  if (!removeCheckoutDraftItem(index)) return
+  quantities.value.splice(index, 1)
+  checkoutError.value = ''
+  showToast(`Đã bỏ ${name} khỏi đơn.`, 'info')
 }
 
 // Xóa lỗi của một ô ngay khi khách sửa ô đó.
@@ -505,6 +517,18 @@ onBeforeUnmount(() => { runId++ })
                     </div>
                     <p class="qo-line-total">{{ formatPrice(item.price * quantities[index]) }}</p>
                   </div>
+
+                  <!-- Nút bỏ hẳn món khỏi đơn; khóa khi chỉ còn 1 món (dùng "Bỏ đơn nháp" thay thế) -->
+                  <button
+                    type="button"
+                    class="qo-item-remove"
+                    :disabled="!editable || items.length <= 1"
+                    :title="items.length <= 1 ? 'Đơn còn 1 món, dùng Bỏ đơn nháp' : 'Bỏ món này'"
+                    :aria-label="`Bỏ ${item.name} khỏi đơn`"
+                    @click="removeItem(index)"
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4a1 1 0 0 1 1 1v1h3v1.5H2V4h3V3a1 1 0 0 1 1-1Zm.5 1.5V4h3v-.5h-3ZM3.5 6.5h9l-.7 7.1A1.5 1.5 0 0 1 10.3 15H5.7a1.5 1.5 0 0 1-1.5-1.4L3.5 6.5Z" fill="currentColor"/></svg>
+                  </button>
                 </li>
               </template>
             </ul>
@@ -849,6 +873,36 @@ onBeforeUnmount(() => { runId++ })
   flex-direction: column;
   align-items: flex-end;
   gap: 0.4rem;
+}
+
+/* Nút bỏ món: biểu tượng thùng rác xám, rê chuột thì đỏ theo bảng màu lỗi của dự án. */
+.qo-item-remove {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b6560;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.qo-item-remove svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.qo-item-remove:hover:not(:disabled) {
+  background: #fdf1f0;
+  color: #ba1a1a;
+}
+
+.qo-item-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .qo-stepper {
