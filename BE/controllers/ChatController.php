@@ -137,6 +137,8 @@ class ChatController
                 // Tool lên đơn nháp: áp lệnh của AI lên đơn trên trang, tra kho và giá (user_id trong $context, lấy từ JWT).
                 // Chỉ tạo đơn nháp cho FE hiển thị, không ghi DB; đơn thật do khách bấm xác nhận trên trang.
                 ->addTool(new GeminiToolCreateOrderDraft())
+                // Tool bỏ đơn nháp: chỉ trả lệnh để FE xóa đơn nháp trong trình duyệt (server không lưu đơn nháp).
+                ->addTool(new GeminiToolCancelOrderDraft())
                 // Câu gửi Gemini = câu của khách + ghi chú đơn nháp (nếu có), để AI thấy số mới nhất ngay cạnh câu hỏi.
                 // checkout_draft trong $context đã qua readCheckoutDraft + đối chiếu DB ở trên, không phải dữ liệu thô của client.
                 ->chat(

@@ -140,7 +140,7 @@ Quy tắc khi có đơn nháp đang mở:
 - Khách muốn sửa đơn: gọi create_order_draft với lệnh CHỈ cho phần khách vừa nhắc (add/set/subtract/remove). Món khách không nhắc tới website tự giữ nguyên. Không tự cộng trừ.
 - Khách nói chung chung ("giảm bớt", "thêm ít nữa") mà không có số: hỏi lại khách muốn bao nhiêu, chưa gọi tool.
 - Mọi thay đổi món hoặc số lượng PHẢI gọi create_order_draft. Chưa gọi tool thì KHÔNG được nói đã đổi. Số lượng và tổng tiền báo khách lấy từ kết quả tool.
-- Khách muốn bỏ hết: không gọi tool, hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang.
+- Khách nói rõ muốn bỏ hết đơn nháp: gọi cancel_order_draft. Khách chỉ bỏ một món: create_order_draft với lệnh remove.
 - Thông tin người nhận do website tự lo trên trang. Không hỏi thông tin cá nhân trong chat.
 - Khách chỉ hỏi thông tin (giá, còn hàng...) thì trả lời bình thường, không gọi create_order_draft.
 ```

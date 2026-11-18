@@ -26,7 +26,7 @@ File: `BE/geminiServices/GeminiPrompt.php`. System prompt là đoạn chỉ dẫ
 | Khách muốn | Louis làm |
 | --- | --- |
 | Đổi món, phiên bản, số lượng, thêm/bớt món | Gọi lại tool với **lệnh** cho đúng phần khách nói: "thêm 2 X" → `add X 2`, "X lấy 3 thôi" → `set X 3`, "bớt 1 X" → `subtract X 1`, "bỏ X" → `remove X`; đổi phiên bản → `remove` bản cũ + `add` bản mới. Món không nhắc tới server tự giữ. Nhắc khách cũng tự chỉnh được trên trang |
-| Bỏ/hủy đơn nháp | Hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang (có hỏi xác nhận); đơn nháp chưa lưu ở hệ thống, không giữ hàng. **Không** gọi tool nào |
+| Bỏ/hủy đơn nháp | Khách nói rõ → gọi `cancel_order_draft` ngay (đơn nháp chưa đặt, không giữ hàng, không cần hỏi lại). Nói mơ hồ → hỏi lại. Bỏ một món → `create_order_draft` lệnh `remove`. Hủy đơn đã đặt → không phải tool này, hướng dẫn vào trang chi tiết đơn |
 
 ## 4. Những câu cấm nói
 
@@ -39,7 +39,7 @@ File: `BE/geminiServices/GeminiPrompt.php`. System prompt là đoạn chỉ dẫ
 Cuối mỗi câu trả lời, Louis viết `[[GOI_Y: câu 1 | câu 2 | câu 3]]`; server tách ra thành nút bấm. Khách bấm thì câu đó được **gửi lại cho Louis**, nên:
 
 - Mỗi gợi ý phải là việc Louis làm được ngay: hỏi sản phẩm/phiên bản/giá/còn hàng, lên đơn nháp hoặc đổi món/số lượng, nghe hát.
-- **Cấm** gợi ý: thêm vào giỏ hàng, hủy đơn nháp, hủy đơn, thanh toán, xem đơn hàng, theo dõi giao hàng, áp mã giảm giá, đổi trả.
+- **Cấm** gợi ý: thêm vào giỏ hàng, hủy đơn hàng đã đặt, thanh toán, xem đơn hàng, theo dõi giao hàng, áp mã giảm giá, đổi trả. Gợi ý "Bỏ đơn nháp này" chỉ khi khách đang có đơn nháp.
 
 Ví dụ trong prompt:
 
@@ -60,7 +60,7 @@ Khi FE gửi kèm `checkout_draft`, `GeminiPrompt::checkoutDraftContext()` nối
 | Sửa đơn: chỉ gửi lệnh cho phần khách vừa nhắc (`add`/`set`/`subtract`/`remove`), món không nhắc tới website tự giữ, KHÔNG tự cộng trừ | AI hay lấy nhầm số gốc trong lịch sử; để server áp lệnh lên đơn trên trang (thiết kế lệnh, xem [04-tool-be.md](04-tool-be.md)) |
 | Khách nói chung chung ("giảm bớt") mà không có số: hỏi lại, chưa gọi tool | Tránh AI tự đoán số lượng |
 | Mọi thay đổi món/số lượng phải gọi tool; chưa gọi thì không được nói "đã đổi"; số lượng và tổng tiền lấy từ kết quả tool | Đã gặp lỗi: AI trả lời "đã giảm còn 14 hộp" nhưng không gọi tool, trang vẫn 15 |
-| Bỏ hết: không gọi tool, hướng dẫn khách bấm "Bỏ đơn nháp" trên trang | Không có tool hủy đơn nháp; tool cũng báo lỗi nếu lệnh làm đơn rỗng |
+| Bỏ hết: gọi `cancel_order_draft`; bỏ một món: `create_order_draft` lệnh `remove` | `create_order_draft` báo lỗi nếu lệnh làm đơn rỗng, và lỗi đó chỉ AI sang `cancel_order_draft` |
 | Thông tin người nhận do website tự lo (FE, không đi qua AI) | Không có tham số trong tool; không hỏi lại trong chat |
 | Chỉ hỏi thông tin thì không gọi tool | Có đơn nháp không có nghĩa là mọi câu đều là lệnh mua |
 
