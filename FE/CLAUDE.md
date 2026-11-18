@@ -14,6 +14,11 @@ Dự án môn học: Vue 3 + Vite + Vue Router + Axios + Bootstrap 5. Ưu tiên 
 - `FE/src/helpers/api/client.js`: giữ nguyên hoàn toàn nội dung (base URL, interceptor, xử lý 401). Chỉ import để dùng, không chỉnh, không "dọn", không refactor, kể cả khi thấy hardcode. Cần đổi thì phải có yêu cầu trực tiếp từ chủ dự án.
 - Không bắt chước cách `client.js` xác định base URL ở nơi khác. Mọi nơi khác chỉ gọi `api.get/post/...`.
 - `services/auth.js` (cách lưu token trong `localStorage`, key `auth_token`/`auth_user`): không đổi nếu task không yêu cầu trực tiếp.
+- **2 trang đặt hàng: `FE/src/views/payment/CheckoutView.vue` (đặt hàng tay) và `FE/src/views/ai/AiCheckout.vue` (đặt hàng qua trợ lý AI). TUYỆT ĐỐI KHÔNG SỬA.** (Quyết định của admin, 18/11/2026.)
+  - Không sửa vì bất kỳ lý do nào: không áp dụng `StateBlock` (mục 13), không đổi giao diện, không "dọn" hay refactor, không thêm tính năng, kể cả khi thấy code có thể viết gọn hơn.
+  - Lý do: hai trang xử lý các trạng thái nghiệp vụ do BE trả về khi đặt hàng (409 hết hàng/ngừng bán, giá đổi qua `expected_total`, thiếu kho, kẹp số lượng đơn nháp, SePay lỗi, tải lại giỏ mà vẫn giữ form khách đang điền). Bản hiện tại đã được admin kiểm thử trên trình duyệt và chạy đúng; sửa lại dễ làm hỏng các luồng này.
+  - Chỉ sửa khi **chính admin yêu cầu trực tiếp** cho hai file này. Khi đó phải kiểm thử lại trên trình duyệt trọn luồng của CẢ HAI trang (đặt thành công, COD, SePay lỗi, 409 giá đổi, thiếu kho, ngừng bán, đơn nháp AI tra lại kho) và ghi kết quả thật.
+  - Helper mà hai trang đang dùng (`helpers/ai/checkoutDraft.js`, `helpers/ai/chatAssistant.js`, `helpers/orders/orderActions.js`...) là vùng dùng chung: không đổi hành vi nếu không có task riêng được admin duyệt, và đổi thì cũng phải kiểm thử lại cả hai trang như trên.
 
 ## 3. Cấu trúc và pattern
 - `src/router/index.js` (route), `src/helpers/` (module dùng chung, chia theo nhóm `api/`, `auth/`, `ui/`, `format/`, `media/`, `debug/`), `src/views/` (trang), `src/components/` (tái sử dụng).
@@ -46,6 +51,7 @@ Dự án môn học: Vue 3 + Vite + Vue Router + Axios + Bootstrap 5. Ưu tiên 
 
 ## 6. Bao phủ đầy đủ luồng giao diện
 - Với mỗi thao tác/API được triển khai, xử lý các trạng thái phù hợp: loading, thành công, lỗi, rỗng và thử lại khi có thể. Không để lỗi bị hiểu nhầm thành dữ liệu rỗng hoặc báo thành công giả.
+- Trạng thái đang tải / lỗi / rỗng khi **tải dữ liệu để hiển thị** phải dùng component chung `StateBlock` (mục 13), không tự viết khối riêng. Ngoại lệ: 2 trang đặt hàng (mục 2), không được sửa.
 - Mọi thao tác gửi form/thay đổi dữ liệu cần có thông báo thành công/lỗi bằng `services/toast.js`; khóa nút trong lúc request để tránh gửi lặp.
 - Form phải validate ở FE và hiện lỗi thân thiện ngay dưới từng trường liên quan; xóa/cập nhật lỗi trường khi người dùng sửa dữ liệu.
 - Lỗi validation trả về từ BE hiển thị bằng thông báo chung lấy từ `err.response?.data?.message`, không cần ánh xạ thành lỗi từng trường. Không coi validation FE là thay thế cho kiểm tra của BE.
@@ -149,3 +155,26 @@ Phát hiện thêm vấn đề tương tự: báo lại cho người dùng trong
 - Sửa file dùng chung (`style.css`, `App.vue`, `router/index.js`) cần xác nhận của người phụ trách trước.
 - Thiết kế cần logic/API mới (ví dụ bộ lọc giá, mã giảm giá, theo dõi hành trình): liệt kê để người dùng quyết định, không tự thêm.
 - Giữ đủ trạng thái loading / rỗng / lỗi và nút thử lại. Chữ hiển thị giữ theo ngôn ngữ hiện có của trang.
+
+## 13. Trạng thái tải dữ liệu dùng chung (`StateBlock`)
+Quyết định của admin (18/11/2026): mọi trạng thái đang tải / lỗi / rỗng khi tải dữ liệu để hiển thị đều dùng một component chung, để giao diện đồng bộ và lỗi API không bao giờ bị hiện thành "rỗng".
+
+- Component: `FE/src/components/StateBlock.vue`. Tài liệu chi tiết: `FE/docs/ke-hoach-state-component.md`.
+  - Props: `loading`, `error` (chuỗi, rỗng = không lỗi), `empty`, `loadingText`, `emptyText`, `onRetry` (hàm; có thì hiện nút "Thử lại").
+  - Thứ tự ưu tiên cố định: đang tải → lỗi → rỗng → nội dung (slot mặc định). Slot `empty-action` cho nút/link dưới thông báo rỗng (ví dụ "Xem sản phẩm").
+  - Giao diện theo Stitch (mục 12), đã có sẵn trong component; trang không ghi đè style của nó.
+- **Bắt buộc dùng cho:**
+  - Mọi trang FE **mới**, và mọi khối mới trong trang có tải dữ liệu từ API.
+  - Các trang FE **cũ** khi có task sửa phần tải hoặc hiển thị dữ liệu của trang đó: `HomeView.vue`, `products/catalog.vue`, `products/ProductDetail.vue`, `auth/Profile.vue`... Khi sửa thì thay khối loading/lỗi/rỗng tự viết bằng `StateBlock`; không tự đi sửa trang cũ khi task không liên quan.
+  - Đang dùng: `orders/OrderList.vue`, `orders/OrderDetail.vue`, `cart/CartView.vue`. Đây là mẫu tham khảo.
+- **Không dùng cho:**
+  - **2 trang đặt hàng** `payment/CheckoutView.vue` và `ai/AiCheckout.vue`: tuyệt đối không sửa (mục 2).
+  - Trạng thái của form: nút gửi đang xử lý, lỗi từng ô nhập (các trang đăng nhập, đăng ký, đổi mật khẩu...). Giữ cách làm ở mục 6.
+- **Cách dùng đúng:**
+  - Truyền `:on-retry` bằng hàm tải lại; cần tham số thì bọc lại: `:on-retry="() => loadOrders(pagination.current_page)"`.
+  - Lỗi không thể thử lại (ví dụ 404 không tìm thấy) thì không truyền `onRetry` (xem `OrderDetail.vue`).
+  - Giữ nguyên chữ thông báo tiếng Việt của trang qua `loading-text`, `empty-text`.
+  - Có comment HTML trên khối `StateBlock` nói trang đang xử lý những trạng thái nào (mục 8).
+  - StateBlock ẩn toàn bộ nội dung khi đang tải hoặc lỗi. **Không bọc form khách đang điền** trong StateBlock nếu dữ liệu có thể tải lại trong lúc khách đang điền (form sẽ biến mất rồi hiện lại).
+- Cần kiểu hiển thị mà `StateBlock` chưa có (ví dụ khung xương dạng lưới ở catalog, khối nhỏ trong trang như bình luận): hỏi admin trước. Không tự viết khối riêng, không tự sửa `StateBlock.vue`.
+- `StateBlock.vue` là vùng dùng chung (mục 1): sửa phải có admin xác nhận, và kiểm thử lại các trang đang dùng nó.

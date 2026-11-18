@@ -16,6 +16,7 @@ Dự án môn học: Vue 3 + Vite + Vue Router + Axios + Bootstrap 5. Ưu tiên 
 - `FE/src/helpers/api/client.js`: giữ nguyên hoàn toàn nội dung (base URL, interceptor, xử lý 401). Chỉ import để dùng, không chỉnh, không "dọn", không refactor, kể cả khi thấy hardcode. Cần đổi thì phải có yêu cầu trực tiếp từ chủ dự án.
 - Không bắt chước cách `api.js` xác định base URL ở nơi khác. Mọi nơi khác chỉ gọi `api.get/post/...`.
 - `services/auth.js` (cách lưu token trong `localStorage`, key `auth_token`/`auth_user`): không đổi nếu task không yêu cầu trực tiếp.
+- **2 trang đặt hàng `FE/src/views/payment/CheckoutView.vue` (đặt tay) và `FE/src/views/ai/AiCheckout.vue` (đặt qua AI): TUYỆT ĐỐI KHÔNG SỬA** (quyết định của admin, 18/11/2026). Không áp dụng `StateBlock`, không đổi giao diện, không refactor, không thêm tính năng. Hai trang xử lý trạng thái nghiệp vụ do BE trả về (409 hết hàng, giá đổi, thiếu kho, SePay lỗi, giữ form khi tải lại giỏ) và đã được kiểm thử chạy đúng. Chỉ sửa khi chính admin yêu cầu trực tiếp; khi đó kiểm thử lại trọn luồng cả hai trang trên trình duyệt. Helper hai trang đang dùng (`helpers/ai/checkoutDraft.js`, `helpers/ai/chatAssistant.js`, `helpers/orders/orderActions.js`...) không đổi hành vi nếu không có task được admin duyệt. Chi tiết: `FE/CLAUDE.md` mục 2.
 
 ## 3. Cấu trúc và pattern
 - `src/router/index.js` (route), `src/helpers/` (module dùng chung, chia theo nhóm `api/`, `auth/`, `ui/`, `format/`, `media/`, `debug/`), `src/views/` (trang), `src/components/` (tái sử dụng).
@@ -129,6 +130,7 @@ Phát hiện thêm vấn đề tương tự: báo lại, không tự sửa ngầ
 
 ## Bao Phủ Đầy Đủ Luồng Giao Diện
 - Với mỗi thao tác/API được triển khai, xử lý các trạng thái phù hợp: loading, thành công, lỗi, rỗng và thử lại khi có thể. Không để lỗi bị hiểu nhầm thành dữ liệu rỗng hoặc báo thành công giả.
+- Trạng thái đang tải / lỗi / rỗng khi **tải dữ liệu để hiển thị** phải dùng component chung `StateBlock` (xem mục "Trạng Thái Tải Dữ Liệu Dùng Chung" bên dưới). Ngoại lệ: 2 trang đặt hàng, không được sửa.
 - Mọi thao tác gửi form/thay đổi dữ liệu cần có thông báo thành công/lỗi bằng `services/toast.js`; khóa nút trong lúc request để tránh gửi lặp.
 - Form phải validate ở FE và hiện lỗi thân thiện ngay dưới từng trường liên quan; xóa/cập nhật lỗi trường khi người dùng sửa dữ liệu.
 - Lỗi validation trả về từ BE hiển thị bằng thông báo chung lấy từ `err.response?.data?.message`, không cần ánh xạ thành lỗi từng trường. Không coi validation FE là thay thế cho kiểm tra của BE.
@@ -139,3 +141,13 @@ Phát hiện thêm vấn đề tương tự: báo lại, không tự sửa ngầ
 - Nếu không có file SQL đầy đủ, thiếu schema/dữ liệu cần thiết hoặc chạy thất bại: dừng phần tích hợp và báo admin để xin file đầy đủ; không tự tạo/chỉnh SQL hay sửa BE để khắc phục.
 - Chỉ chạy SQL trên database local/dev được chỉ định; không chạy script có nguy cơ xóa dữ liệu trên môi trường dùng chung/production.
 - FE chỉ được đọc/đối chiếu BE contract. Không sửa `BE/`, schema, migration hoặc endpoint nếu task chỉ giao phạm vi FE; khi thấy lỗi BE, báo owner kèm request/response thực tế.
+
+## Trạng Thái Tải Dữ Liệu Dùng Chung (`StateBlock`)
+Quyết định của admin (18/11/2026). Bản gốc và chi tiết: `FE/CLAUDE.md` mục 13; tài liệu component: `FE/docs/ke-hoach-state-component.md`.
+
+- Component `FE/src/components/StateBlock.vue`: props `loading`, `error`, `empty`, `loadingText`, `emptyText`, `onRetry`; thứ tự đang tải → lỗi → rỗng → nội dung; slot `empty-action`; giao diện theo Stitch, trang không ghi đè style.
+- **Bắt buộc dùng** cho mọi trang FE mới, khối mới có tải dữ liệu, và trang FE cũ khi có task sửa phần tải/hiển thị dữ liệu của trang đó (`HomeView.vue`, `products/catalog.vue`, `products/ProductDetail.vue`, `auth/Profile.vue`...). Không tự viết khối loading/lỗi/rỗng riêng. Mẫu: `orders/OrderList.vue`, `orders/OrderDetail.vue`, `cart/CartView.vue`.
+- **Không dùng** cho 2 trang đặt hàng (`payment/CheckoutView.vue`, `ai/AiCheckout.vue`, tuyệt đối không sửa) và cho trạng thái của form (nút gửi, lỗi từng ô).
+- `:on-retry` truyền hàm (cần tham số thì bọc `() => ...`); lỗi không thử lại được (404) thì không truyền. Giữ chữ thông báo tiếng Việt qua `loading-text`, `empty-text`. Có comment HTML trên khối `StateBlock`.
+- Không bọc form khách đang điền trong `StateBlock` nếu dữ liệu có thể tải lại lúc khách đang điền.
+- Cần kiểu hiển thị `StateBlock` chưa có (khung xương, khối nhỏ trong trang): hỏi admin trước. Sửa `StateBlock.vue` là vùng dùng chung, cần admin xác nhận và kiểm thử lại các trang đang dùng.
