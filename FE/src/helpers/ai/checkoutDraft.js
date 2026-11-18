@@ -87,6 +87,18 @@ function normalizeItem(item) {
   }
 }
 
+// true khi Louis vừa gửi đơn nháp mới mà trang /ai-checkout chưa hiển thị. Chỉ nằm trong bộ nhớ (không lưu
+// sessionStorage), nên F5 hoặc mở lại đơn cũ thì là false: trang hiện ngay, không diễn lại hiệu ứng.
+let pendingIntro = false
+
+// Trang /ai-checkout gọi khi bắt đầu hiển thị một đơn: trả true nếu nên diễn hiệu ứng, đồng thời xóa cờ
+// (chỉ diễn MỘT lần cho mỗi đơn Louis gửi).
+export function consumeDraftIntro() {
+  const value = pendingIntro
+  pendingIntro = false
+  return value
+}
+
 // Lưu đơn nháp mới từ Louis. Chỉ thay danh sách món; người nhận và trạng thái hồ sơ được giữ nguyên.
 // Trả true nếu hợp lệ; false nếu sai định dạng (giữ đơn cũ).
 export function setCheckoutDraft(draft) {
@@ -97,6 +109,8 @@ export function setCheckoutDraft(draft) {
   if (items.includes(null)) return false
 
   const previous = checkoutDraft.value
+  // Đơn vừa được Louis gửi tới: lần hiển thị tới trên trang /ai-checkout sẽ diễn hiệu ứng "Louis lên đơn".
+  pendingIntro = true
   checkoutDraft.value = {
     items,
     recipient: previous ? previous.recipient : { name: '', phone: '', address: '' },
@@ -255,7 +269,18 @@ export function clearCheckoutDraft() {
   save()
 }
 
-// Dùng trong component: lấy ref của đơn nháp (chỉ đọc qua .value).
+// Số lần đơn nháp bị khách hoặc Louis CHỦ ĐỘNG bỏ (khác với xóa sau khi đặt hàng thành công).
+// Trang /ai-checkout theo dõi số này để về màn "chưa có đơn nháp". Khi đặt hàng thành công thì trang
+// vẫn cần giữ bản chụp đơn để hiển thị, nên không thể chỉ dựa vào việc checkoutDraft thành null.
+const discardCount = ref(0)
+
+// Bỏ hẳn đơn nháp theo yêu cầu (Louis gọi tool cancel_order_draft, BE trả lệnh 'checkout-draft-clear').
+export function discardCheckoutDraft() {
+  clearCheckoutDraft()
+  discardCount.value += 1
+}
+
+// Dùng trong component: lấy ref của đơn nháp và số lần bị bỏ (chỉ đọc qua .value).
 export function useCheckoutDraft() {
-  return { checkoutDraft }
+  return { checkoutDraft, discardCount }
 }

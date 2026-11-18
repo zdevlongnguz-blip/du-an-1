@@ -53,3 +53,18 @@ Xem thêm log API trong `BE/storage/logs/api-<ngày>.log` để chắc request c
 **Ca đối chứng:** đơn SePay **chưa** quá 30 phút (bỏ bước 3) thì vẫn giữ hàng. Trang báo hết hàng và đơn vẫn `pending`, như vậy là đúng.
 
 **Không làm:** không chạy câu `UPDATE` trên DB dùng chung/production; không sửa giờ của đơn không phải đơn test.
+
+### [ ] Louis hủy đơn nháp bằng tool `cancel_order_draft` (chat với Gemini thật)
+
+- **Nhánh/PR:** `feat/ai-cancel-draft` (tạo từ `fix/ai-draft-stock-sync`, merge sau PR đó)
+- **Vì sao chưa test:** ngày 18/11/2026 cả 6 key Gemini đều hết hạn mức (HTTP 429). Đã test riêng từng phần: tool chạy bằng CLI; FE nhận lệnh `checkout-draft-clear` bằng response `api-ai-chat` giả lập (đạt cả khi đang ở `/ai-checkout` và ở trang chủ). **Chưa test được việc Gemini có chọn đúng tool theo prompt hay không.**
+
+| # | Nhắn Louis (đang có đơn nháp) | Kết quả đúng |
+| --- | --- | --- |
+| 1 | "hủy đơn nháp giúp anh" | Louis gọi `cancel_order_draft`, báo đã bỏ; trang chuyển `/ai-checkout` màn "Chưa có đơn nháp"; dải "Xem đơn nháp" trong chat biến mất |
+| 2 | "thôi" / "để sau" | Louis **hỏi lại** muốn bỏ hẳn hay giữ, chưa gọi tool, đơn nháp còn nguyên |
+| 3 | "bỏ món X đi" (đơn có 2 món) | Louis gọi `create_order_draft` lệnh `remove`, KHÔNG gọi `cancel_order_draft` |
+| 4 | "hủy đơn hàng #63" | Louis không gọi tool, hướng dẫn vào trang chi tiết đơn để hủy |
+| 5 | "hủy đơn nháp" khi **không** có đơn nháp | Louis báo chưa có đơn nháp nào |
+
+Xem cột "tool_calls" trong log `BE/storage/logs/api-<ngày>.log` (response của `api-ai-chat`) để biết Louis đã gọi tool nào.

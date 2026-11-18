@@ -360,8 +360,8 @@ class GeminiToolCreateOrderDraft extends GeminiTool
         }
 
         if ($draft === []) {
-            throw new InvalidArgumentException('Sau khi áp lệnh, đơn không còn món nào. Không gọi lại tool; '
-                . 'hướng dẫn khách bấm nút "Bỏ đơn nháp" trên trang nếu muốn bỏ hẳn.');
+            throw new InvalidArgumentException('Sau khi áp lệnh, đơn không còn món nào. Không gọi lại create_order_draft; '
+                . 'nếu khách muốn bỏ hẳn đơn nháp thì gọi cancel_order_draft.');
         }
         if (count($draft) > Order::MAX_DIRECT_ITEMS) {
             throw new InvalidArgumentException('Một đơn tối đa ' . Order::MAX_DIRECT_ITEMS . ' món.');
