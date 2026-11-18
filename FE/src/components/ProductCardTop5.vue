@@ -1,9 +1,13 @@
 <script setup>
 // Thẻ sản phẩm Top 5: mặc định hiện tên/giá, hover hoặc focus để xem đầy đủ thông tin.
 import { computed, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { formatPrice } from '@/helpers/format/price'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
+import api from '@/helpers/api/client'
+import { isAuthenticated } from '@/helpers/auth/session'
+import { saveReturnUrl } from '@/helpers/auth/returnUrl'
+import { useToast } from '@/helpers/ui/toast'
 
 const props = defineProps({
   product: {
@@ -32,6 +36,41 @@ const isOutOfStock = computed(() => {
   const stock = props.product.stock
   return stock !== null && stock !== undefined && Number.isFinite(Number(stock)) && Number(stock) <= 0
 })
+
+const cartAdding = ref(false)
+const route = useRoute()
+const router = useRouter()
+const { showToast } = useToast()
+
+// Mỗi card chỉ thêm một sản phẩm với số lượng cố định là 1.
+async function addToCart() {
+  if (cartAdding.value || isOutOfStock.value) return
+
+  // Khách chưa đăng nhập được chuyển tới đăng nhập và quay lại trang hiện tại.
+  if (!isAuthenticated()) {
+    saveReturnUrl(route.fullPath)
+    await router.push({ name: 'login' })
+    return
+  }
+
+  cartAdding.value = true
+  try {
+    const response = await api.post('/?action=api-cart-add', {
+      product_id: props.product.id,
+      quantity: 1,
+    })
+    showToast(response.data?.message || 'Đã thêm sản phẩm vào giỏ hàng.', 'success')
+  } catch (error) {
+    const status = error.response?.status
+    const message = error.response?.data?.message
+      || (status === 409
+        ? 'Sản phẩm đã hết hàng hoặc vượt quá số lượng tồn kho.'
+        : 'Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.')
+    showToast(message, 'danger')
+  } finally {
+    cartAdding.value = false
+  }
+}
 </script>
 
 <template>
@@ -105,13 +144,15 @@ const isOutOfStock = computed(() => {
           <circle cx="12" cy="12" r="3" />
         </svg>
       </RouterLink>
-      <!-- Nút thêm giỏ đang giữ giao diện, chưa nối hành vi. -->
+      <!-- Nút thêm giỏ gọi API với quantity = 1. -->
       <button
         class="top5-card-action top5-card-cart"
         type="button"
-        :disabled="isOutOfStock"
-        :aria-label="isOutOfStock ? `${product.name} đã hết hàng` : `Thêm ${product.name} vào giỏ hàng`"
-        :title="isOutOfStock ? 'Hết hàng' : 'Thêm vào giỏ'"
+        :disabled="isOutOfStock || cartAdding"
+        :aria-busy="cartAdding"
+        :aria-label="isOutOfStock ? `${product.name} đã hết hàng` : cartAdding ? `Đang thêm ${product.name} vào giỏ` : `Thêm ${product.name} vào giỏ hàng`"
+        :title="isOutOfStock ? 'Hết hàng' : cartAdding ? 'Đang thêm...' : 'Thêm vào giỏ'"
+        @click.stop.prevent="addToCart"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <circle cx="9" cy="21" r="1" />
