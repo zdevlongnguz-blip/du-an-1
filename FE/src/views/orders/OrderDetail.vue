@@ -8,6 +8,7 @@ import api from '@/helpers/api/client'
 import { formatPrice } from '@/helpers/format/price'
 import { showToast } from '@/helpers/ui/toast'
 import OrderPanel from '@/components/orders/OrderPanel.vue'
+import StateBlock from '@/components/StateBlock.vue'
 import StatusBadge from '@/components/orders/StatusBadge.vue'
 import { cancelOrder, startOnlinePayment, verifyPayment } from '@/helpers/orders/orderActions'
 import {
@@ -141,16 +142,8 @@ watch(() => route.params.id, loadInvoice)
       <RouterLink class="detail-back" to="/orders">&larr; Quay lại lịch sử đơn hàng</RouterLink>
     </nav>
 
-    <!-- Trạng thái tải. -->
-    <div v-if="loading && !order" class="text-center py-5 text-secondary" role="status">Đang tải đơn hàng...</div>
-
-    <!-- Lỗi (gồm 404 không tìm thấy) có nút thử lại. -->
-    <div v-else-if="loadError" class="alert alert-danger d-flex align-items-center justify-content-between gap-3" role="alert">
-      <span>{{ loadError }}</span>
-      <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" @click="loadInvoice">Thử lại</button>
-    </div>
-
-    <template v-else-if="order">
+    <StateBlock :loading="loading && !order" :error="loadError" :on-retry="loadInvoice">
+      <template v-if="order">
       <!-- Khối đầu: mã đơn, ngày đặt, huy hiệu trạng thái, hành động và tiến trình xử lý. -->
       <OrderPanel class="detail-hero">
         <div class="detail-hero__top">
@@ -261,7 +254,8 @@ watch(() => route.params.id, loadInvoice)
           </OrderPanel>
         </aside>
       </div>
-    </template>
+      </template>
+    </StateBlock>
   </section>
 </template>
 

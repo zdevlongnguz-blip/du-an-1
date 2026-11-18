@@ -8,6 +8,7 @@ import api from '@/helpers/api/client'
 import { formatPrice } from '@/helpers/format/price'
 import { showToast } from '@/helpers/ui/toast'
 import PaginationBar from '@/components/PaginationBar.vue'
+import StateBlock from '@/components/StateBlock.vue'
 import OrderPanel from '@/components/orders/OrderPanel.vue'
 import StatusBadge from '@/components/orders/StatusBadge.vue'
 import { cancelOrder, startOnlinePayment } from '@/helpers/orders/orderActions'
@@ -114,25 +115,20 @@ onMounted(() => loadOrders())
       </p>
     </header>
 
-    <!-- Trạng thái tải danh sách đơn. -->
-    <div v-if="loading" class="text-center py-5 text-secondary" role="status">Đang tải đơn hàng...</div>
-
-    <!-- Lỗi API có nút tải lại, không bị nhầm với danh sách rỗng. -->
-    <div v-else-if="loadError" class="alert alert-danger d-flex align-items-center justify-content-between gap-3" role="alert">
-      <span>{{ loadError }}</span>
-      <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" @click="loadOrders(pagination.current_page)">
-        Thử lại
-      </button>
-    </div>
-
-    <!-- Trạng thái rỗng khi user chưa có đơn nào. -->
-    <div v-else-if="orders.length === 0" class="text-center py-5">
-      <p class="text-secondary mb-3">Bạn chưa có đơn hàng nào.</p>
-      <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
-    </div>
+    <StateBlock
+      :loading="loading"
+      :error="loadError"
+      :empty="orders.length === 0"
+      loading-text="Đang tải đơn hàng..."
+      empty-text="Bạn chưa có đơn hàng nào."
+      :on-retry="() => loadOrders(pagination.current_page)"
+    >
+      <template #empty-action>
+        <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
+      </template>
 
     <!-- Danh sách đơn: mỗi đơn là một thẻ gồm thanh thông tin, nội dung và khối tóm tắt có hành động. -->
-    <ul v-else class="list-unstyled orders-list">
+    <ul class="list-unstyled orders-list">
       <li v-for="order in orders" :key="order.id">
         <OrderPanel tag="article" class="order-item" :class="{ 'order-item--cancelled': order.order_status === 'cancelled' }">
           <!-- Thanh thông tin: mã đơn, ngày đặt và các huy hiệu trạng thái. -->
@@ -196,6 +192,8 @@ onMounted(() => loadOrders())
         </OrderPanel>
       </li>
     </ul>
+
+    </StateBlock>
 
     <!-- Phân trang chỉ hiện khi có nhiều hơn một trang. -->
     <PaginationBar

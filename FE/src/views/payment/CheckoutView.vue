@@ -12,6 +12,7 @@ import { startOnlinePayment } from '@/helpers/orders/orderActions'
 import { fetchProfile } from '@/helpers/auth/profile'
 import { showToast } from '@/helpers/ui/toast'
 import OrderPanel from '@/components/orders/OrderPanel.vue'
+import StateBlock from '@/components/StateBlock.vue'
 
 const router = useRouter()
 
@@ -229,22 +230,7 @@ onMounted(() => {
       <p class="checkout-subtitle">Vui lòng cung cấp thông tin chính xác để cửa hàng chuẩn bị và giao hàng đến tận tay bạn.</p>
     </header>
 
-    <!-- Trạng thái tải giỏ hàng. -->
-    <div v-if="loadingCart" class="text-center py-5 text-secondary" role="status">Đang tải giỏ hàng...</div>
-
-    <!-- Lỗi API có nút thử lại, không bị nhầm với giỏ trống. -->
-    <div v-else-if="cartError" class="alert alert-danger d-flex align-items-center justify-content-between gap-3" role="alert">
-      <span>{{ cartError }}</span>
-      <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" @click="loadCart">Thử lại</button>
-    </div>
-
-    <!-- Giỏ trống có liên kết quay lại danh sách sản phẩm. -->
-    <div v-else-if="cartItems.length === 0 && !createdOrder" class="text-center py-5">
-      <p class="text-secondary mb-3">Giỏ hàng của bạn đang trống.</p>
-      <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
-    </div>
-
-    <!-- Lỗi chung. Với đơn online đã tạo nhưng chưa chuyển được sang SePay: cho thử lại, hoặc để thanh toán sau. -->
+    <!-- Lỗi thanh toán có luồng thử lại riêng, không đưa vào StateBlock. -->
     <div v-if="checkoutError" class="alert alert-danger" role="alert">
       <p class="mb-2">{{ checkoutError }}</p>
       <div v-if="createdOrder?.paymentMethod === 'sepay'" class="d-flex flex-wrap gap-2">
@@ -256,6 +242,18 @@ onMounted(() => {
         </RouterLink>
       </div>
     </div>
+
+    <StateBlock
+      :loading="loadingCart"
+      :error="cartError"
+      :empty="cartItems.length === 0 && !createdOrder"
+      loading-text="Đang tải giỏ hàng..."
+      empty-text="Giỏ hàng của bạn đang trống."
+      :on-retry="loadCart"
+    >
+      <template #empty-action>
+        <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
+      </template>
 
     <!-- Form đặt hàng chỉ hiện khi còn item trong giỏ và chưa tạo đơn thành công. -->
     <form v-if="cartItems.length > 0 && !createdOrder" class="row g-4" novalidate @submit.prevent="submitCheckout">
@@ -378,6 +376,7 @@ onMounted(() => {
         </OrderPanel>
       </aside>
     </form>
+    </StateBlock>
   </section>
 </template>
 

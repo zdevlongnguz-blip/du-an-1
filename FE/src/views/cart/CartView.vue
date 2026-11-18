@@ -8,6 +8,7 @@ import { useToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
 import { setCartCountFromItems } from '@/helpers/cart/cartCount'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
+import StateBlock from '@/components/StateBlock.vue'
 
 const { showToast } = useToast()
 
@@ -147,23 +148,21 @@ onMounted(() => fetchCart())
       </div>
     </header>
 
-    <!-- Đang tải giỏ hàng. -->
-    <div v-if="loading" class="cart-state" role="status">Đang tải giỏ hàng...</div>
-
-    <!-- Lỗi tải giỏ: hiện thông báo thật và nút thử lại. -->
-    <div v-else-if="loadError" class="cart-state cart-state--error" role="alert">
-      <p>{{ loadError }}</p>
-      <button type="button" class="cart-btn cart-btn--outline" @click="fetchCart()">Thử lại</button>
-    </div>
-
-    <!-- Giỏ trống: thẻ giữa trang có nút xem sản phẩm. -->
-    <div v-else-if="!hasItems" class="cart-empty">
-      <p class="cart-empty-text">Giỏ hàng của bạn đang trống.</p>
-      <RouterLink class="cart-btn cart-btn--primary" to="/catalog">Xem sản phẩm</RouterLink>
-    </div>
+    <StateBlock
+      class="cart-state-block"
+      :loading="loading"
+      :error="loadError"
+      :empty="!hasItems"
+      loading-text="Đang tải giỏ hàng..."
+      empty-text="Giỏ hàng của bạn đang trống."
+      :on-retry="() => fetchCart()"
+    >
+      <template #empty-action>
+        <RouterLink class="cart-btn cart-btn--primary" to="/catalog">Xem sản phẩm</RouterLink>
+      </template>
 
     <!-- Có hàng: danh sách bên trái (8 cột), tóm tắt bên phải (4 cột). -->
-    <div v-else class="cart-layout">
+    <div class="cart-layout">
       <section class="cart-list" aria-label="Danh sách sản phẩm trong giỏ">
         <!-- Hàng tiêu đề cột, chỉ hiện trên màn hình rộng. -->
         <div class="cart-list-head" aria-hidden="true">
@@ -273,10 +272,33 @@ onMounted(() => fetchCart())
         <button v-else type="button" class="cart-btn cart-btn--primary cart-btn--block" disabled>Thanh toán</button>
       </aside>
     </div>
+    </StateBlock>
   </section>
 </template>
 
 <style scoped>
+.cart-page :deep(.cart-state-block .state-block__loading),
+.cart-page :deep(.cart-state-block .state-block__error),
+.cart-page :deep(.cart-state-block .state-block__empty) {
+  padding: 48px 24px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.cart-page :deep(.cart-state-block .state-block__error) {
+  border-color: #ba1a1a;
+  background: #fdf1f0;
+  color: #93000a;
+}
+
+.cart-page :deep(.cart-state-block .state-block__empty) {
+  max-width: 640px;
+  margin: 0 auto;
+  box-shadow: 0 4px 16px rgba(28, 42, 58, 0.06);
+}
+
 /* Trang giỏ hàng theo Stitch: thẻ trắng viền kem trên nền kem, giá màu đồng, nút đồng/viền navy. */
 .cart-page {
   display: grid;
@@ -367,53 +389,6 @@ onMounted(() => fetchCart())
   outline-offset: 2px;
 }
 
-.cart-state {
-  padding: 48px 24px;
-  border: 1px solid #e6e0d4;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #6b6560;
-  text-align: center;
-}
-
-.cart-state p {
-  margin: 0 0 14px;
-}
-
-.cart-state--error {
-  border-color: #ba1a1a;
-  background: #fdf1f0;
-  color: #93000a;
-}
-
-.cart-empty {
-  display: grid;
-  max-width: 640px;
-  justify-items: center;
-  gap: 10px;
-  margin: 0 auto;
-  padding: 48px 28px;
-  border: 1px solid #e6e0d4;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 4px 16px rgba(28, 42, 58, 0.06);
-  text-align: center;
-}
-
-.cart-empty h2 {
-  margin: 0;
-  color: #1f1f1f;
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.cart-empty-text {
-  max-width: 420px;
-  margin: 0 0 8px;
-  color: #6b6560;
-}
 
 .cart-layout {
   display: grid;
