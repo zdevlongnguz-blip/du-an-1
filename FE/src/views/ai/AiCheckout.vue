@@ -13,7 +13,14 @@ import { validateVietnamPhone } from '@/helpers/format/phone'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
 import { startOnlinePayment } from '@/helpers/orders/orderActions'
 import { openChat } from '@/helpers/ai/chatAssistant'
-import { clearCheckoutDraft, ensureDraftRecipient, removeCheckoutDraftItem, syncCheckoutDraft, useCheckoutDraft } from '@/helpers/ai/checkoutDraft'
+import {
+  clearCheckoutDraft,
+  ensureDraftRecipient,
+  refreshCheckoutDraftStock,
+  removeCheckoutDraftItem,
+  syncCheckoutDraft,
+  useCheckoutDraft,
+} from '@/helpers/ai/checkoutDraft'
 import { showToast } from '@/helpers/ui/toast'
 
 const router = useRouter()
@@ -61,6 +68,8 @@ const submitting = ref(false)
 const checkoutError = ref('')
 // Đơn đã tạo nhưng chuyển sang SePay thất bại: giữ ID để khách bấm thanh toán lại mà không tạo đơn lần nữa.
 const createdOrder = ref(null)
+// Các thay đổi vừa áp theo kho/giá mới nhất (kẹp số lượng, đổi giá, món hết hàng), mỗi phần tử là một câu để hiện cho khách.
+const draftChanges = ref([])
 
 // computed: chỉ cho sửa khi hiệu ứng đã xong, không đang gửi và chưa tạo đơn.
 const editable = computed(() => phase.value === 'ready' && !submitting.value && !createdOrder.value)
@@ -74,8 +83,18 @@ const savings = computed(() => items.value.reduce((sum, item, index) => (
 ), 0))
 // computed: tổng số sản phẩm (cộng số lượng các món).
 const totalQuantity = computed(() => quantities.value.reduce((sum, qty) => sum + qty, 0))
+// computed: true nếu có món đã hết hàng/ngừng bán (đánh dấu sau khi tra lại kho). Khi đó khóa nút đặt hàng
+// vì BE chắc chắn từ chối đơn (409); khách cần bỏ món đó trước.
+const hasUnavailableItem = computed(() => items.value.some((item) => item.available === false))
 // Tổng tiền hiển thị: lúc diễn thì dùng số đang nhảy, diễn xong thì dùng số tính theo số lượng thật.
 const displayTotal = computed(() => (phase.value === 'ready' ? subtotal.value : (shownTotal.value ?? 0)))
+// "Tạm tính" là tổng theo giá niêm yết (trước giảm giá), để Tạm tính − Đã giảm = Tổng thanh toán.
+// Lúc diễn thì nhảy số cùng nhịp với tổng tiền (theo tỉ lệ số đang nhảy / số thật).
+const displayListTotal = computed(() => {
+  const listTotal = subtotal.value + savings.value
+  if (phase.value === 'ready') return listTotal
+  return subtotal.value > 0 ? Math.round(listTotal * (shownTotal.value ?? 0) / subtotal.value) : 0
+})
 // Chữ trên nút chính, đổi theo trạng thái gửi đơn.
 const confirmLabel = computed(() => {
   if (createdOrder.value) return submitting.value ? 'Đang chuyển sang SePay...' : 'Thanh toán lại'
@@ -92,6 +111,11 @@ const hasMissingInfo = computed(() => ['name', 'phone', 'address'].some(isMissin
 // computed: chữ ở dòng trạng thái dưới form.
 const statusText = computed(() => {
   if (phase.value !== 'ready') return 'Louis đang điền đơn giúp quý ông...'
+  if (hasUnavailableItem.value) {
+    return items.value.length > 1
+      ? 'Có món đã hết hàng hoặc ngừng bán, quý ông bỏ món đó khỏi đơn rồi xác nhận lại.'
+      : 'Món trong đơn đã hết hàng hoặc ngừng bán. Quý ông nhờ Louis chọn món khác hoặc bỏ đơn nháp.'
+  }
   if (hasMissingInfo.value) return 'Quý ông điền nốt các ô còn trống phía trên để hoàn tất đơn.'
   return 'Đơn đã sẵn sàng, quý ông có thể chỉnh sửa.'
 })
@@ -156,6 +180,16 @@ function resetStage(nextDraft) {
   paymentMethod.value = 'cod'
   checkoutError.value = ''
   createdOrder.value = null
+  draftChanges.value = []
+}
+
+// Tra lại kho/giá mới nhất cho đơn nháp rồi chép số lượng (có thể đã bị kẹp) sang các bộ tăng/giảm.
+// Trả mảng thay đổi; lỗi API thì ném lỗi cho nơi gọi tự quyết định báo thế nào.
+async function syncDraftWithStock() {
+  const changes = await refreshCheckoutDraftStock()
+  quantities.value = items.value.map((item) => item.quantity)
+  draftChanges.value = changes
+  return changes
 }
 
 // Chạy toàn bộ hiệu ứng cho một đơn nháp. Được gọi khi trang mở và khi Louis gửi đơn nháp mới.
@@ -165,6 +199,14 @@ async function play(nextDraft) {
   // Tải người nhận từ hồ sơ (nếu đơn chưa có) CHẠY SONG SONG với màn chuẩn bị, để không bắt khách chờ thêm.
   // Đơn nháp từ BE chỉ có món; tên, SĐT, địa chỉ do FE tự lấy (api-profile), không đi qua AI.
   const recipientTask = ensureDraftRecipient()
+  // Tra lại kho/giá mới nhất cũng CHẠY SONG SONG với màn chuẩn bị: đơn nháp lưu trong sessionStorage
+  // có thể đã cũ (khách mở tab khác mua bớt hàng, giá vừa đổi). Gom kết quả thành object để không ném lỗi giữa chừng.
+  const stockTask = refreshCheckoutDraftStock()
+    .then((changes) => ({ ok: true, changes }))
+    .catch((error) => {
+      console.error('Không tra lại được tồn kho của đơn nháp:', error)
+      return { ok: false, changes: [] }
+    })
 
   try {
     // Màn 1: gõ từng bước chuẩn bị, xong bước nào hiện dấu ✓ bước đó.
@@ -183,6 +225,17 @@ async function play(nextDraft) {
     if (id !== runId) throw CANCELLED
     if (!profileLoaded) {
       showToast('Chưa tải được hồ sơ, quý ông điền thông tin nhận hàng trên trang giúp Louis nhé.', 'warning')
+    }
+
+    // Đợi kết quả tra kho rồi chép số lượng (có thể đã bị kẹp) trước khi các món bay vào và tổng tiền nhảy số.
+    const stockResult = await stockTask
+    if (id !== runId) throw CANCELLED
+    quantities.value = nextDraft.items.map((item) => item.quantity)
+    draftChanges.value = stockResult.changes
+    if (!stockResult.ok) {
+      showToast('Chưa kiểm tra được kho mới nhất. Cửa hàng sẽ kiểm tra lại khi quý ông xác nhận.', 'warning')
+    } else if (stockResult.changes.length > 0) {
+      showToast('Kho hoặc giá vừa thay đổi, Louis đã cập nhật đơn. Quý ông xem lại giúp Louis nhé.', 'warning')
     }
 
     // Màn 2: hiện form. Louis tự điền từng ô người nhận (phần trên), ô đang điền sẽ phát sáng.
@@ -223,8 +276,11 @@ async function play(nextDraft) {
 function changeQuantity(index, delta) {
   if (!editable.value) return
   const item = items.value[index]
+  // Món đã hết hàng thì không cho đổi số lượng, khách chỉ có thể bỏ món.
+  if (item.available === false) return
   quantities.value[index] = Math.min(Math.max(1, quantities.value[index] + delta), Math.max(1, item.stock))
   checkoutError.value = ''
+  draftChanges.value = []
 }
 
 // Bấm nút xóa của một món: bỏ hẳn món đó khỏi đơn nháp.
@@ -236,6 +292,7 @@ function removeItem(index) {
   if (!removeCheckoutDraftItem(index)) return
   quantities.value.splice(index, 1)
   checkoutError.value = ''
+  draftChanges.value = []
   showToast(`Đã bỏ ${name} khỏi đơn.`, 'info')
 }
 
@@ -279,6 +336,10 @@ async function handleConfirm() {
     return
   }
   if (!editable.value) return
+  if (hasUnavailableItem.value) {
+    showToast('Có món đã hết hàng hoặc ngừng bán, quý ông bỏ món đó trước khi đặt.', 'warning')
+    return
+  }
   if (!validateForm()) {
     showToast('Quý ông kiểm tra lại thông tin người nhận giúp Louis nhé.', 'warning')
     return
@@ -318,9 +379,24 @@ async function handleConfirm() {
     showToast('Đặt hàng thành công. Quý ông sẽ thanh toán khi nhận hàng.', 'success')
     router.push({ name: 'order-detail', params: { id: orderId } })
   } catch (error) {
-    // 409: hết hàng hoặc giá vừa đổi; 422: dữ liệu sai; 401 do interceptor chuyển về trang đăng nhập.
+    // 409: hết hàng, không đủ số lượng hoặc giá vừa đổi; 422: dữ liệu sai; 401 do interceptor chuyển về trang đăng nhập.
     checkoutError.value = error.response?.data?.message || error.message || 'Không thể tạo đơn hàng.'
-    showToast(checkoutError.value, 'danger')
+    if (error.response?.status === 409) {
+      // Không cần biết lý do cụ thể: tra lại kho/giá cho cả đơn rồi cập nhật đơn nháp,
+      // để khách thấy số mới (ví dụ kho chỉ còn 13) và bấm xác nhận lại. Nút vẫn khóa trong lúc tra (submitting).
+      try {
+        const changes = await syncDraftWithStock()
+        if (changes.length > 0) {
+          checkoutError.value = 'Kho hoặc giá vừa thay đổi, Louis đã cập nhật đơn theo số mới nhất. Quý ông kiểm tra rồi bấm xác nhận lại.'
+        }
+      } catch (refreshError) {
+        // Tra kho lỗi: giữ thông báo 409 gốc của BE, khách vẫn có thể nhờ Louis lên lại đơn.
+        console.error('Không tra lại được tồn kho sau khi đặt hàng thất bại:', refreshError)
+      }
+      showToast(checkoutError.value, 'warning')
+    } else {
+      showToast(checkoutError.value, 'danger')
+    }
   } finally {
     // finally luôn chạy dù thành công hay lỗi. Riêng lúc đang chuyển SePay thành công thì trang đã rời đi.
     if (!createdOrder.value || createdOrder.value.paymentMethod !== 'sepay') {
@@ -482,14 +558,19 @@ onBeforeUnmount(() => { runId++ })
 
             <ul class="qo-items">
               <template v-for="(item, index) in items" :key="item.sku">
-                <li v-if="index < itemsVisible" class="qo-item">
+                <li v-if="index < itemsVisible" class="qo-item" :class="{ 'qo-item--off': item.available === false }">
                   <!-- Ảnh sản phẩm; chưa có ảnh thì hiện chữ cái đầu của tên -->
                   <img v-if="item.image" class="qo-item-thumb qo-item-img" :src="resolveImageUrl(item.image)" :alt="item.name">
                   <div v-else class="qo-item-thumb" aria-hidden="true">{{ item.name.charAt(0) }}</div>
 
                   <div class="qo-item-info">
                     <p class="qo-item-name">{{ item.name }}</p>
-                    <p class="qo-item-variant"><template v-if="item.variant_name">{{ item.variant_name }} · </template>còn {{ item.stock }}</p>
+                    <!-- Món đã hết hàng/ngừng bán (sau khi tra lại kho) thì báo đỏ thay cho số còn lại -->
+                    <p class="qo-item-variant">
+                      <template v-if="item.variant_name">{{ item.variant_name }} · </template>
+                      <span v-if="item.available === false" class="qo-item-off">Hết hàng hoặc ngừng bán</span>
+                      <template v-else>còn {{ item.stock }}</template>
+                    </p>
                     <!-- Giá đơn vị: khóa, chỉ hiển thị -->
                     <p class="qo-item-price">
                       <svg class="qo-lock" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2h.5A1.5 1.5 0 0 1 13.5 8.5v5A1.5 1.5 0 0 1 12 15H4a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 4 7h.5Zm1.5 0h4V5a2 2 0 1 0-4 0v2Z" fill="currentColor"/></svg>
@@ -503,14 +584,14 @@ onBeforeUnmount(() => { runId++ })
                     <div class="qo-stepper" role="group" :aria-label="`Số lượng ${item.name}`">
                       <button
                         type="button"
-                        :disabled="!editable || quantities[index] <= 1"
+                        :disabled="!editable || item.available === false || quantities[index] <= 1"
                         aria-label="Giảm số lượng"
                         @click="changeQuantity(index, -1)"
                       >−</button>
                       <span class="qo-qty" aria-live="polite">{{ quantities[index] }}</span>
                       <button
                         type="button"
-                        :disabled="!editable || quantities[index] >= item.stock"
+                        :disabled="!editable || item.available === false || quantities[index] >= item.stock"
                         aria-label="Tăng số lượng"
                         @click="changeQuantity(index, 1)"
                       >+</button>
@@ -534,7 +615,7 @@ onBeforeUnmount(() => { runId++ })
             </ul>
 
             <!-- Dòng trạng thái: đang điền / còn ô trống cần khách điền / đã sẵn sàng -->
-            <p class="qo-status" :class="{ ready: editable && !hasMissingInfo, todo: editable && hasMissingInfo }">
+            <p class="qo-status" :class="{ ready: editable && !hasMissingInfo && !hasUnavailableItem, todo: editable && (hasMissingInfo || hasUnavailableItem) }">
               <span class="qo-status-dot"></span>
               {{ statusText }}
             </p>
@@ -549,7 +630,7 @@ onBeforeUnmount(() => { runId++ })
 
             <!-- Bảng tiền -->
             <dl class="qo-sums">
-              <div><dt>Tạm tính</dt><dd>{{ formatPrice(displayTotal) }}</dd></div>
+              <div><dt>Tạm tính</dt><dd>{{ formatPrice(displayListTotal) }}</dd></div>
               <div v-if="savings > 0"><dt>Đã giảm</dt><dd class="qo-save">−{{ formatPrice(savings) }}</dd></div>
             </dl>
 
@@ -579,6 +660,14 @@ onBeforeUnmount(() => { runId++ })
               </label>
             </div>
 
+            <!-- Các thay đổi vừa áp theo kho/giá mới nhất (kẹp số lượng, đổi giá, món hết hàng) -->
+            <div v-if="draftChanges.length" class="qo-changes" role="status">
+              <p class="qo-changes-title">Louis vừa cập nhật đơn theo kho mới nhất:</p>
+              <ul>
+                <li v-for="(change, index) in draftChanges" :key="index">{{ change }}</li>
+              </ul>
+            </div>
+
             <!-- Lỗi khi gửi đơn (hết hàng, giá vừa đổi, lỗi mạng...) -->
             <p v-if="checkoutError" class="qo-alert" role="alert">{{ checkoutError }}</p>
 
@@ -587,7 +676,7 @@ onBeforeUnmount(() => { runId++ })
               <button
                 type="button"
                 class="btn-brass"
-                :disabled="createdOrder ? submitting : !editable"
+                :disabled="createdOrder ? submitting : (!editable || hasUnavailableItem)"
                 @click="handleConfirm"
               >{{ confirmLabel }}</button>
               <button type="button" class="btn-outline-navy" :disabled="submitting" @click="handleEdit">Nhờ Louis sửa đơn</button>
@@ -1305,6 +1394,38 @@ onBeforeUnmount(() => { runId++ })
   background: #fdf1f0;
   color: #93000a;
   font-size: 0.8rem;
+}
+
+/* Danh sách thay đổi sau khi tra lại kho: nền kem phụ, viền đồng, để khách để ý mà không giống lỗi. */
+.qo-changes {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #b8893e;
+  border-radius: 6px;
+  background: #efeae0;
+  color: #1c2a3a;
+  font-size: 0.8rem;
+}
+
+.qo-changes-title {
+  margin: 0 0 0.3rem;
+  font-weight: 600;
+}
+
+.qo-changes ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+/* Món đã hết hàng/ngừng bán: viền đỏ nhạt, chữ báo màu đỏ. */
+.qo-item--off {
+  border-color: rgba(186, 26, 26, 0.45);
+  background: #fdf1f0;
+}
+
+.qo-item-off {
+  color: #ba1a1a;
+  font-weight: 600;
 }
 
 /* Màn "chưa có đơn nháp". */

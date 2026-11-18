@@ -200,6 +200,89 @@ class OrderController
     }
 
     /**
+     * Tra lại giá và tồn kho hiện tại của các món trong đơn nháp AI (trang /ai-checkout).
+     * FE gọi khi mở trang và khi đặt hàng bị 409, để cập nhật đơn nháp theo kho/giá mới nhất.
+     * Chỉ đọc, không khóa dòng: lúc khách xác nhận, Order::checkoutItems vẫn khóa và kiểm tra lại.
+     *
+     * Method: GET. Query: skus[]=SKU1&skus[]=SKU2 (mảng 1-10 SKU, mỗi SKU 1-100 ký tự, không trùng).
+     * Thành công 200: { status, items: [{ sku, name, variant_name, image, price, original_price, stock, available }] }
+     *   - Mỗi SKU gửi lên có đúng một dòng, giữ thứ tự gửi lên.
+     *   - SKU không tồn tại hoặc ngừng bán: available = false, stock = 0, các trường còn lại null.
+     *   - stock kẹp tối đa Order::MAX_ITEM_QUANTITY, giống đơn nháp do trợ lý lên.
+     * Lỗi: 405 sai method, 401 thiếu/sai token (requireAuth ở router), 422 danh sách SKU không hợp lệ.
+     *
+     * @return void
+     */
+    public function draftItems(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        // PHP tự gom skus[]=A&skus[]=B thành mảng ['A', 'B']; gửi skus=A (không có []) thì là chuỗi, coi như sai.
+        $rawSkus = $_GET['skus'] ?? null;
+        if (!is_array($rawSkus) || $rawSkus === [] || count($rawSkus) > Order::MAX_DIRECT_ITEMS) {
+            response_json(['status' => 'error', 'message' => 'Danh sách món phải có từ 1 đến ' . Order::MAX_DIRECT_ITEMS . ' SKU'], 422);
+        }
+
+        $skus = [];
+        $seenSkus = [];
+        foreach ($rawSkus as $rawSku) {
+            $sku = is_string($rawSku) ? trim($rawSku) : '';
+            if ($sku === '' || strlen($sku) > 100) {
+                response_json(['status' => 'error', 'message' => 'SKU không hợp lệ'], 422);
+            }
+            // So trùng theo chữ thường vì SKU trong DB không phân biệt hoa thường.
+            $skuKey = mb_strtolower($sku, 'UTF-8');
+            if (isset($seenSkus[$skuKey])) {
+                response_json(['status' => 'error', 'message' => 'Một món hàng bị lặp trong danh sách'], 422);
+            }
+            $seenSkus[$skuKey] = true;
+            $skus[] = $sku;
+        }
+
+        // Chỉ biến thể đang bán mới có trong kết quả. Map theo SKU viết thường để khớp với SKU khách gửi.
+        $variants = [];
+        foreach ((new Product())->getActiveVariantsBySkus($skus) as $row) {
+            $variants[mb_strtolower((string) $row['sku'], 'UTF-8')] = $row;
+        }
+
+        $items = [];
+        foreach ($skus as $sku) {
+            $variant = $variants[mb_strtolower($sku, 'UTF-8')] ?? null;
+            if ($variant === null) {
+                // Không tìm thấy hoặc ngừng bán: vẫn trả một dòng để FE biết món này không đặt được.
+                $items[] = [
+                    'sku' => $sku,
+                    'name' => null,
+                    'variant_name' => null,
+                    'image' => null,
+                    'price' => null,
+                    'original_price' => null,
+                    'stock' => 0,
+                    'available' => false,
+                ];
+                continue;
+            }
+
+            $stock = max(0, (int) $variant['stock']);
+            $items[] = [
+                'sku' => $variant['sku'],
+                'name' => $variant['product_name'],
+                'variant_name' => $variant['variant_name'],
+                'image' => $variant['image'],
+                'price' => (float) $variant['final_price'],
+                // Giá niêm yết chỉ gửi khi đang giảm giá, để FE gạch giá cũ (giống tool lên đơn nháp).
+                'original_price' => $variant['sale_price'] !== null ? (float) $variant['price'] : null,
+                'stock' => min($stock, Order::MAX_ITEM_QUANTITY),
+                'available' => $stock > 0,
+            ];
+        }
+
+        response_json(['status' => 'success', 'items' => $items], 200);
+    }
+
+    /**
      * Tạo dữ liệu form thanh toán SePay cho đơn online (payment_method = sepay) còn pending/unpaid của user.
      * Lưu mã hóa đơn của lần thanh toán này để sau đó hỏi lại SePay khi người dùng quay về.
      * Sai method trả 405, đơn không tồn tại trả 404, đơn COD hoặc sai trạng thái trả 409.
