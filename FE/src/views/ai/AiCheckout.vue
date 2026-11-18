@@ -601,7 +601,11 @@ onBeforeUnmount(() => { runId++ })
                         @click="changeQuantity(index, 1)"
                       >+</button>
                     </div>
-                    <p class="qo-line-total">{{ formatPrice(item.price * quantities[index]) }}</p>
+                    <!-- Thành tiền; món hết hàng/ngừng bán thì gạch đi kèm ghi chú, vì tổng tiền đã không cộng món này -->
+                    <p class="qo-line-total" :class="{ 'qo-line-total--off': item.available === false }">
+                      {{ formatPrice(item.price * quantities[index]) }}
+                    </p>
+                    <p v-if="item.available === false" class="qo-line-note">không tính vào tổng</p>
                   </div>
 
                   <!-- Nút bỏ hẳn món khỏi đơn; khóa khi chỉ còn 1 món (dùng "Bỏ đơn nháp" thay thế) -->
@@ -1432,6 +1436,19 @@ onBeforeUnmount(() => { runId++ })
 .qo-item-off {
   color: #ba1a1a;
   font-weight: 600;
+}
+
+/* Thành tiền của món hết hàng: gạch ngang, chữ phụ, để khách hiểu tổng không cộng món này. */
+.qo-line-total--off {
+  color: #6b6560;
+  text-decoration: line-through;
+}
+
+.qo-line-note {
+  margin: 0;
+  color: #ba1a1a;
+  font-size: 0.72rem;
+  text-align: right;
 }
 
 /* Màn "chưa có đơn nháp". */
