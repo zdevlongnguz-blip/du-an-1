@@ -12,7 +12,6 @@ import { startOnlinePayment } from '@/helpers/orders/orderActions'
 import { fetchProfile } from '@/helpers/auth/profile'
 import { showToast } from '@/helpers/ui/toast'
 import OrderPanel from '@/components/orders/OrderPanel.vue'
-import StateBlock from '@/components/StateBlock.vue'
 
 const router = useRouter()
 
@@ -230,8 +229,22 @@ onMounted(() => {
       <p class="checkout-subtitle">Vui lòng cung cấp thông tin chính xác để cửa hàng chuẩn bị và giao hàng đến tận tay bạn.</p>
     </header>
 
-    <!-- Lỗi chung. Với đơn online đã tạo nhưng chưa chuyển được sang SePay: cho thử lại, hoặc để thanh toán sau.
-         Khối này có luồng thử lại riêng nên không đưa vào StateBlock. -->
+    <!-- Trạng thái tải giỏ hàng. -->
+    <div v-if="loadingCart" class="text-center py-5 text-secondary" role="status">Đang tải giỏ hàng...</div>
+
+    <!-- Lỗi API có nút thử lại, không bị nhầm với giỏ trống. -->
+    <div v-else-if="cartError" class="alert alert-danger d-flex align-items-center justify-content-between gap-3" role="alert">
+      <span>{{ cartError }}</span>
+      <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" @click="loadCart">Thử lại</button>
+    </div>
+
+    <!-- Giỏ trống có liên kết quay lại danh sách sản phẩm. -->
+    <div v-else-if="cartItems.length === 0 && !createdOrder" class="text-center py-5">
+      <p class="text-secondary mb-3">Giỏ hàng của bạn đang trống.</p>
+      <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
+    </div>
+
+    <!-- Lỗi chung. Với đơn online đã tạo nhưng chưa chuyển được sang SePay: cho thử lại, hoặc để thanh toán sau. -->
     <div v-if="checkoutError" class="alert alert-danger" role="alert">
       <p class="mb-2">{{ checkoutError }}</p>
       <div v-if="createdOrder?.paymentMethod === 'sepay'" class="d-flex flex-wrap gap-2">
@@ -244,152 +257,127 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Trạng thái giỏ hàng (StateBlock): đang tải → lỗi có nút thử lại → giỏ trống; còn hàng thì hiện form.
-         Chỉ chặn cả trang khi CHƯA có giỏ (lần tải đầu). Đã có giỏ mà tải lại (ví dụ sau khi đặt hàng bị 409)
-         thì giữ nguyên form khách đang điền, chỉ báo nhỏ phía trên form, tránh form biến mất rồi hiện lại. -->
-    <StateBlock
-      :loading="loadingCart && !cart"
-      :error="cart ? '' : cartError"
-      :empty="cartItems.length === 0 && !createdOrder"
-      loading-text="Đang tải giỏ hàng..."
-      empty-text="Giỏ hàng của bạn đang trống."
-      :on-retry="loadCart"
-    >
-      <template #empty-action>
-        <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
-      </template>
+    <!-- Form đặt hàng chỉ hiện khi còn item trong giỏ và chưa tạo đơn thành công. -->
+    <form v-if="cartItems.length > 0 && !createdOrder" class="row g-4" novalidate @submit.prevent="submitCheckout">
+      <!-- Cột trái: thông tin nhận hàng và phương thức thanh toán. -->
+      <div class="col-lg-7">
+        <OrderPanel>
+          <section class="checkout-section" aria-labelledby="checkout-recipient">
+            <h2 id="checkout-recipient" class="checkout-heading"><span class="checkout-step">1</span>Người tiếp nhận kiện hàng</h2>
+            <div class="mb-3">
+              <label class="checkout-label" for="recipient-name">Họ và tên người nhận</label>
+              <input
+                id="recipient-name"
+                v-model="recipientName"
+                class="form-control"
+                :class="{ 'is-invalid': fieldErrors.recipientName }"
+                :disabled="profileLoading"
+                type="text"
+                maxlength="100"
+                autocomplete="name"
+                placeholder="Ví dụ: Nguyễn Hoàng Nam"
+                @input="fieldErrors.recipientName = ''"
+              >
+              <div v-if="fieldErrors.recipientName" class="invalid-feedback">{{ fieldErrors.recipientName }}</div>
+            </div>
+            <div>
+              <label class="checkout-label" for="recipient-phone">Số điện thoại liên hệ</label>
+              <input
+                id="recipient-phone"
+                v-model="recipientPhone"
+                class="form-control"
+                :class="{ 'is-invalid': fieldErrors.recipientPhone }"
+                :disabled="profileLoading"
+                type="tel"
+                maxlength="20"
+                autocomplete="tel"
+                placeholder="Ví dụ: 0912 345 678"
+                @input="fieldErrors.recipientPhone = ''"
+              >
+              <div v-if="fieldErrors.recipientPhone" class="invalid-feedback">{{ fieldErrors.recipientPhone }}</div>
+            </div>
+          </section>
 
-      <!-- Đang tải lại giỏ khi đã có giỏ: báo nhỏ, không che form. -->
-      <p v-if="loadingCart && cart" class="checkout-reload" role="status">Đang cập nhật giỏ hàng...</p>
+          <section class="checkout-section" aria-labelledby="checkout-address">
+            <h2 id="checkout-address" class="checkout-heading"><span class="checkout-step">2</span>Địa chỉ nhận hàng</h2>
+            <label class="checkout-label" for="shipping-address">Địa chỉ chi tiết (số nhà, đường, phường/xã, quận/huyện, tỉnh/thành)</label>
+            <textarea
+              id="shipping-address"
+              v-model="shippingAddress"
+              class="form-control"
+              :class="{ 'is-invalid': fieldErrors.shippingAddress }"
+              :disabled="profileLoading"
+              rows="3"
+              maxlength="500"
+              autocomplete="street-address"
+              placeholder="Ví dụ: 128 Phố Cổ, P. Hàng Gai, Q. Hoàn Kiếm, Hà Nội"
+              @input="fieldErrors.shippingAddress = ''"
+            ></textarea>
+            <div v-if="fieldErrors.shippingAddress" class="invalid-feedback">{{ fieldErrors.shippingAddress }}</div>
+          </section>
 
-      <!-- Tải lại giỏ bị lỗi khi đã có giỏ: báo lỗi kèm nút thử lại, form vẫn giữ nguyên. -->
-      <div v-else-if="cartError && cart" class="alert alert-danger d-flex flex-wrap align-items-center justify-content-between gap-2" role="alert">
-        <span>{{ cartError }}</span>
-        <button type="button" class="btn btn-sm btn-outline-danger" @click="loadCart">Thử lại</button>
+          <!-- Phương thức thanh toán dạng thẻ chọn; radio ẩn nhưng vẫn dùng được bằng bàn phím. -->
+          <fieldset class="checkout-section checkout-section--last">
+            <legend class="checkout-heading"><span class="checkout-step">3</span>Phương thức thanh toán</legend>
+            <label class="pay-option" :class="{ 'is-selected': paymentMethod === 'cod' }" for="payment-cod">
+              <input id="payment-cod" v-model="paymentMethod" class="pay-option__input" type="radio" name="payment-method" value="cod">
+              <span class="pay-option__check" aria-hidden="true"></span>
+              <span class="pay-option__body">
+                <strong>Thanh toán khi nhận hàng (COD)</strong>
+                <small>Kiểm tra hàng rồi thanh toán tiền mặt cho nhân viên giao hàng.</small>
+              </span>
+            </label>
+            <label class="pay-option" :class="{ 'is-selected': paymentMethod === 'sepay' }" for="payment-sepay">
+              <input id="payment-sepay" v-model="paymentMethod" class="pay-option__input" type="radio" name="payment-method" value="sepay">
+              <span class="pay-option__check" aria-hidden="true"></span>
+              <span class="pay-option__body">
+                <strong>Thanh toán online qua SePay</strong>
+                <small>Bạn sẽ được chuyển sang cổng SePay. Đơn chưa thanh toán sau 30 phút sẽ tự hủy và hoàn lại hàng.</small>
+              </span>
+            </label>
+          </fieldset>
+
+          <RouterLink class="checkout-back" to="/cart">&larr; Quay lại giỏ hàng</RouterLink>
+        </OrderPanel>
       </div>
 
-      <!-- Form đặt hàng chỉ hiện khi còn item trong giỏ và chưa tạo đơn thành công. -->
-      <form v-if="cartItems.length > 0 && !createdOrder" class="row g-4" novalidate @submit.prevent="submitCheckout">
-        <!-- Cột trái: thông tin nhận hàng và phương thức thanh toán. -->
-        <div class="col-lg-7">
-          <OrderPanel>
-            <section class="checkout-section" aria-labelledby="checkout-recipient">
-              <h2 id="checkout-recipient" class="checkout-heading"><span class="checkout-step">1</span>Người tiếp nhận kiện hàng</h2>
-              <div class="mb-3">
-                <label class="checkout-label" for="recipient-name">Họ và tên người nhận</label>
-                <input
-                  id="recipient-name"
-                  v-model="recipientName"
-                  class="form-control"
-                  :class="{ 'is-invalid': fieldErrors.recipientName }"
-                  :disabled="profileLoading"
-                  type="text"
-                  maxlength="100"
-                  autocomplete="name"
-                  placeholder="Ví dụ: Nguyễn Hoàng Nam"
-                  @input="fieldErrors.recipientName = ''"
-                >
-                <div v-if="fieldErrors.recipientName" class="invalid-feedback">{{ fieldErrors.recipientName }}</div>
+      <!-- Cột phải: tóm tắt giỏ dùng giá và tổng tiền do BE trả về, kèm nút đặt hàng. -->
+      <aside class="col-lg-5">
+        <OrderPanel class="checkout-summary">
+          <h2 class="checkout-summary__title">Tóm tắt đơn hàng ({{ cartItems.length }})</h2>
+          <ul class="list-unstyled mb-0">
+            <li v-for="item in cartItems" :key="item.id" class="checkout-item">
+              <div class="checkout-item__main">
+                <!-- BE trả product_name và variant_name (tên biến thể, ví dụ "Chai 140ml"). -->
+                <p class="checkout-item__name">{{ item.product_name }}</p>
+                <p class="checkout-item__variant">
+                  <span v-if="item.variant_name">{{ item.variant_name }} · </span>SL: {{ item.quantity }}
+                </p>
+                <!-- Dòng hết hàng/ngừng bán không được tính vào tổng và sẽ làm đặt hàng bị từ chối. -->
+                <p v-if="!item.is_available" class="checkout-item__warn">
+                  Mặt hàng này đã hết hoặc ngừng bán, vui lòng xóa khỏi giỏ hàng.
+                </p>
+                <!-- Dòng còn bán nhưng kho không đủ số lượng trong giỏ: mời về giỏ để giảm số lượng. -->
+                <p v-else-if="isShortItem(item)" class="checkout-item__warn">
+                  Kho chỉ còn {{ item.stock }}, vui lòng
+                  <RouterLink :to="{ name: 'cart' }">giảm số lượng trong giỏ hàng</RouterLink>.
+                </p>
               </div>
-              <div>
-                <label class="checkout-label" for="recipient-phone">Số điện thoại liên hệ</label>
-                <input
-                  id="recipient-phone"
-                  v-model="recipientPhone"
-                  class="form-control"
-                  :class="{ 'is-invalid': fieldErrors.recipientPhone }"
-                  :disabled="profileLoading"
-                  type="tel"
-                  maxlength="20"
-                  autocomplete="tel"
-                  placeholder="Ví dụ: 0912 345 678"
-                  @input="fieldErrors.recipientPhone = ''"
-                >
-                <div v-if="fieldErrors.recipientPhone" class="invalid-feedback">{{ fieldErrors.recipientPhone }}</div>
-              </div>
-            </section>
+              <p class="checkout-item__total">{{ formatPrice(Number(item.line_total)) }}</p>
+            </li>
+          </ul>
 
-            <section class="checkout-section" aria-labelledby="checkout-address">
-              <h2 id="checkout-address" class="checkout-heading"><span class="checkout-step">2</span>Địa chỉ nhận hàng</h2>
-              <label class="checkout-label" for="shipping-address">Địa chỉ chi tiết (số nhà, đường, phường/xã, quận/huyện, tỉnh/thành)</label>
-              <textarea
-                id="shipping-address"
-                v-model="shippingAddress"
-                class="form-control"
-                :class="{ 'is-invalid': fieldErrors.shippingAddress }"
-                :disabled="profileLoading"
-                rows="3"
-                maxlength="500"
-                autocomplete="street-address"
-                placeholder="Ví dụ: 128 Phố Cổ, P. Hàng Gai, Q. Hoàn Kiếm, Hà Nội"
-                @input="fieldErrors.shippingAddress = ''"
-              ></textarea>
-              <div v-if="fieldErrors.shippingAddress" class="invalid-feedback">{{ fieldErrors.shippingAddress }}</div>
-            </section>
+          <p class="checkout-total">
+            <span>Tổng thanh toán</span>
+            <strong>{{ formatPrice(Number(cart?.total_amount || 0)) }}</strong>
+          </p>
 
-            <!-- Phương thức thanh toán dạng thẻ chọn; radio ẩn nhưng vẫn dùng được bằng bàn phím. -->
-            <fieldset class="checkout-section checkout-section--last">
-              <legend class="checkout-heading"><span class="checkout-step">3</span>Phương thức thanh toán</legend>
-              <label class="pay-option" :class="{ 'is-selected': paymentMethod === 'cod' }" for="payment-cod">
-                <input id="payment-cod" v-model="paymentMethod" class="pay-option__input" type="radio" name="payment-method" value="cod">
-                <span class="pay-option__check" aria-hidden="true"></span>
-                <span class="pay-option__body">
-                  <strong>Thanh toán khi nhận hàng (COD)</strong>
-                  <small>Kiểm tra hàng rồi thanh toán tiền mặt cho nhân viên giao hàng.</small>
-                </span>
-              </label>
-              <label class="pay-option" :class="{ 'is-selected': paymentMethod === 'sepay' }" for="payment-sepay">
-                <input id="payment-sepay" v-model="paymentMethod" class="pay-option__input" type="radio" name="payment-method" value="sepay">
-                <span class="pay-option__check" aria-hidden="true"></span>
-                <span class="pay-option__body">
-                  <strong>Thanh toán online qua SePay</strong>
-                  <small>Bạn sẽ được chuyển sang cổng SePay. Đơn chưa thanh toán sau 30 phút sẽ tự hủy và hoàn lại hàng.</small>
-                </span>
-              </label>
-            </fieldset>
-
-            <RouterLink class="checkout-back" to="/cart">&larr; Quay lại giỏ hàng</RouterLink>
-          </OrderPanel>
-        </div>
-
-        <!-- Cột phải: tóm tắt giỏ dùng giá và tổng tiền do BE trả về, kèm nút đặt hàng. -->
-        <aside class="col-lg-5">
-          <OrderPanel class="checkout-summary">
-            <h2 class="checkout-summary__title">Tóm tắt đơn hàng ({{ cartItems.length }})</h2>
-            <ul class="list-unstyled mb-0">
-              <li v-for="item in cartItems" :key="item.id" class="checkout-item">
-                <div class="checkout-item__main">
-                  <!-- BE trả product_name và variant_name (tên biến thể, ví dụ "Chai 140ml"). -->
-                  <p class="checkout-item__name">{{ item.product_name }}</p>
-                  <p class="checkout-item__variant">
-                    <span v-if="item.variant_name">{{ item.variant_name }} · </span>SL: {{ item.quantity }}
-                  </p>
-                  <!-- Dòng hết hàng/ngừng bán không được tính vào tổng và sẽ làm đặt hàng bị từ chối. -->
-                  <p v-if="!item.is_available" class="checkout-item__warn">
-                    Mặt hàng này đã hết hoặc ngừng bán, vui lòng xóa khỏi giỏ hàng.
-                  </p>
-                  <!-- Dòng còn bán nhưng kho không đủ số lượng trong giỏ: mời về giỏ để giảm số lượng. -->
-                  <p v-else-if="isShortItem(item)" class="checkout-item__warn">
-                    Kho chỉ còn {{ item.stock }}, vui lòng
-                    <RouterLink :to="{ name: 'cart' }">giảm số lượng trong giỏ hàng</RouterLink>.
-                  </p>
-                </div>
-                <p class="checkout-item__total">{{ formatPrice(Number(item.line_total)) }}</p>
-              </li>
-            </ul>
-
-            <p class="checkout-total">
-              <span>Tổng thanh toán</span>
-              <strong>{{ formatPrice(Number(cart?.total_amount || 0)) }}</strong>
-            </p>
-
-            <button class="btn btn-primary w-100 checkout-submit" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem || hasShortItem || profileLoading">
-              {{ submitting ? 'Đang tạo đơn...' : paymentMethod === 'sepay' ? 'Đặt hàng và thanh toán' : 'Đặt hàng' }}
-            </button>
-          </OrderPanel>
-        </aside>
-      </form>
-    </StateBlock>
+          <button class="btn btn-primary w-100 checkout-submit" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem || hasShortItem || profileLoading">
+            {{ submitting ? 'Đang tạo đơn...' : paymentMethod === 'sepay' ? 'Đặt hàng và thanh toán' : 'Đặt hàng' }}
+          </button>
+        </OrderPanel>
+      </aside>
+    </form>
   </section>
 </template>
 
@@ -439,13 +427,6 @@ onMounted(() => {
   margin: 6px 0 0;
   color: #4a5565;
   font-size: 14px;
-}
-
-/* Dòng "Đang cập nhật giỏ hàng..." khi tải lại giỏ mà vẫn giữ form: chữ phụ, nhỏ, không chiếm nhiều chỗ. */
-.checkout-reload {
-  margin: 0 0 12px;
-  color: #6b6560;
-  font-size: 13px;
 }
 
 /* Mỗi phần của form (1, 2, 3) cách nhau bằng đường kẻ mảnh. */
