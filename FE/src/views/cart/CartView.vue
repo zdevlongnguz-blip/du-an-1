@@ -8,6 +8,7 @@ import { useToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
 import { setCartCountFromItems } from '@/helpers/cart/cartCount'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
+import StateBlock from '@/components/StateBlock.vue'
 
 const { showToast } = useToast()
 
@@ -147,132 +148,132 @@ onMounted(() => fetchCart())
       </div>
     </header>
 
-    <!-- Đang tải giỏ hàng. -->
-    <div v-if="loading" class="cart-state" role="status">Đang tải giỏ hàng...</div>
+    <!-- Trạng thái giỏ hàng (StateBlock): đang tải → lỗi có nút thử lại → giỏ trống; có hàng thì hiện nội dung bên trong.
+         Lỗi API được ưu tiên hơn "trống" để không báo nhầm giỏ trống khi server lỗi. -->
+    <StateBlock
+      :loading="loading"
+      :error="loadError"
+      :empty="!hasItems"
+      loading-text="Đang tải giỏ hàng..."
+      empty-text="Giỏ hàng của bạn đang trống."
+      :on-retry="() => fetchCart()"
+    >
+      <template #empty-action>
+        <RouterLink class="cart-btn cart-btn--primary" to="/catalog">Xem sản phẩm</RouterLink>
+      </template>
 
-    <!-- Lỗi tải giỏ: hiện thông báo thật và nút thử lại. -->
-    <div v-else-if="loadError" class="cart-state cart-state--error" role="alert">
-      <p>{{ loadError }}</p>
-      <button type="button" class="cart-btn cart-btn--outline" @click="fetchCart()">Thử lại</button>
-    </div>
+      <!-- Có hàng: danh sách bên trái (8 cột), tóm tắt bên phải (4 cột). -->
+      <div class="cart-layout">
+        <section class="cart-list" aria-label="Danh sách sản phẩm trong giỏ">
+          <!-- Hàng tiêu đề cột, chỉ hiện trên màn hình rộng. -->
+          <div class="cart-list-head" aria-hidden="true">
+            <span>Sản phẩm</span>
+            <span>Số lượng</span>
+            <span>Thành tiền</span>
+          </div>
 
-    <!-- Giỏ trống: thẻ giữa trang có nút xem sản phẩm. -->
-    <div v-else-if="!hasItems" class="cart-empty">
-      <p class="cart-empty-text">Giỏ hàng của bạn đang trống.</p>
-      <RouterLink class="cart-btn cart-btn--primary" to="/catalog">Xem sản phẩm</RouterLink>
-    </div>
-
-    <!-- Có hàng: danh sách bên trái (8 cột), tóm tắt bên phải (4 cột). -->
-    <div v-else class="cart-layout">
-      <section class="cart-list" aria-label="Danh sách sản phẩm trong giỏ">
-        <!-- Hàng tiêu đề cột, chỉ hiện trên màn hình rộng. -->
-        <div class="cart-list-head" aria-hidden="true">
-          <span>Sản phẩm</span>
-          <span>Số lượng</span>
-          <span>Thành tiền</span>
-        </div>
-
-        <ul class="cart-items">
-          <li v-for="item in items" :key="item.id" class="cart-item">
-            <div class="cart-thumb">
-              <img
-                v-if="itemImageSrc(item)"
-                :src="itemImageSrc(item)"
-                :alt="item.product_name"
-                @error="markImageFailed(item)"
-              />
-              <span v-else class="cart-thumb-empty" aria-hidden="true">SB</span>
-            </div>
-
-            <!-- Tên, phiên bản, đơn giá và cảnh báo tồn kho. -->
-            <div class="cart-item-info">
-              <span class="cart-item-variant">
-                {{ item.variant_name }}
-                <span v-if="variantAttributesLine(item)"> · {{ variantAttributesLine(item) }}</span>
-              </span>
-              <RouterLink class="cart-item-name" :to="`/product-detail/${item.product_slug}`">
-                {{ item.product_name }}
-              </RouterLink>
-              <p class="cart-item-price">
-                <strong>{{ formatPrice(Number(item.unit_price)) }}</strong>
-                <span v-if="!item.is_available" class="cart-tag cart-tag--muted">
-                  {{ item.stock <= 0 ? 'Hết hàng' : 'Ngừng bán' }}
-                </span>
-                <span v-else-if="item.quantity > item.stock" class="cart-tag cart-tag--warn">
-                  Chỉ còn {{ item.stock }}
-                </span>
-              </p>
-            </div>
-
-            <!-- Bộ tăng giảm số lượng + nút xóa. -->
-            <div class="cart-item-qty">
-              <div class="cart-stepper" role="group" :aria-label="`Số lượng ${item.product_name}`">
-                <button
-                  type="button"
-                  :disabled="!canEditQuantity(item) || item.quantity <= 1"
-                  aria-label="Giảm số lượng"
-                  @click="stepQuantity(item, -1)"
-                >−</button>
-                <input
-                  type="number"
-                  min="1"
-                  :max="Math.max(1, item.stock)"
-                  :value="item.quantity"
-                  :disabled="!canEditQuantity(item)"
-                  aria-label="Nhập số lượng"
-                  @change="onQuantityChange(item, $event)"
+          <ul class="cart-items">
+            <li v-for="item in items" :key="item.id" class="cart-item">
+              <div class="cart-thumb">
+                <img
+                  v-if="itemImageSrc(item)"
+                  :src="itemImageSrc(item)"
+                  :alt="item.product_name"
+                  @error="markImageFailed(item)"
                 />
-                <button
-                  type="button"
-                  :disabled="!canEditQuantity(item) || item.quantity >= item.stock"
-                  aria-label="Tăng số lượng"
-                  @click="stepQuantity(item, 1)"
-                >+</button>
+                <span v-else class="cart-thumb-empty" aria-hidden="true">SB</span>
               </div>
 
-              <button
-                type="button"
-                class="cart-remove"
-                :disabled="busyItemId !== null"
-                :aria-label="`Xóa ${item.product_name} khỏi giỏ hàng`"
-                @click="removeItem(item)"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                  <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z" />
-                  <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z" />
-                </svg>
-                Xóa
-              </button>
-            </div>
+              <!-- Tên, phiên bản, đơn giá và cảnh báo tồn kho. -->
+              <div class="cart-item-info">
+                <span class="cart-item-variant">
+                  {{ item.variant_name }}
+                  <span v-if="variantAttributesLine(item)"> · {{ variantAttributesLine(item) }}</span>
+                </span>
+                <RouterLink class="cart-item-name" :to="`/product-detail/${item.product_slug}`">
+                  {{ item.product_name }}
+                </RouterLink>
+                <p class="cart-item-price">
+                  <strong>{{ formatPrice(Number(item.unit_price)) }}</strong>
+                  <span v-if="!item.is_available" class="cart-tag cart-tag--muted">
+                    {{ item.stock <= 0 ? 'Hết hàng' : 'Ngừng bán' }}
+                  </span>
+                  <span v-else-if="item.quantity > item.stock" class="cart-tag cart-tag--warn">
+                    Chỉ còn {{ item.stock }}
+                  </span>
+                </p>
+              </div>
 
-            <div class="cart-item-total">
-              {{ formatPrice(Number(item.line_total)) }}
-            </div>
-          </li>
-        </ul>
-      </section>
+              <!-- Bộ tăng giảm số lượng + nút xóa. -->
+              <div class="cart-item-qty">
+                <div class="cart-stepper" role="group" :aria-label="`Số lượng ${item.product_name}`">
+                  <button
+                    type="button"
+                    :disabled="!canEditQuantity(item) || item.quantity <= 1"
+                    aria-label="Giảm số lượng"
+                    @click="stepQuantity(item, -1)"
+                  >−</button>
+                  <input
+                    type="number"
+                    min="1"
+                    :max="Math.max(1, item.stock)"
+                    :value="item.quantity"
+                    :disabled="!canEditQuantity(item)"
+                    aria-label="Nhập số lượng"
+                    @change="onQuantityChange(item, $event)"
+                  />
+                  <button
+                    type="button"
+                    :disabled="!canEditQuantity(item) || item.quantity >= item.stock"
+                    aria-label="Tăng số lượng"
+                    @click="stepQuantity(item, 1)"
+                  >+</button>
+                </div>
 
-      <!-- Tóm tắt đơn hàng: dính khi cuộn trên desktop. -->
-      <aside class="cart-summary">
-        <div class="cart-summary-head">
-          <h2>Tóm tắt</h2>
-        </div>
-        <div class="cart-summary-row">
-          <span>Số sản phẩm</span>
-          <span>{{ availableCount }}/{{ items.length }} có thể mua</span>
-        </div>
-        <div class="cart-summary-total">
-          <span>Tạm tính</span>
-          <strong>{{ formatPrice(Number(totalAmount)) }}</strong>
-        </div>
-        <p class="cart-summary-note">Tổng chỉ tính các phiên bản đang bán và còn hàng.</p>
+                <button
+                  type="button"
+                  class="cart-remove"
+                  :disabled="busyItemId !== null"
+                  :aria-label="`Xóa ${item.product_name} khỏi giỏ hàng`"
+                  @click="removeItem(item)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z" />
+                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z" />
+                  </svg>
+                  Xóa
+                </button>
+              </div>
 
-        <RouterLink v-if="availableCount > 0" class="cart-btn cart-btn--primary cart-btn--block" to="/checkout">
-          Thanh toán
-        </RouterLink>
-        <button v-else type="button" class="cart-btn cart-btn--primary cart-btn--block" disabled>Thanh toán</button>
-      </aside>
-    </div>
+              <div class="cart-item-total">
+                {{ formatPrice(Number(item.line_total)) }}
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Tóm tắt đơn hàng: dính khi cuộn trên desktop. -->
+        <aside class="cart-summary">
+          <div class="cart-summary-head">
+            <h2>Tóm tắt</h2>
+          </div>
+          <div class="cart-summary-row">
+            <span>Số sản phẩm</span>
+            <span>{{ availableCount }}/{{ items.length }} có thể mua</span>
+          </div>
+          <div class="cart-summary-total">
+            <span>Tạm tính</span>
+            <strong>{{ formatPrice(Number(totalAmount)) }}</strong>
+          </div>
+          <p class="cart-summary-note">Tổng chỉ tính các phiên bản đang bán và còn hàng.</p>
+
+          <RouterLink v-if="availableCount > 0" class="cart-btn cart-btn--primary cart-btn--block" to="/checkout">
+            Thanh toán
+          </RouterLink>
+          <button v-else type="button" class="cart-btn cart-btn--primary cart-btn--block" disabled>Thanh toán</button>
+        </aside>
+      </div>
+    </StateBlock>
   </section>
 </template>
 
@@ -365,54 +366,6 @@ onMounted(() => fetchCart())
 .cart-stepper button:focus-visible {
   outline: 3px solid #b8893e;
   outline-offset: 2px;
-}
-
-.cart-state {
-  padding: 48px 24px;
-  border: 1px solid #e6e0d4;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #6b6560;
-  text-align: center;
-}
-
-.cart-state p {
-  margin: 0 0 14px;
-}
-
-.cart-state--error {
-  border-color: #ba1a1a;
-  background: #fdf1f0;
-  color: #93000a;
-}
-
-.cart-empty {
-  display: grid;
-  max-width: 640px;
-  justify-items: center;
-  gap: 10px;
-  margin: 0 auto;
-  padding: 48px 28px;
-  border: 1px solid #e6e0d4;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 4px 16px rgba(28, 42, 58, 0.06);
-  text-align: center;
-}
-
-.cart-empty h2 {
-  margin: 0;
-  color: #1f1f1f;
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.cart-empty-text {
-  max-width: 420px;
-  margin: 0 0 8px;
-  color: #6b6560;
 }
 
 .cart-layout {

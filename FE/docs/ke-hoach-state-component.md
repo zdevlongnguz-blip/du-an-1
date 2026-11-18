@@ -1,7 +1,11 @@
 # Kế hoạch: gộp trạng thái loading / lỗi / trống thành component dùng chung
 
 > Dành cho: thành viên làm FE, đã đọc `FE/CLAUDE.md`.
-> Trạng thái: chưa làm. Đây là kế hoạch, không phải thay đổi code.
+> Trạng thái: đã làm cho 3 trang `OrderList`, `OrderDetail`, `CartView` (nhánh `feature/week3-tuananh-state-block`).
+>
+> **Quyết định của admin (18/11/2026): KHÔNG áp dụng StateBlock cho 2 trang đặt hàng** `CheckoutView.vue` (đặt tay) và `ai/AiCheckout.vue` (đặt qua AI).
+> Hai trang này có trạng thái nghiệp vụ do BE trả về khi đặt hàng (409 hết hàng, giá đổi, kẹp số lượng, thiếu kho, SePay lỗi, tải lại giỏ mà phải giữ form...).
+> Bản hiện tại trên `dev` đã chạy đúng; gộp vào StateBlock có rủi ro làm form biến mất khi tải lại giỏ (đã gặp khi review) mà không thêm chức năng gì. Giữ nguyên để an toàn.
 
 ## 1. Mục tiêu
 
@@ -18,10 +22,10 @@ Không làm: đổi logic API, đổi `<script setup>` của trang, đổi contr
 |---|---|---|---|---|
 | Danh sách đơn | `FE/src/views/orders/OrderList.vue` (dòng ~118-133) | `text-center py-5 text-secondary` | `alert alert-danger ...` + nút "Thử lại" | `text-center py-5`, có nút "Xem sản phẩm" |
 | Chi tiết đơn | `FE/src/views/orders/OrderDetail.vue` (dòng ~145-153) | `text-center py-5 text-secondary` (chỉ khi `loading && !order`) | `alert alert-danger ...` + "Thử lại" | Không có (đơn không tồn tại đã báo lỗi 404) |
-| Thanh toán | `FE/src/views/payment/CheckoutView.vue` (dòng ~219-231) | `text-center py-5 text-secondary` | `alert alert-danger ...` + "Thử lại" | `text-center py-5`, có nút "Xem sản phẩm" |
+| Thanh toán (**không áp dụng**, xem quyết định ở đầu file) | `FE/src/views/payment/CheckoutView.vue` (dòng ~219-231) | `text-center py-5 text-secondary` | `alert alert-danger ...` + "Thử lại" | `text-center py-5`, có nút "Xem sản phẩm" |
 | Giỏ hàng | `FE/src/views/cart/CartView.vue` (dòng ~150-164) | `cart-state` | `cart-state cart-state--error`, `role="alert"` | `cart-empty` |
 
-Ngoài 4 trang trên, còn `ProductDetail.vue`, `HomeView.vue`, `auth/Profile.vue`, `catalog.vue`. Các trang này có class và bố cục riêng, **để sau**.
+Ngoài các trang trên, còn `ProductDetail.vue`, `HomeView.vue`, `auth/Profile.vue`, `catalog.vue`. Các trang này có class và bố cục riêng, **để sau**.
 
 Các điểm không nhất quán cần xử lý:
 - Loading: có chỗ `role="status"`, chỗ không có.
@@ -52,8 +56,9 @@ Lỗi phải được ưu tiên hơn trống, để không hiện "chưa có đ�
 
 **Thuộc tính:**
 - Loading dùng `role="status"`, lỗi dùng `role="alert"`, thống nhất ở mọi trang.
-- Dùng Bootstrap 5 có sẵn (`text-center py-5`, `alert alert-danger`, `btn btn-outline-danger`). Không thêm thư viện.
-- CSS riêng dùng `<style scoped>`.
+- Style riêng trong `<style scoped>` theo bảng màu Stitch (`FE/CLAUDE.md` mục 12): thẻ trắng viền kem, lỗi nền đỏ nhạt, nút "Thử lại" viền navy. **Không** gắn cứng class tiện ích Bootstrap (`text-secondary`, `py-5`, `alert`...) vì chúng có `!important`, trang không ghi đè được. Không thêm thư viện.
+- Nút "Thử lại" gọi `onRetry()` không kèm tham số (không viết `@click="onRetry"`, vì Vue sẽ truyền sự kiện click vào hàm).
+- StateBlock ẩn toàn bộ nội dung (slot) khi `loading` hoặc `error` bật. Trang có form khách đang điền mà phải tải lại dữ liệu thì **không** bọc form trong StateBlock (form sẽ biến mất rồi hiện lại). Đây là lý do 2 trang đặt hàng không dùng StateBlock.
 
 Ví dụ cách dùng:
 
@@ -80,8 +85,8 @@ Ví dụ cách dùng:
 1. **Tạo component.** Viết `StateBlock.vue` theo mục 3. Đầu `<script setup>` có comment tiếng Việt 1-3 dòng, mỗi prop có comment.
 2. **Áp dụng cho OrderList** trước vì đơn giản nhất. Giữ nguyên `loadOrders`, `loading`, `loadError`, `orders`.
 3. **Áp dụng cho OrderDetail.** Lưu ý điều kiện `loading && !order`: truyền `:loading="loading && !order"`. Trang này không có nhánh trống.
-4. **Áp dụng cho CheckoutView.** Khối lỗi chung `checkoutError` (có nút thanh toán lại) **không** đưa vào `StateBlock`, vì nó có logic riêng. Chỉ gộp khối `cartError` và `cartItems.length === 0`.
-5. **Áp dụng cho CartView.** Giữ class `cart-*` nếu cần để không lệch giao diện. Có thể đổi sang Bootstrap sau khi đối chiếu màn hình.
+4. ~~Áp dụng cho CheckoutView~~: **bỏ**, theo quyết định của admin ở đầu file. Không sửa `CheckoutView.vue` và `ai/AiCheckout.vue`.
+5. **Áp dụng cho CartView.** Giao diện trạng thái của StateBlock lấy theo giao diện cũ của trang này (Stitch), nên bỏ được class `cart-state`, `cart-empty` và không cần `:deep` ghi đè.
 6. **Dọn class cũ** trong `<style scoped>` của từng trang nếu không còn dùng. Không xóa class đang được dùng ở nơi khác.
 
 Mỗi bước là một commit riêng để dễ revert.
@@ -112,12 +117,14 @@ Mỗi bước là một commit riêng để dễ revert.
 ## 7. Tiêu chí hoàn thành
 
 - `StateBlock.vue` tồn tại, có comment tiếng Việt.
-- 4 trang trong mục 4 dùng component, không còn khối `alert alert-danger` lặp lại cho loading/lỗi/trống (trừ `checkoutError`).
+- 3 trang `OrderList`, `OrderDetail`, `CartView` dùng component, không còn khối loading/lỗi/trống tự viết riêng.
+- `CheckoutView.vue` và `ai/AiCheckout.vue` giống hệt `dev` (`git diff origin/dev` của 2 file này rỗng).
 - Lỗi API không bao giờ hiển thị là trạng thái trống.
 - Checklist mục 6 đã đánh dấu, phần chưa làm được ghi rõ.
 
 ## 8. Ngoài phạm vi
 
+- `CheckoutView.vue`, `ai/AiCheckout.vue`: **không áp dụng** (quyết định của admin, xem đầu file).
 - `ProductDetail.vue`, `HomeView.vue`, `Profile.vue`, `catalog.vue`: để task riêng sau.
 - Thông báo toast (`services/toast.js`): không thay đổi.
 - Đổi thông điệp tiếng Việt của các trang: không thuộc task này.
