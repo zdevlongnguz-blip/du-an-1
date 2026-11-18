@@ -37,6 +37,13 @@ const cartItems = computed(() => cart.value?.items || [])
 // true nếu giỏ có dòng hết hàng/ngừng bán (BE đặt is_available = false); khi đó khóa nút Đặt hàng
 // vì BE sẽ từ chối đơn (409). computed: tự tính lại mỗi khi giỏ hàng thay đổi.
 const hasUnavailableItem = computed(() => cartItems.value.some((item) => !item.is_available))
+// Dòng còn bán nhưng số lượng trong giỏ lớn hơn tồn kho (ví dụ giỏ 17, kho còn 13 vì vừa có người mua).
+// BE vẫn coi dòng này is_available = true nhưng sẽ từ chối đơn (409), nên trang tự phát hiện từ stock.
+function isShortItem(item) {
+  return item.is_available && Number(item.quantity) > Number(item.stock)
+}
+// computed: true nếu có dòng thiếu hàng; khi đó khóa nút Đặt hàng và mời khách về giỏ để giảm số lượng.
+const hasShortItem = computed(() => cartItems.value.some(isShortItem))
 
 // Gọi api-cart để lấy mặt hàng và tổng tiền do backend tính.
 async function loadCart() {
@@ -111,6 +118,9 @@ async function submitCheckout() {
       recipient_phone: recipientPhone.value.trim(),
       shipping_address: shippingAddress.value.trim(),
       payment_method: paymentMethod.value,
+      // Tổng tiền khách đang thấy (chuỗi do api-cart trả, ví dụ "1449000.00"). BE chỉ dùng để phát hiện giá vừa đổi
+      // trong lúc khách ở trang này (trả 409), không dùng để tính tiền.
+      expected_total: cart.value?.total_amount ?? null,
     })
     const orderId = response.data?.order?.id
     if (response.data?.status !== 'success' || !orderId) {
@@ -132,6 +142,10 @@ async function submitCheckout() {
   } catch (error) {
     checkoutError.value = error.response?.data?.message || error.message || 'Không thể tạo đơn hàng.'
     showToast(checkoutError.value, 'danger')
+    // 409: tồn kho vừa thay đổi (hết hàng, ngừng bán, không đủ số lượng) hoặc giá vừa đổi.
+    // Tải lại giỏ để trang hiện đúng tồn kho và giá mới: dòng thiếu hàng được đánh dấu và khóa nút Đặt hàng;
+    // giá đổi thì tổng mới hiện ra, khách xem lại rồi bấm đặt lần nữa.
+    if (error.response?.status === 409) await loadCart()
   } finally {
     submitting.value = false
   }
@@ -343,6 +357,11 @@ onMounted(() => {
                 <p v-if="!item.is_available" class="checkout-item__warn">
                   Mặt hàng này đã hết hoặc ngừng bán, vui lòng xóa khỏi giỏ hàng.
                 </p>
+                <!-- Dòng còn bán nhưng kho không đủ số lượng trong giỏ: mời về giỏ để giảm số lượng. -->
+                <p v-else-if="isShortItem(item)" class="checkout-item__warn">
+                  Kho chỉ còn {{ item.stock }}, vui lòng
+                  <RouterLink :to="{ name: 'cart' }">giảm số lượng trong giỏ hàng</RouterLink>.
+                </p>
               </div>
               <p class="checkout-item__total">{{ formatPrice(Number(item.line_total)) }}</p>
             </li>
@@ -353,7 +372,7 @@ onMounted(() => {
             <strong>{{ formatPrice(Number(cart?.total_amount || 0)) }}</strong>
           </p>
 
-          <button class="btn btn-primary w-100 checkout-submit" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem || profileLoading">
+          <button class="btn btn-primary w-100 checkout-submit" type="submit" :disabled="submitting || paymentLoading || hasUnavailableItem || hasShortItem || profileLoading">
             {{ submitting ? 'Đang tạo đơn...' : paymentMethod === 'sepay' ? 'Đặt hàng và thanh toán' : 'Đặt hàng' }}
           </button>
         </OrderPanel>

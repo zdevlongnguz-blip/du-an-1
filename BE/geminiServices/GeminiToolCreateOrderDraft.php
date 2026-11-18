@@ -134,6 +134,8 @@ class GeminiToolCreateOrderDraft extends GeminiTool
         if ($userId < 1) {
             throw new RuntimeException('Thiếu user_id trong context của tool create_order_draft.');
         }
+        // Trả lại kho của đơn SePay quá hạn trước khi kiểm tra tồn kho, để Louis không báo "không đủ hàng" oan.
+        Order::releaseExpiredStock();
 
         // Gốc để áp lệnh: đơn làm việc của lượt này nếu đã có lần gọi thành công,
         // ngược lại là đơn nháp khách đang thấy trên trang (rỗng nếu chưa có).
@@ -144,11 +146,8 @@ class GeminiToolCreateOrderDraft extends GeminiTool
         $applied = $this->applyOps($this->readOps($args['ops'] ?? null), $baseDraft);
         $items = $applied['items'];
 
-        // Tra giá và tồn kho thật từ DB. Map theo SKU viết thường vì cột sku không phân biệt hoa thường.
-        $variants = [];
-        foreach ((new Product())->getActiveVariantsBySkus(array_column($items, 'sku')) as $row) {
-            $variants[mb_strtolower((string)$row['sku'], 'UTF-8')] = $row;
-        }
+        // Tra giá và tồn kho thật từ DB. Kết quả có key là SKU viết thường vì cột sku không phân biệt hoa thường.
+        $variants = (new Product())->getActiveVariantsBySkus(array_column($items, 'sku'));
 
         $problems = [];
         $draftItems = [];
@@ -169,19 +168,12 @@ class GeminiToolCreateOrderDraft extends GeminiTool
                 continue;
             }
 
-            $price = (float)$variant['final_price'];
-            $draftItems[] = [
-                'sku' => $variant['sku'],
-                'name' => $variant['product_name'],
-                'variant_name' => $variant['variant_name'],
-                'image' => $variant['image'],
-                'quantity' => $item['quantity'],
-                'price' => $price,
-                // Giá niêm yết chỉ gửi khi đang giảm giá, để FE gạch giá cũ.
-                'original_price' => $variant['sale_price'] !== null ? (float)$variant['price'] : null,
-                // Tồn kho lúc lên đơn: FE dùng làm giới hạn khi khách tăng số lượng. Lúc xác nhận BE kiểm tra lại.
-                'stock' => min($stock, Order::MAX_ITEM_QUANTITY),
-            ];
+            // Giá, giá gốc, tồn kho dựng theo quy tắc chung (Product::buildDraftItem), giống API tra lại kho
+            // api-order-draft-items. Tồn kho lúc lên đơn là giới hạn khi khách tăng số lượng; lúc xác nhận BE kiểm tra lại.
+            $draftItem = Product::buildDraftItem($variant);
+            $draftItem['quantity'] = $item['quantity'];
+            $draftItems[] = $draftItem;
+            $price = $draftItem['price'];
             // Cộng theo đơn vị xu (số nguyên) để không bị sai số khi cộng số thập phân.
             $totalCents += (int)round($price * 100) * $item['quantity'];
         }

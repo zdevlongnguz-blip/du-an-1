@@ -24,6 +24,9 @@ class CartController
         }
 
         $userId = $this->getUserId($authPayload);
+        // Trả lại kho của đơn SePay quá hạn trước khi đọc giỏ, để stock trả về là số thật còn bán được
+        // (tránh trang đặt hàng báo "Kho chỉ còn N" và khóa nút oan).
+        Order::releaseExpiredStock();
         response_json(['status' => 'success', 'cart' => $this->cart->getByUserId($userId)]);
     }
 
@@ -52,6 +55,8 @@ class CartController
             response_json(['status' => 'error', 'message' => 'ID biến thể hoặc số lượng không hợp lệ'], 422);
         }
 
+        // Trả lại kho của đơn SePay quá hạn trước khi kiểm tra tồn kho, tránh báo "vượt tồn kho" oan.
+        Order::releaseExpiredStock();
         $result = $this->cart->addItem($userId, $variantId, $quantity);
         if ($result === 'not_found') {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy phiên bản sản phẩm'], 404);
@@ -98,6 +103,8 @@ class CartController
             response_json(['status' => 'error', 'message' => 'Số lượng phải là số nguyên dương'], 422);
         }
 
+        // Trả lại kho của đơn SePay quá hạn trước khi kiểm tra tồn kho, tránh báo "vượt tồn kho" oan.
+        Order::releaseExpiredStock();
         $result = $this->cart->updateItem($userId, $itemId, $quantity);
         if ($result === 'not_found') {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm trong giỏ'], 404);

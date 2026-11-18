@@ -141,6 +141,12 @@ switch ($action) {
         (new OrderController)->checkoutItems($authPayload);
         break;
 
+    // API tra lại giá và tồn kho hiện tại của các món trong đơn nháp AI (theo SKU); yêu cầu user đăng nhập.
+    case 'api-order-draft-items':
+        (new AuthMiddleware())->requireAuth();
+        (new OrderController)->draftItems();
+        break;
+
     // API tạo form thanh toán SePay cho đơn online của user đang đăng nhập.
     case 'api-order-payment':
         $authPayload = (new AuthMiddleware())->requireAuth();

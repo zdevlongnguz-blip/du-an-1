@@ -17,6 +17,8 @@ class ProductController{
         }
         $category = trim($category);
         $category = $category === '' ? null : $category;
+        // Trả lại kho của đơn SePay quá hạn trước khi đọc tồn kho, để danh sách không hiện "hết hàng" oan.
+        Order::releaseExpiredStock();
         $page = $_GET['page'] ?? 1;
         $perPage = $_GET['per_page'] ?? $_GET['perPage'] ?? 8;
 
@@ -67,6 +69,8 @@ class ProductController{
             ], 400);
         }
 
+        // Trả lại kho của đơn SePay quá hạn trước khi đọc tồn kho (xem Order::releaseExpiredStock).
+        Order::releaseExpiredStock();
         $products = $this->product->getTop($sortBy);
         $products = array_map([$this, 'formatProductListItem'], $products);
 
@@ -88,6 +92,8 @@ class ProductController{
             response_json(['status' => 'error', 'message' => 'Slug sản phẩm không hợp lệ'], 400);
         }
 
+        // Trả lại kho của đơn SePay quá hạn trước khi đọc tồn kho, để trang chi tiết không hiện "hết hàng" oan.
+        Order::releaseExpiredStock();
         $product = $this->product->getBySlug(trim($slug));
         if ($product === null) {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);

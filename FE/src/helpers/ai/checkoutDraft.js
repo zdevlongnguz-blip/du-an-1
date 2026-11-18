@@ -9,6 +9,8 @@
 // Đơn nháp không đi lên URL và không đi qua AI; chỉ items (SKU + số lượng) được gửi cho Louis khi chat.
 
 import { ref } from 'vue'
+import api from '@/helpers/api/client'
+import { formatPrice } from '@/helpers/format/price'
 import { getUser } from '@/helpers/auth/session'
 import { fetchProfile } from '@/helpers/auth/profile'
 import { normalizeVietnamPhone } from '@/helpers/format/phone'
@@ -112,7 +114,8 @@ export function syncCheckoutDraft({ quantities = [], recipient = {} } = {}) {
 
   draft.items.forEach((item, index) => {
     const quantity = Number(quantities[index])
-    if (Number.isInteger(quantity)) {
+    // Món đã hết hàng (stock = 0) thì giữ nguyên số lượng: khách thấy món bị đánh dấu và tự bỏ món.
+    if (Number.isInteger(quantity) && item.stock >= 1) {
       item.quantity = Math.min(Math.max(1, quantity), item.stock, MAX_QUANTITY)
     }
   })
@@ -136,6 +139,74 @@ export function removeCheckoutDraftItem(index = -1) {
   draft.items.splice(index, 1)
   save()
   return true
+}
+
+// Tra lại giá và tồn kho mới nhất của các món trong đơn nháp, rồi cập nhật đơn nháp tại chỗ.
+// Gọi khi mở trang /ai-checkout (đơn nháp có thể đã cũ) và khi đặt hàng bị 409 (hết hàng, thiếu hàng, giá đổi).
+// - Giá, giá gốc, tồn kho: lấy theo server.
+// - Số lượng lớn hơn tồn kho: kẹp về tồn kho (ví dụ đặt 17, kho còn 13 thì thành 13).
+// - Món hết hàng hoặc ngừng bán: đánh dấu available = false, stock = 0; trang khóa nút đặt cho đến khi khách bỏ món.
+// Trả mảng câu mô tả thay đổi để trang báo cho khách (rỗng = không có gì đổi). Lỗi API thì ném lỗi cho trang tự xử lý.
+export async function refreshCheckoutDraftStock() {
+  const draft = checkoutDraft.value
+  if (!draft) return []
+
+  // API api-order-draft-items (GET, cần đăng nhập). axios gửi mảng params thành skus[]=A&skus[]=B,
+  // PHP tự gom thành mảng. Thành công 200: { status, items: [{ sku, price, original_price, stock, available, ... }] },
+  // mỗi SKU gửi lên có đúng một dòng.
+  const response = await api.get('/?action=api-order-draft-items', {
+    params: { skus: draft.items.map((item) => item.sku) },
+  })
+  const freshItems = response.data?.items
+  if (response.data?.status !== 'success' || !Array.isArray(freshItems)) {
+    throw new Error('Dữ liệu tồn kho trả về không hợp lệ.')
+  }
+
+  // Tra theo SKU viết thường vì server không phân biệt hoa thường.
+  const freshBySku = new Map(freshItems.map((fresh) => [String(fresh?.sku ?? '').toLowerCase(), fresh]))
+  const changes = []
+
+  for (const item of draft.items) {
+    const fresh = freshBySku.get(item.sku.toLowerCase())
+    const stock = Number(fresh?.stock)
+    const price = Number(fresh?.price)
+
+    // Không còn bán được: đánh dấu, không tự bỏ món (để khách thấy món nào bị ảnh hưởng).
+    if (!fresh || fresh.available !== true || !Number.isInteger(stock) || stock < 1
+      || !Number.isFinite(price) || price < 0) {
+      if (item.available !== false) {
+        changes.push(`${item.name}: đã hết hàng hoặc ngừng bán, quý ông bỏ món này khỏi đơn giúp Louis.`)
+      }
+      item.available = false
+      item.stock = 0
+      continue
+    }
+
+    item.available = true
+    // Tên, tên phiên bản, ảnh: lấy theo server để đơn nháp cũ không hiển thị thông tin đã đổi.
+    if (typeof fresh.name === 'string' && fresh.name.trim() !== '') item.name = fresh.name
+    if (typeof fresh.variant_name === 'string') item.variant_name = fresh.variant_name
+    if (typeof fresh.image === 'string') item.image = fresh.image
+
+    const originalPrice = Number(fresh.original_price)
+    const nextOriginalPrice = Number.isFinite(originalPrice) && originalPrice > price ? originalPrice : null
+    if (price !== item.price) {
+      changes.push(`${item.name}: giá đổi từ ${formatPrice(item.price)} thành ${formatPrice(price)}.`)
+    } else if (item.original_price && !nextOriginalPrice) {
+      // Giá bán giữ nguyên nhưng hết chương trình giảm giá: "Đã giảm" sẽ mất, nên báo để khách không bất ngờ.
+      changes.push(`${item.name}: đã hết chương trình giảm giá.`)
+    }
+    item.price = price
+    item.original_price = nextOriginalPrice
+    item.stock = Math.min(stock, MAX_QUANTITY)
+    if (item.quantity > item.stock) {
+      changes.push(`${item.name}: kho chỉ còn ${item.stock}, Louis đã giảm từ ${item.quantity} xuống ${item.stock}.`)
+      item.quantity = item.stock
+    }
+  }
+
+  save()
+  return changes
 }
 
 // Lấy người nhận từ hồ sơ, chỉ MỘT LẦN cho mỗi đơn nháp.
