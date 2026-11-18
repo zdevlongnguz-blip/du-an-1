@@ -23,6 +23,7 @@ Bộ tài liệu riêng cho tính năng **trợ lý AI Louis Dé Fule lên đơn
 | [11-dong-bo-don-nhap.md](11-dong-bo-don-nhap.md) | **Đồng bộ đơn nháp giữa trang và Louis** để tăng trải nghiệm: khách sửa trên trang thì Louis biết ở lượt sau | Muốn hiểu vì sao Louis nhớ chỉnh sửa của khách |
 | [12-mo-phong-json.md](12-mo-phong-json.md) | **Mô phỏng JSON từng bước** qua 3 kịch bản (lên đơn + COD, thiếu SĐT, sửa trên trang + giá đổi 409): request/response, payload Gemini, kết quả tool, lượt lưu DB | Cần chỉ ra chính xác dữ liệu nào đi đâu |
 | [13-giai-thich-de-hieu.md](13-giai-thich-de-hieu.md) | **Giải thích dễ hiểu** tool lên đơn: ví von quán ăn, sơ đồ một lượt chat, code mẫu từng bước, bảng lệnh `add`/`set`/`subtract`/`remove`, so với tool tìm sản phẩm | **Người mới: đọc file này trước** |
+| [../../don-hang/dong-bo-ton-kho-va-gia.md](../../don-hang/dong-bo-ton-kho-va-gia.md) | **Đơn treo**: khách để trang lâu, kho/giá đổi. Tra lại kho khi mở trang (`api-order-draft-items`), xử lý 409, dùng chung cho đặt hàng tay | Khách báo "bấm đặt bị lỗi mà số trên trang không đổi" |
 
 ## Tóm tắt một đoạn
 
