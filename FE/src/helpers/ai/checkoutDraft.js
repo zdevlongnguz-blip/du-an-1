@@ -183,12 +183,21 @@ export async function refreshCheckoutDraftStock() {
     }
 
     item.available = true
+    // Tên, tên phiên bản, ảnh: lấy theo server để đơn nháp cũ không hiển thị thông tin đã đổi.
+    if (typeof fresh.name === 'string' && fresh.name.trim() !== '') item.name = fresh.name
+    if (typeof fresh.variant_name === 'string') item.variant_name = fresh.variant_name
+    if (typeof fresh.image === 'string') item.image = fresh.image
+
+    const originalPrice = Number(fresh.original_price)
+    const nextOriginalPrice = Number.isFinite(originalPrice) && originalPrice > price ? originalPrice : null
     if (price !== item.price) {
       changes.push(`${item.name}: giá đổi từ ${formatPrice(item.price)} thành ${formatPrice(price)}.`)
+    } else if (item.original_price && !nextOriginalPrice) {
+      // Giá bán giữ nguyên nhưng hết chương trình giảm giá: "Đã giảm" sẽ mất, nên báo để khách không bất ngờ.
+      changes.push(`${item.name}: đã hết chương trình giảm giá.`)
     }
     item.price = price
-    const originalPrice = Number(fresh.original_price)
-    item.original_price = Number.isFinite(originalPrice) && originalPrice > price ? originalPrice : null
+    item.original_price = nextOriginalPrice
     item.stock = Math.min(stock, MAX_QUANTITY)
     if (item.quantity > item.stock) {
       changes.push(`${item.name}: kho chỉ còn ${item.stock}, Louis đã giảm từ ${item.quantity} xuống ${item.stock}.`)

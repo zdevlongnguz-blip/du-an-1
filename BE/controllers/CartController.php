@@ -24,6 +24,10 @@ class CartController
         }
 
         $userId = $this->getUserId($authPayload);
+        // Trả lại tồn kho của các đơn SePay quá hạn chưa thanh toán trước khi đọc giỏ, để stock trả về
+        // là số thật còn bán được. Nếu không, trang đặt hàng có thể báo "Kho chỉ còn N" và khóa nút oan,
+        // trong khi lúc tạo đơn server vẫn trả hàng đó về kho và cho đặt.
+        (new Order())->expireStaleOnlineOrders(SEPAY_PAYMENT_TIMEOUT_MINUTES);
         response_json(['status' => 'success', 'cart' => $this->cart->getByUserId($userId)]);
     }
 

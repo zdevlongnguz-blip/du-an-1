@@ -235,6 +235,10 @@ class OrderController
             $skus[] = $sku;
         }
 
+        // Trả lại tồn kho của các đơn SePay quá hạn chưa thanh toán trước khi đọc, giống bước tạo đơn,
+        // để không báo "hết hàng" oan cho món mà lúc xác nhận server vẫn cho đặt.
+        $this->order->expireStaleOnlineOrders(SEPAY_PAYMENT_TIMEOUT_MINUTES);
+
         // Chỉ biến thể đang bán mới có trong kết quả. Map theo SKU viết thường để khớp với SKU khách gửi.
         $variants = [];
         foreach ((new Product())->getActiveVariantsBySkus($skus) as $row) {

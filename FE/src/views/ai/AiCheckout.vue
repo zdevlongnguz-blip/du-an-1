@@ -198,7 +198,9 @@ async function syncDraftWithStock() {
 }
 
 // Chạy toàn bộ hiệu ứng cho một đơn nháp. Được gọi khi trang mở và khi Louis gửi đơn nháp mới.
-async function play(nextDraft) {
+// refreshStock: có tra lại kho/giá không. Mở trang (đơn có thể đã cũ) thì có; đơn Louis vừa gửi thì không,
+// vì server vừa kiểm tra giá và tồn kho lúc lên đơn, gọi thêm chỉ tốn request.
+async function play(nextDraft, refreshStock = true) {
   const id = ++runId
   resetStage(nextDraft)
   // Tải người nhận từ hồ sơ (nếu đơn chưa có) CHẠY SONG SONG với màn chuẩn bị, để không bắt khách chờ thêm.
@@ -206,12 +208,14 @@ async function play(nextDraft) {
   const recipientTask = ensureDraftRecipient()
   // Tra lại kho/giá mới nhất cũng CHẠY SONG SONG với màn chuẩn bị: đơn nháp lưu trong sessionStorage
   // có thể đã cũ (khách mở tab khác mua bớt hàng, giá vừa đổi). Gom kết quả thành object để không ném lỗi giữa chừng.
-  const stockTask = refreshCheckoutDraftStock()
-    .then((changes) => ({ ok: true, changes }))
-    .catch((error) => {
-      console.error('Không tra lại được tồn kho của đơn nháp:', error)
-      return { ok: false, changes: [] }
-    })
+  const stockTask = !refreshStock
+    ? Promise.resolve({ ok: true, changes: [] })
+    : refreshCheckoutDraftStock()
+      .then((changes) => ({ ok: true, changes }))
+      .catch((error) => {
+        console.error('Không tra lại được tồn kho của đơn nháp:', error)
+        return { ok: false, changes: [] }
+      })
 
   try {
     // Màn 1: gõ từng bước chuẩn bị, xong bước nào hiện dấu ✓ bước đó.
@@ -386,7 +390,9 @@ async function handleConfirm() {
   } catch (error) {
     // 409: hết hàng, không đủ số lượng hoặc giá vừa đổi; 422: dữ liệu sai; 401 do interceptor chuyển về trang đăng nhập.
     checkoutError.value = error.response?.data?.message || error.message || 'Không thể tạo đơn hàng.'
-    if (error.response?.status === 409) {
+    // Chỉ tra lại khi trang vẫn hiển thị đúng đơn nháp đang dùng. Nếu trong lúc gửi, Louis vừa gửi đơn mới
+    // (hoặc đơn nháp bị xóa) thì trang sẽ tự diễn lại với đơn mới, không sửa nhầm sang đơn khác.
+    if (error.response?.status === 409 && draft.value === checkoutDraft.value) {
       // Không cần biết lý do cụ thể: tra lại kho/giá cho cả đơn rồi cập nhật đơn nháp,
       // để khách thấy số mới (ví dụ kho chỉ còn 13) và bấm xác nhận lại. Nút vẫn khóa trong lúc tra (submitting).
       try {
@@ -442,7 +448,7 @@ watch([quantities, form], () => {
 }, { deep: true })
 
 watch(checkoutDraft, (nextDraft) => {
-  if (nextDraft && nextDraft !== draft.value) play(nextDraft)
+  if (nextDraft && nextDraft !== draft.value) play(nextDraft, false)
 })
 
 // onMounted: chạy 1 lần khi trang vừa hiện ra. Có đơn nháp thì bắt đầu hiệu ứng, không thì hiện màn "chưa có đơn".
