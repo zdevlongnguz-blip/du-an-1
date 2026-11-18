@@ -142,118 +142,125 @@ watch(() => route.params.id, loadInvoice)
       <RouterLink class="detail-back" to="/orders">&larr; Quay lại lịch sử đơn hàng</RouterLink>
     </nav>
 
-    <StateBlock :loading="loading && !order" :error="loadError" :on-retry="loadInvoice">
+    <!-- Trạng thái chi tiết đơn (StateBlock): đang tải (chỉ khi chưa có đơn) → lỗi, gồm 404 không tìm thấy, có nút thử lại.
+         Trang này không có trạng thái trống: đơn không tồn tại thì BE trả lỗi 404. -->
+    <StateBlock
+      :loading="loading && !order"
+      :error="loadError"
+      loading-text="Đang tải đơn hàng..."
+      :on-retry="loadInvoice"
+    >
       <template v-if="order">
-      <!-- Khối đầu: mã đơn, ngày đặt, huy hiệu trạng thái, hành động và tiến trình xử lý. -->
-      <OrderPanel class="detail-hero">
-        <div class="detail-hero__top">
-          <div class="detail-hero__title">
-            <p class="detail-eyebrow">Biên nhận đơn hàng</p>
-            <h1 class="detail-title">Chi tiết đơn hàng #{{ order.id }}</h1>
-            <p class="detail-date">Đặt lúc {{ formatOrderDate(order.created_at) }}</p>
-            <div class="detail-badges">
-              <StatusBadge :label="orderStatusLabel(order.order_status)" :tone="orderStatusTone(order.order_status)" />
-              <StatusBadge :label="paymentStatusLabel(order.payment_status)" :tone="paymentStatusTone(order.payment_status)" />
+        <!-- Khối đầu: mã đơn, ngày đặt, huy hiệu trạng thái, hành động và tiến trình xử lý. -->
+        <OrderPanel class="detail-hero">
+          <div class="detail-hero__top">
+            <div class="detail-hero__title">
+              <p class="detail-eyebrow">Biên nhận đơn hàng</p>
+              <h1 class="detail-title">Chi tiết đơn hàng #{{ order.id }}</h1>
+              <p class="detail-date">Đặt lúc {{ formatOrderDate(order.created_at) }}</p>
+              <div class="detail-badges">
+                <StatusBadge :label="orderStatusLabel(order.order_status)" :tone="orderStatusTone(order.order_status)" />
+                <StatusBadge :label="paymentStatusLabel(order.payment_status)" :tone="paymentStatusTone(order.payment_status)" />
+              </div>
+            </div>
+
+            <!-- Hành động: chỉ hiện khi trạng thái đơn cho phép (BE vẫn kiểm tra lại). -->
+            <div class="detail-actions">
+              <button v-if="canPayOnline(order)" type="button" class="btn btn-primary" :disabled="acting" @click="pay">
+                {{ acting ? 'Đang xử lý...' : 'Thanh toán online' }}
+              </button>
+              <button v-if="canPayOnline(order)" type="button" class="btn btn-outline-secondary" :disabled="acting" @click="checkPayment">
+                Kiểm tra thanh toán
+              </button>
+              <button v-if="canCancelOrder(order)" type="button" class="btn btn-outline-danger" :disabled="acting" @click="cancel">
+                Hủy đơn hàng
+              </button>
             </div>
           </div>
 
-          <!-- Hành động: chỉ hiện khi trạng thái đơn cho phép (BE vẫn kiểm tra lại). -->
-          <div class="detail-actions">
-            <button v-if="canPayOnline(order)" type="button" class="btn btn-primary" :disabled="acting" @click="pay">
-              {{ acting ? 'Đang xử lý...' : 'Thanh toán online' }}
-            </button>
-            <button v-if="canPayOnline(order)" type="button" class="btn btn-outline-secondary" :disabled="acting" @click="checkPayment">
-              Kiểm tra thanh toán
-            </button>
-            <button v-if="canCancelOrder(order)" type="button" class="btn btn-outline-danger" :disabled="acting" @click="cancel">
-              Hủy đơn hàng
-            </button>
+          <!-- Đơn đã hủy không có tiến trình, chỉ báo trạng thái. -->
+          <div v-if="order.order_status === 'cancelled'" class="alert alert-danger mb-0 mt-4" role="status">
+            Đơn hàng này đã được hủy. Hàng đã được hoàn lại kho.
           </div>
+
+          <!-- Tiến trình xử lý đơn: 4 bước, bước đã qua tô vàng, bước hiện tại có viền sáng. -->
+          <ol v-else class="detail-steps" aria-label="Tiến trình xử lý đơn hàng">
+            <li v-for="step in steps" :key="step.key" class="detail-steps__item" :class="`is-${step.state}`">
+              <span class="detail-steps__marker" aria-hidden="true">{{ step.state === 'done' ? '✓' : '' }}</span>
+              <p class="detail-steps__label">{{ step.label }}</p>
+              <p class="detail-steps__note">{{ step.note }}</p>
+            </li>
+          </ol>
+        </OrderPanel>
+
+        <!-- Gợi ý theo trạng thái để người dùng biết cần làm gì tiếp. -->
+        <div v-if="canPayOnline(order)" class="alert alert-warning mt-4 mb-0" role="status">
+          Đơn đang chờ thanh toán online. Đơn chưa thanh toán sau 30 phút sẽ tự hủy và hoàn lại hàng.
+          Nếu bạn đã trả tiền mà trạng thái chưa đổi, bấm "Kiểm tra thanh toán".
+        </div>
+        <div v-else-if="order.payment_status === 'paid' && order.order_status === 'pending'" class="alert alert-success mt-4 mb-0" role="status">
+          Đã nhận thanh toán. Cửa hàng sẽ sớm xác nhận và giao hàng cho bạn.
         </div>
 
-        <!-- Đơn đã hủy không có tiến trình, chỉ báo trạng thái. -->
-        <div v-if="order.order_status === 'cancelled'" class="alert alert-danger mb-0 mt-4" role="status">
-          Đơn hàng này đã được hủy. Hàng đã được hoàn lại kho.
-        </div>
+        <div class="row g-4 mt-0">
+          <!-- Cột trái: các dòng hàng; tên, biến thể, đơn giá và thành tiền là snapshot tại thời điểm mua. -->
+          <section class="col-lg-7" aria-label="Sản phẩm trong đơn">
+            <OrderPanel class="h-100">
+              <h2 class="detail-heading">Sản phẩm trong đơn ({{ items.length }})</h2>
+              <ul class="list-unstyled mb-0">
+                <li v-for="item in items" :key="item.id" class="detail-item">
+                  <div class="detail-item__main">
+                    <p class="detail-item__name">{{ item.product_name }}</p>
+                    <p v-if="item.variant_label" class="detail-item__variant">{{ item.variant_label }}</p>
+                    <p class="detail-item__price">{{ formatPrice(Number(item.unit_price)) }} × {{ item.quantity }}</p>
+                  </div>
+                  <p class="detail-item__total">{{ formatPrice(Number(item.line_total)) }}</p>
+                </li>
+              </ul>
+            </OrderPanel>
+          </section>
 
-        <!-- Tiến trình xử lý đơn: 4 bước, bước đã qua tô vàng, bước hiện tại có viền sáng. -->
-        <ol v-else class="detail-steps" aria-label="Tiến trình xử lý đơn hàng">
-          <li v-for="step in steps" :key="step.key" class="detail-steps__item" :class="`is-${step.state}`">
-            <span class="detail-steps__marker" aria-hidden="true">{{ step.state === 'done' ? '✓' : '' }}</span>
-            <p class="detail-steps__label">{{ step.label }}</p>
-            <p class="detail-steps__note">{{ step.note }}</p>
-          </li>
-        </ol>
-      </OrderPanel>
-
-      <!-- Gợi ý theo trạng thái để người dùng biết cần làm gì tiếp. -->
-      <div v-if="canPayOnline(order)" class="alert alert-warning mt-4 mb-0" role="status">
-        Đơn đang chờ thanh toán online. Đơn chưa thanh toán sau 30 phút sẽ tự hủy và hoàn lại hàng.
-        Nếu bạn đã trả tiền mà trạng thái chưa đổi, bấm "Kiểm tra thanh toán".
-      </div>
-      <div v-else-if="order.payment_status === 'paid' && order.order_status === 'pending'" class="alert alert-success mt-4 mb-0" role="status">
-        Đã nhận thanh toán. Cửa hàng sẽ sớm xác nhận và giao hàng cho bạn.
-      </div>
-
-      <div class="row g-4 mt-0">
-        <!-- Cột trái: các dòng hàng; tên, biến thể, đơn giá và thành tiền là snapshot tại thời điểm mua. -->
-        <section class="col-lg-7" aria-label="Sản phẩm trong đơn">
-          <OrderPanel class="h-100">
-            <h2 class="detail-heading">Sản phẩm trong đơn ({{ items.length }})</h2>
-            <ul class="list-unstyled mb-0">
-              <li v-for="item in items" :key="item.id" class="detail-item">
-                <div class="detail-item__main">
-                  <p class="detail-item__name">{{ item.product_name }}</p>
-                  <p v-if="item.variant_label" class="detail-item__variant">{{ item.variant_label }}</p>
-                  <p class="detail-item__price">{{ formatPrice(Number(item.unit_price)) }} × {{ item.quantity }}</p>
+          <!-- Cột phải: thông tin giao nhận và tổng kết thanh toán. -->
+          <aside class="col-lg-5 detail-side">
+            <OrderPanel>
+              <h2 class="detail-heading">Thông tin giao nhận</h2>
+              <dl class="detail-fields">
+                <div>
+                  <dt>Người nhận</dt>
+                  <dd>{{ order.recipient_name }}</dd>
                 </div>
-                <p class="detail-item__total">{{ formatPrice(Number(item.line_total)) }}</p>
-              </li>
-            </ul>
-          </OrderPanel>
-        </section>
+                <div>
+                  <dt>Số điện thoại</dt>
+                  <dd>{{ order.recipient_phone }}</dd>
+                </div>
+                <div>
+                  <dt>Địa chỉ giao hàng</dt>
+                  <dd>{{ order.shipping_address }}</dd>
+                </div>
+              </dl>
+            </OrderPanel>
 
-        <!-- Cột phải: thông tin giao nhận và tổng kết thanh toán. -->
-        <aside class="col-lg-5 detail-side">
-          <OrderPanel>
-            <h2 class="detail-heading">Thông tin giao nhận</h2>
-            <dl class="detail-fields">
-              <div>
-                <dt>Người nhận</dt>
-                <dd>{{ order.recipient_name }}</dd>
-              </div>
-              <div>
-                <dt>Số điện thoại</dt>
-                <dd>{{ order.recipient_phone }}</dd>
-              </div>
-              <div>
-                <dt>Địa chỉ giao hàng</dt>
-                <dd>{{ order.shipping_address }}</dd>
-              </div>
-            </dl>
-          </OrderPanel>
-
-          <OrderPanel>
-            <h2 class="detail-heading">Tổng kết thanh toán</h2>
-            <dl class="detail-fields">
-              <div>
-                <dt>Hình thức thanh toán</dt>
-                <dd>{{ paymentMethodLabel(order.payment_method) }}</dd>
-              </div>
-              <div>
-                <dt>Trạng thái</dt>
-                <dd>
-                  <StatusBadge :label="paymentStatusLabel(order.payment_status)" :tone="paymentStatusTone(order.payment_status)" />
-                </dd>
-              </div>
-            </dl>
-            <p class="detail-total">
-              <span>Tổng thanh toán</span>
-              <strong>{{ formatPrice(Number(order.total_amount)) }}</strong>
-            </p>
-          </OrderPanel>
-        </aside>
-      </div>
+            <OrderPanel>
+              <h2 class="detail-heading">Tổng kết thanh toán</h2>
+              <dl class="detail-fields">
+                <div>
+                  <dt>Hình thức thanh toán</dt>
+                  <dd>{{ paymentMethodLabel(order.payment_method) }}</dd>
+                </div>
+                <div>
+                  <dt>Trạng thái</dt>
+                  <dd>
+                    <StatusBadge :label="paymentStatusLabel(order.payment_status)" :tone="paymentStatusTone(order.payment_status)" />
+                  </dd>
+                </div>
+              </dl>
+              <p class="detail-total">
+                <span>Tổng thanh toán</span>
+                <strong>{{ formatPrice(Number(order.total_amount)) }}</strong>
+              </p>
+            </OrderPanel>
+          </aside>
+        </div>
       </template>
     </StateBlock>
   </section>

@@ -115,6 +115,8 @@ onMounted(() => loadOrders())
       </p>
     </header>
 
+    <!-- Trạng thái danh sách đơn (StateBlock): đang tải → lỗi có nút thử lại → chưa có đơn nào.
+         Lỗi API được ưu tiên hơn "trống" để không báo nhầm "chưa có đơn" khi server lỗi. -->
     <StateBlock
       :loading="loading"
       :error="loadError"
@@ -127,82 +129,81 @@ onMounted(() => loadOrders())
         <RouterLink class="btn btn-primary" to="/catalog">Xem sản phẩm</RouterLink>
       </template>
 
-    <!-- Danh sách đơn: mỗi đơn là một thẻ gồm thanh thông tin, nội dung và khối tóm tắt có hành động. -->
-    <ul class="list-unstyled orders-list">
-      <li v-for="order in orders" :key="order.id">
-        <OrderPanel tag="article" class="order-item" :class="{ 'order-item--cancelled': order.order_status === 'cancelled' }">
-          <!-- Thanh thông tin: mã đơn, ngày đặt và các huy hiệu trạng thái. -->
-          <header class="order-item__meta">
-            <div class="order-item__id">
-              <RouterLink :to="`/orders/${order.id}`">#{{ order.id }}</RouterLink>
-              <span class="order-item__date">{{ formatOrderDate(order.created_at) }}</span>
-            </div>
-            <div class="order-item__badges">
-              <StatusBadge :label="orderStatusLabel(order.order_status)" :tone="orderStatusTone(order.order_status)" />
-              <StatusBadge :label="paymentStatusLabel(order.payment_status)" :tone="paymentStatusTone(order.payment_status)" />
-            </div>
-          </header>
+      <!-- Danh sách đơn: mỗi đơn là một thẻ gồm thanh thông tin, nội dung và khối tóm tắt có hành động. -->
+      <ul class="list-unstyled orders-list">
+        <li v-for="order in orders" :key="order.id">
+          <OrderPanel tag="article" class="order-item" :class="{ 'order-item--cancelled': order.order_status === 'cancelled' }">
+            <!-- Thanh thông tin: mã đơn, ngày đặt và các huy hiệu trạng thái. -->
+            <header class="order-item__meta">
+              <div class="order-item__id">
+                <RouterLink :to="`/orders/${order.id}`">#{{ order.id }}</RouterLink>
+                <span class="order-item__date">{{ formatOrderDate(order.created_at) }}</span>
+              </div>
+              <div class="order-item__badges">
+                <StatusBadge :label="orderStatusLabel(order.order_status)" :tone="orderStatusTone(order.order_status)" />
+                <StatusBadge :label="paymentStatusLabel(order.payment_status)" :tone="paymentStatusTone(order.payment_status)" />
+              </div>
+            </header>
 
-          <div class="order-item__body">
-            <!-- Thông tin nhận hàng và phương thức thanh toán. -->
-            <dl class="order-item__info">
-              <div>
-                <dt>Người nhận</dt>
-                <dd>{{ order.recipient_name }} · {{ order.recipient_phone }}</dd>
-              </div>
-              <div>
-                <dt>Giao đến</dt>
-                <dd class="order-item__address">{{ order.shipping_address }}</dd>
-              </div>
-              <div>
-                <dt>Thanh toán</dt>
-                <dd>{{ paymentMethodLabel(order.payment_method) }}</dd>
-              </div>
-            </dl>
+            <div class="order-item__body">
+              <!-- Thông tin nhận hàng và phương thức thanh toán. -->
+              <dl class="order-item__info">
+                <div>
+                  <dt>Người nhận</dt>
+                  <dd>{{ order.recipient_name }} · {{ order.recipient_phone }}</dd>
+                </div>
+                <div>
+                  <dt>Giao đến</dt>
+                  <dd class="order-item__address">{{ order.shipping_address }}</dd>
+                </div>
+                <div>
+                  <dt>Thanh toán</dt>
+                  <dd>{{ paymentMethodLabel(order.payment_method) }}</dd>
+                </div>
+              </dl>
 
-            <!-- Khối tóm tắt: tổng tiền và hành động; thanh toán/hủy chỉ hiện khi đơn còn ở trạng thái cho phép. -->
-            <div class="order-item__summary">
-              <p class="order-item__total">
-                <span>Tổng thanh toán</span>
-                <strong>{{ formatPrice(Number(order.total_amount)) }}</strong>
-              </p>
-              <div class="order-item__actions">
-                <RouterLink class="btn btn-primary btn-sm" :to="`/orders/${order.id}`">Xem chi tiết đơn hàng</RouterLink>
-                <button
-                  v-if="canPayOnline(order)"
-                  type="button"
-                  class="btn btn-outline-secondary btn-sm"
-                  :disabled="busyOrderId !== null"
-                  @click="payOrder(order)"
-                >
-                  {{ busyOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán online' }}
-                </button>
-                <button
-                  v-if="canCancelOrder(order)"
-                  type="button"
-                  class="btn btn-outline-danger btn-sm"
-                  :disabled="busyOrderId !== null"
-                  @click="cancel(order)"
-                >
-                  Hủy đơn
-                </button>
+              <!-- Khối tóm tắt: tổng tiền và hành động; thanh toán/hủy chỉ hiện khi đơn còn ở trạng thái cho phép. -->
+              <div class="order-item__summary">
+                <p class="order-item__total">
+                  <span>Tổng thanh toán</span>
+                  <strong>{{ formatPrice(Number(order.total_amount)) }}</strong>
+                </p>
+                <div class="order-item__actions">
+                  <RouterLink class="btn btn-primary btn-sm" :to="`/orders/${order.id}`">Xem chi tiết đơn hàng</RouterLink>
+                  <button
+                    v-if="canPayOnline(order)"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm"
+                    :disabled="busyOrderId !== null"
+                    @click="payOrder(order)"
+                  >
+                    {{ busyOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán online' }}
+                  </button>
+                  <button
+                    v-if="canCancelOrder(order)"
+                    type="button"
+                    class="btn btn-outline-danger btn-sm"
+                    :disabled="busyOrderId !== null"
+                    @click="cancel(order)"
+                  >
+                    Hủy đơn
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </OrderPanel>
-      </li>
-    </ul>
+          </OrderPanel>
+        </li>
+      </ul>
 
+      <!-- Phân trang chỉ hiện khi có nhiều hơn một trang. Nằm trong StateBlock nên tự ẩn khi đang tải, lỗi hoặc trống. -->
+      <PaginationBar
+        v-if="pagination.total_pages > 1"
+        :current-page="pagination.current_page"
+        :total-pages="pagination.total_pages"
+        label="Phân trang đơn hàng"
+        @change="loadOrders"
+      />
     </StateBlock>
-
-    <!-- Phân trang chỉ hiện khi có nhiều hơn một trang. -->
-    <PaginationBar
-      v-if="!loading && !loadError && pagination.total_pages > 1"
-      :current-page="pagination.current_page"
-      :total-pages="pagination.total_pages"
-      label="Phân trang đơn hàng"
-      @change="loadOrders"
-    />
   </section>
 </template>
 

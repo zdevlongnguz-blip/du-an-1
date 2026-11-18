@@ -52,8 +52,9 @@ Lỗi phải được ưu tiên hơn trống, để không hiện "chưa có đ�
 
 **Thuộc tính:**
 - Loading dùng `role="status"`, lỗi dùng `role="alert"`, thống nhất ở mọi trang.
-- Dùng Bootstrap 5 có sẵn (`text-center py-5`, `alert alert-danger`, `btn btn-outline-danger`). Không thêm thư viện.
-- CSS riêng dùng `<style scoped>`.
+- Style riêng trong `<style scoped>` theo bảng màu Stitch (`FE/CLAUDE.md` mục 12): thẻ trắng viền kem, lỗi nền đỏ nhạt, nút "Thử lại" viền navy. **Không** gắn cứng class tiện ích Bootstrap (`text-secondary`, `py-5`, `alert`...) vì chúng có `!important`, trang không ghi đè được. Không thêm thư viện.
+- Nút "Thử lại" gọi `onRetry()` không kèm tham số (không viết `@click="onRetry"`, vì Vue sẽ truyền sự kiện click vào hàm).
+- Trang có form cần giữ khi tải lại (ví dụ CheckoutView): chỉ chặn bằng StateBlock khi **chưa có dữ liệu** (`:loading="loadingCart && !cart"`); đã có dữ liệu thì báo nhỏ phía trên, không làm form biến mất.
 
 Ví dụ cách dùng:
 
