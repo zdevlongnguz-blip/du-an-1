@@ -15,6 +15,7 @@ import { startOnlinePayment } from '@/helpers/orders/orderActions'
 import { openChat } from '@/helpers/ai/chatAssistant'
 import {
   clearCheckoutDraft,
+  consumeDraftIntro,
   ensureDraftRecipient,
   refreshCheckoutDraftStock,
   removeCheckoutDraftItem,
@@ -25,7 +26,8 @@ import { showToast } from '@/helpers/ui/toast'
 
 const router = useRouter()
 // Đơn nháp dùng chung với khung chat. null = chưa có (khách gõ thẳng URL hoặc vừa tải lại trang).
-const { checkoutDraft } = useCheckoutDraft()
+// discardCount: tăng mỗi khi đơn nháp bị bỏ theo yêu cầu (Louis gọi tool hủy đơn nháp).
+const { checkoutDraft, discardCount } = useCheckoutDraft()
 
 // Bản chụp đơn nháp mà trang đang hiển thị. Tách khỏi checkoutDraft vì sau khi đặt hàng thành công
 // trang xóa đơn nháp dùng chung, nhưng vẫn cần dữ liệu để hiển thị trong lúc chuyển trang/sang SePay.
@@ -200,7 +202,22 @@ async function syncDraftWithStock() {
   return changes
 }
 
-// Chạy toàn bộ hiệu ứng cho một đơn nháp. Được gọi khi trang mở và khi Louis gửi đơn nháp mới.
+// Áp kết quả tải hồ sơ và tra kho lên trang: chép số lượng (có thể đã bị kẹp), hiện danh sách thay đổi, báo lỗi nếu có.
+// Dùng chung cho đường có hiệu ứng và đường hiện ngay (xem play).
+function applyLoadResults(nextDraft, profileLoaded, stockResult) {
+  if (!profileLoaded) {
+    showToast('Chưa tải được hồ sơ, quý ông điền thông tin nhận hàng trên trang giúp Louis nhé.', 'warning')
+  }
+  quantities.value = nextDraft.items.map((item) => item.quantity)
+  draftChanges.value = stockResult.changes
+  if (!stockResult.ok) {
+    showToast('Chưa kiểm tra được kho mới nhất. Cửa hàng sẽ kiểm tra lại khi quý ông xác nhận.', 'warning')
+  } else if (stockResult.changes.length > 0) {
+    showToast('Kho hoặc giá vừa thay đổi, Louis đã cập nhật đơn. Quý ông xem lại giúp Louis nhé.', 'warning')
+  }
+}
+
+// Hiển thị một đơn nháp: có hiệu ứng nếu Louis vừa gửi đơn, không thì hiện ngay. Gọi khi trang mở và khi Louis gửi đơn mới.
 // refreshStock: có tra lại kho/giá không. Mở trang (đơn có thể đã cũ) thì có; đơn Louis vừa gửi thì không,
 // vì server vừa kiểm tra giá và tồn kho lúc lên đơn, gọi thêm chỉ tốn request.
 async function play(nextDraft, refreshStock = true) {
@@ -221,6 +238,20 @@ async function play(nextDraft, refreshStock = true) {
       })
 
   try {
+    // Chỉ diễn hiệu ứng "Louis đang lên đơn" khi đơn vừa được Louis gửi tới. Mở lại đơn cũ (nút "Xem đơn nháp"
+    // trong khung chat, F5, quay lại trang) thì hiện ngay đơn đầy đủ, vẫn tra kho, để khách không phải chờ diễn lại.
+    if (!consumeDraftIntro()) {
+      const [profileLoaded, stockResult] = await Promise.all([recipientTask, stockTask])
+      if (id !== runId) throw CANCELLED
+      applyLoadResults(nextDraft, profileLoaded, stockResult)
+      for (const key of ['name', 'phone', 'address']) form[key] = nextDraft.recipient[key] || ''
+      itemsVisible.value = nextDraft.items.length
+      shownTotal.value = subtotal.value
+      stamped.value = true
+      phase.value = 'ready'
+      return
+    }
+
     // Màn 1: gõ từng bước chuẩn bị, xong bước nào hiện dấu ✓ bước đó.
     await wait(300, id)
     for (let i = 0; i < PREP_STEPS.length; i++) {
@@ -232,23 +263,11 @@ async function play(nextDraft, refreshStock = true) {
     }
     await wait(350, id)
 
-    // Đợi hồ sơ tải xong (thường đã xong trong lúc màn 1 chạy). Lỗi thì vẫn tiếp tục, khách tự điền.
-    const profileLoaded = await recipientTask
+    // Đợi hồ sơ và kết quả tra kho (thường đã xong trong lúc màn 1 chạy), rồi chép số lượng (có thể đã bị kẹp)
+    // trước khi các món bay vào và tổng tiền nhảy số. Lỗi thì vẫn tiếp tục, khách tự điền / BE kiểm tra lại.
+    const [profileLoaded, stockResult] = await Promise.all([recipientTask, stockTask])
     if (id !== runId) throw CANCELLED
-    if (!profileLoaded) {
-      showToast('Chưa tải được hồ sơ, quý ông điền thông tin nhận hàng trên trang giúp Louis nhé.', 'warning')
-    }
-
-    // Đợi kết quả tra kho rồi chép số lượng (có thể đã bị kẹp) trước khi các món bay vào và tổng tiền nhảy số.
-    const stockResult = await stockTask
-    if (id !== runId) throw CANCELLED
-    quantities.value = nextDraft.items.map((item) => item.quantity)
-    draftChanges.value = stockResult.changes
-    if (!stockResult.ok) {
-      showToast('Chưa kiểm tra được kho mới nhất. Cửa hàng sẽ kiểm tra lại khi quý ông xác nhận.', 'warning')
-    } else if (stockResult.changes.length > 0) {
-      showToast('Kho hoặc giá vừa thay đổi, Louis đã cập nhật đơn. Quý ông xem lại giúp Louis nhé.', 'warning')
-    }
+    applyLoadResults(nextDraft, profileLoaded, stockResult)
 
     // Màn 2: hiện form. Louis tự điền từng ô người nhận (phần trên), ô đang điền sẽ phát sáng.
     phase.value = 'fill'
@@ -452,6 +471,17 @@ watch([quantities, form], () => {
 
 watch(checkoutDraft, (nextDraft) => {
   if (nextDraft && nextDraft !== draft.value) play(nextDraft, false)
+})
+
+// watch: Louis vừa bỏ đơn nháp trong lúc khách đang ở trang này (cùng route nên trang không tải lại).
+// Dừng hiệu ứng đang chạy và về màn "chưa có đơn nháp". Đơn thật đã tạo (createdOrder) thì giữ nguyên
+// để khách vẫn bấm "Thanh toán lại" được; đang gửi đơn thì để kết quả gửi đơn quyết định.
+watch(discardCount, () => {
+  if (createdOrder.value || submitting.value) return
+  runId++
+  draft.value = null
+  draftChanges.value = []
+  checkoutError.value = ''
 })
 
 // onMounted: chạy 1 lần khi trang vừa hiện ra. Có đơn nháp thì bắt đầu hiệu ứng, không thì hiện màn "chưa có đơn".

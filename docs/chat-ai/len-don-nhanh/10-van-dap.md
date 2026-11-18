@@ -11,7 +11,10 @@ A: Khách nói muốn mua trong khung chat, Louis lên đơn nháp với giá, t
 A: AI có thể hiểu sai hoặc bị khách gài câu lệnh, mà tạo đơn là trừ kho ngay. Để khách bấm xác nhận thì mọi đơn do chính khách quyết định, AI làm sai tối đa là mở một trang xem trước. → [02-kien-truc.md, 4.2](02-kien-truc.md)
 
 **Q: Khách hủy đơn nháp thế nào?**
-A: Bấm nút "Bỏ đơn nháp" trên trang, xác nhận hộp thoại là xong. Đơn nháp không nằm trong DB, không giữ hàng; chỉ lưu sessionStorage nên cũng tự mất khi đóng tab hoặc đăng xuất. Louis không có tool xóa đơn nháp, chỉ hướng dẫn khách bấm nút.
+A: Hai cách. Bấm nút "Bỏ đơn nháp" trên trang (có hỏi xác nhận), hoặc nhắn Louis "hủy đơn nháp": Louis gọi tool `cancel_order_draft`, tool không đụng DB mà chỉ trả lệnh `checkout-draft-clear`, FE xóa đơn nháp trong sessionStorage rồi mở trang "Lên đơn nhanh" ở màn "Chưa có đơn nháp". Đơn nháp không nằm trong DB, không giữ hàng; cũng tự mất khi đóng tab hoặc đăng xuất.
+
+**Q: AI có xóa nhầm đơn nháp không?**
+A: Prompt chỉ cho gọi `cancel_order_draft` khi khách nói rõ muốn bỏ/hủy đơn nháp; nói mơ hồ ("thôi", "để sau") thì hỏi lại; bỏ một món thì dùng lệnh `remove` của `create_order_draft`; hủy đơn ĐÃ ĐẶT thì không phải tool này. Nếu lỡ xóa nhầm, thiệt hại nhỏ: đơn nháp chưa đặt, nhờ Louis lên lại là có.
 
 **Q: Có ảnh hưởng giỏ hàng không?**
 A: Không. API xác nhận tạo đơn từ danh sách SKU, không đọc và không xóa giỏ.

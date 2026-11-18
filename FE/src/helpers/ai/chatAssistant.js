@@ -3,7 +3,7 @@
 // Gọi API api-ai-chat (POST, cần đăng nhập). Lịch sử hội thoại do BE lưu, FE chỉ giữ conversation_id.
 import { ref } from 'vue'
 import api from '@/helpers/api/client'
-import { getCheckoutDraftForChat, setCheckoutDraft } from '@/helpers/ai/checkoutDraft'
+import { discardCheckoutDraft, getCheckoutDraftForChat, setCheckoutDraft } from '@/helpers/ai/checkoutDraft'
 
 // Độ dài tối đa của một câu hỏi, khớp giới hạn của BE (2000 ký tự).
 export const MAX_MESSAGE_LENGTH = 2000
@@ -233,6 +233,12 @@ async function requestReply(messageId) {
       if (action?.type === 'checkout-draft') {
         if (setCheckoutDraft(action.draft)) return { name: 'ai-checkout' }
         continue
+      }
+      // Lệnh bỏ đơn nháp (tool cancel_order_draft): xóa đơn nháp trong sessionStorage rồi mở trang lên đơn,
+      // để khách thấy ngay màn "chưa có đơn nháp" (trang này không có trên thanh menu).
+      if (action?.type === 'checkout-draft-clear') {
+        discardCheckoutDraft()
+        return { name: 'ai-checkout' }
       }
       const location = toRouteLocation(action)
       if (location) return location

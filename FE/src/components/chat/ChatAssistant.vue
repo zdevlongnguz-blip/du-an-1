@@ -5,7 +5,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatAssistant, MAX_MESSAGE_LENGTH } from '@/helpers/ai/chatAssistant'
-import { clearCheckoutDraft } from '@/helpers/ai/checkoutDraft'
+import { clearCheckoutDraft, useCheckoutDraft } from '@/helpers/ai/checkoutDraft'
 import { saveReturnUrl } from '@/helpers/auth/returnUrl'
 import { getUser } from '@/helpers/auth/session'
 import { getDisplayName } from '@/helpers/auth/profile'
@@ -63,6 +63,21 @@ function refreshGreetingName() {
 
 // watch nhiều nguồn cùng lúc; immediate: true để chạy luôn 1 lần khi component vừa tạo.
 watch([() => props.authenticated, () => route.fullPath, isOpen], refreshGreetingName, { immediate: true })
+
+// Đơn nháp Louis đã lên (dùng chung với trang /ai-checkout). null = chưa có.
+const { checkoutDraft } = useCheckoutDraft()
+// computed: số món trong đơn nháp, hiện ở dải "Xem đơn nháp".
+const draftItemCount = computed(() => checkoutDraft.value?.items?.length || 0)
+// computed: có hiện dải "Xem đơn nháp" không. Trang /ai-checkout không có trên thanh menu, nên khi khách đang có
+// đơn nháp mà ở trang khác, dải này giúp mở lại đơn để xem, sửa hoặc bỏ. Đang ở sẵn trang đơn nháp thì ẩn.
+const showDraftBar = computed(() => (
+  props.authenticated && draftItemCount.value > 0 && route.name !== 'ai-checkout'
+))
+
+// Bấm "Xem đơn nháp": mở trang lên đơn (điện thoại thì thu nhỏ chat để thấy trang).
+function openDraftPage() {
+  navigateTo({ name: 'ai-checkout' })
+}
 
 // true trong lúc gọi API xóa, để khóa nút tránh bấm lặp.
 const isClearing = ref(false)
@@ -281,6 +296,16 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
           </button>
         </header>
+
+        <!-- Dải "Xem đơn nháp": hiện khi khách có đơn nháp và không ở sẵn trang đơn nháp,
+             để khách tự mở đơn (xem, sửa, bỏ) mà không cần nhờ Louis. -->
+        <div v-if="showDraftBar" class="chat-draft-bar">
+          <span class="chat-draft-text">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>
+            Đơn nháp đang mở · {{ draftItemCount }} món
+          </span>
+          <button type="button" class="chat-draft-button" @click="openDraftPage">Xem đơn nháp</button>
+        </div>
 
         <!-- Chưa đăng nhập: thông báo và link tới trang đăng nhập (lưu trang hiện tại để quay lại) -->
         <div v-if="!authenticated" class="chat-body chat-guest">
@@ -579,10 +604,59 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
 /* flex-shrink: 0 cho header, chip, ô nhập, chú thích: chỉ vùng tin nhắn được co giãn,
    các phần còn lại giữ nguyên chiều cao (trước đây hàng chip bị bóp méo vì bị co). */
 .chat-header,
+.chat-draft-bar,
 .chat-suggestions,
 .chat-composer,
 .chat-note {
   flex-shrink: 0;
+}
+
+/* Dải "Xem đơn nháp" dưới header: nền kem phụ, viền đồng mảnh, nút viền đồng nhỏ. */
+.chat-draft-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-soft);
+  font-size: 0.78rem;
+  color: var(--color-ink);
+}
+
+.chat-draft-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-draft-text svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--color-brass-dark);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-draft-button {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--color-brass);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-brass-dark);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.chat-draft-button:hover,
+.chat-draft-button:focus-visible {
+  background: var(--color-brass);
+  color: #fff;
 }
 
 .chat-header {
