@@ -30,6 +30,9 @@ const invoice = ref(null)
 // Trạng thái tải, lỗi tải và hành động đang chạy (khóa nút để tránh gửi lặp).
 const loading = ref(false)
 const loadError = ref('')
+// true khi BE trả 404 (đơn không tồn tại hoặc không thuộc tài khoản này). Khi đó tải lại cũng vô ích,
+// nên ẩn nút "Thử lại"; khách quay lại bằng link "Quay lại lịch sử đơn hàng" phía trên.
+const notFound = ref(false)
 const acting = ref(false)
 
 // Rút order ra computed để template không phải kiểm tra null nhiều lần.
@@ -62,6 +65,7 @@ const steps = computed(() => {
 async function loadInvoice() {
   loading.value = true
   loadError.value = ''
+  notFound.value = false
 
   try {
     const response = await api.get('/?action=api-order-invoice', { params: { id: route.params.id } })
@@ -71,6 +75,7 @@ async function loadInvoice() {
     invoice.value = response.data.invoice
   } catch (error) {
     invoice.value = null
+    notFound.value = error.response?.status === 404
     loadError.value = error.response?.data?.message || error.message || 'Không tải được đơn hàng.'
   } finally {
     loading.value = false
@@ -142,13 +147,14 @@ watch(() => route.params.id, loadInvoice)
       <RouterLink class="detail-back" to="/orders">&larr; Quay lại lịch sử đơn hàng</RouterLink>
     </nav>
 
-    <!-- Trạng thái chi tiết đơn (StateBlock): đang tải (chỉ khi chưa có đơn) → lỗi, gồm 404 không tìm thấy, có nút thử lại.
+    <!-- Trạng thái chi tiết đơn (StateBlock): đang tải (chỉ khi chưa có đơn) → lỗi.
+         Lỗi mạng/server có nút "Thử lại"; lỗi 404 (không tìm thấy đơn) thì ẩn nút vì tải lại cũng vô ích.
          Trang này không có trạng thái trống: đơn không tồn tại thì BE trả lỗi 404. -->
     <StateBlock
       :loading="loading && !order"
       :error="loadError"
       loading-text="Đang tải đơn hàng..."
-      :on-retry="loadInvoice"
+      :on-retry="notFound ? null : loadInvoice"
     >
       <template v-if="order">
         <!-- Khối đầu: mã đơn, ngày đặt, huy hiệu trạng thái, hành động và tiến trình xử lý. -->
