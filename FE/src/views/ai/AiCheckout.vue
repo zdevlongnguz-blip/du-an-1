@@ -1392,7 +1392,7 @@ onBeforeUnmount(() => { runId++ })
 
 /* Khối báo lỗi khi gửi đơn: nền đỏ nhạt, chữ đỏ đậm theo bảng màu Stitch. */
 .qo-alert {
-  margin: 0 0 0.75rem;
+  margin: 1rem 0 0.75rem;
   padding: 0.6rem 0.75rem;
   border: 1px solid rgba(186, 26, 26, 0.3);
   border-radius: 6px;
@@ -1403,7 +1403,8 @@ onBeforeUnmount(() => { runId++ })
 
 /* Danh sách thay đổi sau khi tra lại kho: nền kem phụ, viền đồng, để khách để ý mà không giống lỗi. */
 .qo-changes {
-  margin: 0 0 0.75rem;
+  /* Cách khối phương thức thanh toán phía trên, tránh hai viền dính liền. */
+  margin: 1rem 0 0.75rem;
   padding: 0.6rem 0.75rem;
   border: 1px solid #b8893e;
   border-radius: 6px;
