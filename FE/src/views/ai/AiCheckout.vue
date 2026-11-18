@@ -76,10 +76,15 @@ const editable = computed(() => phase.value === 'ready' && !submitting.value && 
 // computed: danh sách món của đơn đang hiển thị (rỗng nếu chưa có đơn), để template không phải kiểm tra null.
 const items = computed(() => draft.value?.items || [])
 // computed: tổng tiền theo số lượng hiện tại. Chỉ để khách xem trước, BE sẽ tính lại khi xác nhận.
-const subtotal = computed(() => items.value.reduce((sum, item, index) => sum + item.price * (quantities.value[index] || 0), 0))
-// computed: số tiền khách tiết kiệm nhờ giảm giá (chênh lệch giữa giá niêm yết và giá bán).
+// Món đã hết hàng/ngừng bán (available = false) không được cộng, giống tổng tiền của trang Giỏ hàng.
+const subtotal = computed(() => items.value.reduce((sum, item, index) => (
+  item.available === false ? sum : sum + item.price * (quantities.value[index] || 0)
+), 0))
+// computed: số tiền khách tiết kiệm nhờ giảm giá (chênh lệch giữa giá niêm yết và giá bán), cũng bỏ món hết hàng.
 const savings = computed(() => items.value.reduce((sum, item, index) => (
-  item.original_price ? sum + (item.original_price - item.price) * (quantities.value[index] || 0) : sum
+  item.original_price && item.available !== false
+    ? sum + (item.original_price - item.price) * (quantities.value[index] || 0)
+    : sum
 ), 0))
 // computed: tổng số sản phẩm (cộng số lượng các món).
 const totalQuantity = computed(() => quantities.value.reduce((sum, qty) => sum + qty, 0))
