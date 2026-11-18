@@ -29,7 +29,9 @@ Trường hợp giá đổi còn nguy hiểm hơn ở trang đặt hàng tay: tr
 4. **Kiểm tra sớm khi rẻ.** Mở trang là lấy số mới nhất một lần, để phần lớn trường hợp khách thấy đúng ngay từ đầu.
 5. **Không hỏi server liên tục (polling) và không giữ hàng cho trang đang mở.** Tốn tài nguyên mà vẫn không loại được khoảnh khắc giữa lần hỏi cuối và lúc bấm đặt. Nguyên tắc 1-3 đã đủ an toàn.
 
-> Ngoại lệ đã có từ trước: đơn **SePay** (thanh toán online) giữ hàng tới khi thanh toán hoặc quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (30 phút). Mỗi lần đặt hàng, server gọi `expireStaleOnlineOrders` để trả lại hàng của đơn online quá hạn trước khi kiểm tra kho.
+> Ngoại lệ đã có từ trước: đơn **SePay** (thanh toán online) giữ hàng tới khi thanh toán hoặc quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (30 phút). Server gọi `expireStaleOnlineOrders` để trả lại hàng của đơn online quá hạn **trước khi đọc tồn kho** ở: tạo đơn (cả hai luồng), `api-cart`, `api-order-draft-items`, xem/thanh toán đơn.
+>
+> Vì sao `api-cart` và `api-order-draft-items` cũng phải gọi: hai API này cấp số tồn kho để FE **khóa nút đặt hàng**. Nếu đọc số chưa trả hàng của đơn quá hạn, FE sẽ báo "Kho chỉ còn N" hoặc "Hết hàng" oan, trong khi lúc tạo đơn server vẫn cho đặt.
 
 ## 3. Ba thời điểm kiểm tra
 
