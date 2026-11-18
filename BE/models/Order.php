@@ -19,14 +19,17 @@ class Order extends BaseModel
      * @param string $recipientPhone Số điện thoại người nhận.
      * @param string $shippingAddress Địa chỉ giao hàng.
      * @param string $paymentMethod Phương thức thanh toán: 'cod' (khi nhận hàng) hoặc 'sepay' (online); giá trị khác coi là 'cod'.
-     * @return array Kết quả ok/order_id/total_amount, empty_cart hoặc stock_unavailable.
+     * @param string|null $expectedTotal Tổng tiền khách đã thấy trên trang (chuỗi số), null = không đối chiếu.
+     *                                   Khác tổng tính lại (giá vừa đổi) thì không tạo đơn, trả price_changed.
+     * @return array Kết quả ok/order_id/total_amount, empty_cart, stock_unavailable hoặc price_changed (kèm total_amount mới).
      */
     public function checkout(
         int $userId = 0,
         string $recipientName = '',
         string $recipientPhone = '',
         string $shippingAddress = '',
-        string $paymentMethod = 'cod'
+        string $paymentMethod = 'cod',
+        ?string $expectedTotal = null
     ): array {
         if ($userId < 1) {
             return ['status' => 'invalid_user'];
@@ -92,6 +95,13 @@ class Order extends BaseModel
             unset($item);
 
             $totalAmount = $this->fromCents($totalCents);
+            // Giá đổi trong lúc khách đang ở trang đặt hàng: không tạo đơn, để khách thấy giá mới trước khi bị tính tiền.
+            // So theo đơn vị xu (số nguyên) để tránh sai số khi so sánh số thập phân.
+            if ($expectedTotal !== null && $this->toCents($expectedTotal) !== $totalCents) {
+                $this->pdo->rollBack();
+                return ['status' => 'price_changed', 'total_amount' => $totalAmount];
+            }
+
             // Ghi đơn, chi tiết đơn, trừ kho và cộng lượt bán (dùng chung với checkoutItems).
             $orderId = $this->insertOrderRows(
                 $userId, $items, $recipientName, $recipientPhone, $shippingAddress, $paymentMethod, $totalAmount

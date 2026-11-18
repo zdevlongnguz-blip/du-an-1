@@ -118,6 +118,9 @@ async function submitCheckout() {
       recipient_phone: recipientPhone.value.trim(),
       shipping_address: shippingAddress.value.trim(),
       payment_method: paymentMethod.value,
+      // Tổng tiền khách đang thấy (chuỗi do api-cart trả, ví dụ "1449000.00"). BE chỉ dùng để phát hiện giá vừa đổi
+      // trong lúc khách ở trang này (trả 409), không dùng để tính tiền.
+      expected_total: cart.value?.total_amount ?? null,
     })
     const orderId = response.data?.order?.id
     if (response.data?.status !== 'success' || !orderId) {
@@ -139,8 +142,9 @@ async function submitCheckout() {
   } catch (error) {
     checkoutError.value = error.response?.data?.message || error.message || 'Không thể tạo đơn hàng.'
     showToast(checkoutError.value, 'danger')
-    // 409: tồn kho vừa thay đổi (hết hàng, ngừng bán hoặc không đủ số lượng).
-    // Tải lại giỏ để trang hiện đúng tồn kho mới: dòng thiếu hàng sẽ được đánh dấu và nút Đặt hàng bị khóa.
+    // 409: tồn kho vừa thay đổi (hết hàng, ngừng bán, không đủ số lượng) hoặc giá vừa đổi.
+    // Tải lại giỏ để trang hiện đúng tồn kho và giá mới: dòng thiếu hàng được đánh dấu và khóa nút Đặt hàng;
+    // giá đổi thì tổng mới hiện ra, khách xem lại rồi bấm đặt lần nữa.
     if (error.response?.status === 409) await loadCart()
   } finally {
     submitting.value = false

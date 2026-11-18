@@ -18,7 +18,10 @@ class OrderController
     /**
      * Tạo đơn từ giỏ hàng và trừ tồn kho trong transaction.
      * Body: recipient_name, recipient_phone, shipping_address và payment_method tùy chọn ('cod' mặc định, hoặc 'sepay').
-     * Sai method trả 405, thông tin giao hàng hoặc phương thức thanh toán sai trả 400/422, giỏ rỗng trả 422, thiếu hàng trả 409.
+     * expected_total (không bắt buộc): tổng tiền khách đang thấy trên trang, dùng để phát hiện giá đã đổi.
+     * Không gửi thì không đối chiếu (giữ tương thích với FE cũ).
+     * Sai method trả 405, thông tin giao hàng hoặc phương thức thanh toán sai trả 400/422, giỏ rỗng trả 422,
+     * thiếu hàng trả 409, giá đã đổi trả 409 (kèm total_amount mới).
      *
      * @param array $authPayload Payload JWT từ middleware.
      * @return void
@@ -57,12 +60,19 @@ class OrderController
             response_json(['status' => 'error', 'message' => 'Phương thức thanh toán không hợp lệ'], 422);
         }
 
-        $result = $this->order->checkout($userId, $recipientName, $recipientPhone, $shippingAddress, $paymentMethod);
+        $expectedTotal = $this->readExpectedTotal($input);
+
+        $result = $this->order->checkout(
+            $userId, $recipientName, $recipientPhone, $shippingAddress, $paymentMethod, $expectedTotal
+        );
         if (($result['status'] ?? '') === 'empty_cart') {
             response_json(['status' => 'error', 'message' => 'Giỏ hàng đang trống'], 422);
         }
         if (($result['status'] ?? '') === 'stock_unavailable') {
             response_json(['status' => 'error', 'message' => 'Tồn kho đã thay đổi, vui lòng kiểm tra lại giỏ hàng'], 409);
+        }
+        if (($result['status'] ?? '') === 'price_changed') {
+            $this->respondPriceChanged($result['total_amount']);
         }
 
         response_json([
@@ -151,18 +161,7 @@ class OrderController
             response_json(['status' => 'error', 'message' => 'Phương thức thanh toán không hợp lệ'], 422);
         }
 
-        // expected_total không bắt buộc. Nhận số (1449000) hoặc chuỗi số ("1449000.00"), tối đa 2 chữ số thập phân.
-        // Regex đảm bảo chuỗi chỉ gồm chữ số và tối đa một dấu chấm trước khi model đổi sang đơn vị xu.
-        $expectedTotal = null;
-        if (array_key_exists('expected_total', $input) && $input['expected_total'] !== null) {
-            $rawTotal = $input['expected_total'];
-            $totalText = is_int($rawTotal) ? (string) $rawTotal
-                : (is_float($rawTotal) ? number_format($rawTotal, 2, '.', '') : (is_string($rawTotal) ? trim($rawTotal) : ''));
-            if (!preg_match('/^\d{1,12}(\.\d{1,2})?$/', $totalText)) {
-                response_json(['status' => 'error', 'message' => 'Tổng tiền đối chiếu không hợp lệ'], 422);
-            }
-            $expectedTotal = $totalText;
-        }
+        $expectedTotal = $this->readExpectedTotal($input);
 
         $result = $this->order->checkoutItems(
             $userId, $items, $recipientName, $recipientPhone, $shippingAddress, $paymentMethod, $expectedTotal
@@ -175,12 +174,7 @@ class OrderController
             ], 409);
         }
         if ($status === 'price_changed') {
-            response_json([
-                'status' => 'error',
-                'message' => 'Giá sản phẩm vừa thay đổi. Tổng mới là ' . number_format((float) $result['total_amount'], 0, ',', '.')
-                    . 'đ, quý khách vui lòng kiểm tra lại trước khi đặt.',
-                'total_amount' => $result['total_amount'],
-            ], 409);
+            $this->respondPriceChanged($result['total_amount']);
         }
         if ($status !== 'ok') {
             response_json(['status' => 'error', 'message' => 'Dữ liệu đơn hàng không hợp lệ'], 422);
@@ -634,6 +628,48 @@ class OrderController
         }
 
         response_json(['status' => 'success', 'message' => 'Đã cập nhật đơn hàng']);
+    }
+
+    /**
+     * Đọc expected_total (tổng tiền khách đang thấy) từ body, dùng chung cho api-order-checkout và api-order-checkout-items.
+     * Không bắt buộc: thiếu hoặc null thì trả null (không đối chiếu giá).
+     * Nhận số (1449000) hoặc chuỗi số ("1449000.00"), tối đa 2 chữ số thập phân. Sai định dạng thì dừng với 422.
+     *
+     * @param array $input Body JSON đã decode.
+     * @return string|null Chuỗi số đã kiểm tra, hoặc null nếu không gửi.
+     */
+    private function readExpectedTotal(array $input = []): ?string
+    {
+        if (!array_key_exists('expected_total', $input) || $input['expected_total'] === null) {
+            return null;
+        }
+
+        $rawTotal = $input['expected_total'];
+        $totalText = is_int($rawTotal) ? (string) $rawTotal
+            : (is_float($rawTotal) ? number_format($rawTotal, 2, '.', '') : (is_string($rawTotal) ? trim($rawTotal) : ''));
+        // Regex đảm bảo chuỗi chỉ gồm chữ số và tối đa một dấu chấm trước khi model đổi sang đơn vị xu.
+        if (!preg_match('/^\d{1,12}(\.\d{1,2})?$/', $totalText)) {
+            response_json(['status' => 'error', 'message' => 'Tổng tiền đối chiếu không hợp lệ'], 422);
+        }
+
+        return $totalText;
+    }
+
+    /**
+     * Trả 409 khi giá đã đổi so với tổng khách đang thấy, kèm tổng mới để FE hiển thị.
+     * Dùng chung cho api-order-checkout và api-order-checkout-items để câu báo giống nhau.
+     *
+     * @param string $totalAmount Tổng tiền mới do server tính lại (chuỗi DECIMAL).
+     * @return void
+     */
+    private function respondPriceChanged(string $totalAmount = '0'): void
+    {
+        response_json([
+            'status' => 'error',
+            'message' => 'Giá sản phẩm vừa thay đổi. Tổng mới là ' . number_format((float) $totalAmount, 0, ',', '.')
+                . 'đ, quý khách vui lòng kiểm tra lại trước khi đặt.',
+            'total_amount' => $totalAmount,
+        ], 409);
     }
 
     /**
