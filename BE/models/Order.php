@@ -563,6 +563,25 @@ class Order extends BaseModel
     }
 
     /**
+     * Trả lại tồn kho của các đơn SePay quá hạn chưa thanh toán, gọi TRƯỚC mọi chỗ đọc tồn kho để hiển thị
+     * hoặc kiểm tra (danh sách/chi tiết sản phẩm, giỏ hàng, tool AI, đơn nháp).
+     * Vì sao cần: hàng của đơn quá hạn chỉ được trả "lười" khi có người gọi hàm này. Nếu nơi đọc tồn kho không gọi,
+     * khách sẽ thấy "hết hàng" hoặc "chỉ còn N" oan, trong khi lúc tạo đơn server vẫn cho đặt.
+     * Biến static $done: chỉ chạy tối đa MỘT lần mỗi request (ví dụ một lượt chat gọi tool nhiều lần), đỡ truy vấn thừa.
+     *
+     * @return void
+     */
+    public static function releaseExpiredStock(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        (new self())->expireStaleOnlineOrders(SEPAY_PAYMENT_TIMEOUT_MINUTES);
+    }
+
+    /**
      * Tự hủy các đơn thanh toán online còn pending/unpaid quá hạn và hoàn lại tồn kho.
      * Không dùng cron: hàm này được gọi "lười" (lazy) mỗi khi có người đặt đơn, xem đơn hoặc bắt đầu thanh toán,
      * nên đơn bỏ dở không giữ kho mãi mãi. Mỗi lần xử lý tối đa 50 đơn; lỗi một đơn không làm hỏng request đang chạy.

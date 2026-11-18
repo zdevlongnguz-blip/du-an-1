@@ -86,6 +86,8 @@ class GeminiToolSearchProduct extends GeminiTool
         if ($keyword === '') {
             throw new InvalidArgumentException('Thiếu từ khóa tìm kiếm.');
         }
+        // Trả lại kho của đơn SePay quá hạn trước khi đọc tồn kho, để Louis không báo "hết hàng" oan.
+        Order::releaseExpiredStock();
         // mb_strlen đếm theo ký tự tiếng Việt đúng hơn strlen (đếm theo byte).
         if (mb_strlen($keyword, 'UTF-8') > self::MAX_KEYWORD_LENGTH) {
             throw new InvalidArgumentException('Từ khóa quá dài, tối đa ' . self::MAX_KEYWORD_LENGTH . ' ký tự.');

@@ -29,9 +29,19 @@ Trường hợp giá đổi còn nguy hiểm hơn ở trang đặt hàng tay: tr
 4. **Kiểm tra sớm khi rẻ.** Mở trang là lấy số mới nhất một lần, để phần lớn trường hợp khách thấy đúng ngay từ đầu.
 5. **Không hỏi server liên tục (polling) và không giữ hàng cho trang đang mở.** Tốn tài nguyên mà vẫn không loại được khoảnh khắc giữa lần hỏi cuối và lúc bấm đặt. Nguyên tắc 1-3 đã đủ an toàn.
 
-> Ngoại lệ đã có từ trước: đơn **SePay** (thanh toán online) giữ hàng tới khi thanh toán hoặc quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (30 phút). Server gọi `expireStaleOnlineOrders` để trả lại hàng của đơn online quá hạn **trước khi đọc tồn kho** ở: tạo đơn (cả hai luồng), `api-cart`, `api-order-draft-items`, xem/thanh toán đơn.
+> Ngoại lệ đã có từ trước: đơn **SePay** (thanh toán online) giữ hàng tới khi thanh toán hoặc quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (30 phút). Hàng của đơn quá hạn được trả "lười" (không có cron), nên server phải trả lại **trước mọi chỗ đọc tồn kho**:
 >
-> Vì sao `api-cart` và `api-order-draft-items` cũng phải gọi: hai API này cấp số tồn kho để FE **khóa nút đặt hàng**. Nếu đọc số chưa trả hàng của đơn quá hạn, FE sẽ báo "Kho chỉ còn N" hoặc "Hết hàng" oan, trong khi lúc tạo đơn server vẫn cho đặt.
+> | Chỗ đọc tồn kho | Gọi |
+> | --- | --- |
+> | Tạo đơn (cả hai luồng), xem/thanh toán đơn | `expireStaleOnlineOrders` (có từ trước) |
+> | `api-products`, `api-products-top`, `api-product-detail` | `Order::releaseExpiredStock()` |
+> | `api-cart`, `api-cart-add`, `api-cart-update` | `Order::releaseExpiredStock()` |
+> | `api-order-draft-items` | `Order::releaseExpiredStock()` |
+> | Tool AI `search_product`, `create_order_draft` | `Order::releaseExpiredStock()` |
+>
+> `releaseExpiredStock` chỉ chạy tối đa **một lần mỗi request** (biến `static`), nên một lượt chat gọi tool nhiều lần cũng chỉ quét một lần.
+>
+> Vì sao cần: nếu đọc số chưa trả hàng của đơn quá hạn, khách thấy "Hết hàng", "Kho chỉ còn N", "vượt tồn kho" hoặc Louis báo "không đủ hàng" oan, còn FE khóa nút đặt hàng, trong khi lúc tạo đơn server vẫn cho đặt.
 
 ## 3. Ba thời điểm kiểm tra
 
@@ -84,7 +94,13 @@ Hàm `refreshCheckoutDraftStock()` trong `FE/src/helpers/ai/checkoutDraft.js`, �
 | `available: false` (không tồn tại, ngừng bán, hết hàng) | `available = false`, `stock = 0`, **giữ** số lượng | "…: đã hết hàng hoặc ngừng bán, quý ông bỏ món này khỏi đơn giúp Louis." |
 | Giá khác giá đang hiển thị | Cập nhật `price`, `original_price` | "…: giá đổi từ X thành Y." |
 | Số lượng > tồn kho | Kẹp số lượng về tồn kho | "…: kho chỉ còn N, Louis đã giảm từ A xuống N." |
+| Giá giữ nguyên nhưng hết giảm giá | Bỏ `original_price` | "…: đã hết chương trình giảm giá." |
+| Tên, tên phiên bản, ảnh đổi | Cập nhật theo server | (không báo) |
 | Không đổi gì | Giữ nguyên | (không báo) |
+
+Món hết hàng/ngừng bán **không được cộng** vào Tạm tính, Đã giảm, Tổng và số sản phẩm; thành tiền của món đó bị gạch kèm ghi chú "không tính vào tổng".
+
+Tra kho chỉ chạy khi **mở trang/F5** và khi **bị 409**. Đơn Louis vừa gửi trong lúc khách đang ở trang thì không tra lại (server vừa kiểm tra lúc lên đơn). Khi bị 409, trang chỉ tra lại nếu vẫn đang hiển thị đúng đơn nháp hiện tại (không sửa nhầm khi Louis vừa gửi đơn mới).
 
 Trên trang:
 
@@ -160,6 +176,8 @@ Vẫn như [05-api-xac-nhan.md](../chat-ai/len-don-nhanh/05-api-xac-nhan.md). Ph
 | --- | --- | --- |
 | Route mới | `BE/routes/index.php` | `case 'api-order-draft-items'` |
 | Tra kho đơn nháp | `BE/controllers/OrderController.php` | `draftItems` (dùng `Product::getActiveVariantsBySkus`) |
+| Dựng món đơn nháp (dùng chung với tool AI) | `BE/models/Product.php` | `buildDraftItem`; `getActiveVariantsBySkus` trả key là SKU viết thường |
+| Trả kho đơn SePay quá hạn trước khi đọc | `BE/models/Order.php` | `releaseExpiredStock` (gọi một lần mỗi request) |
 | Đọc/đối chiếu tổng tiền | `BE/controllers/OrderController.php` | `readExpectedTotal`, `respondPriceChanged` |
 | So tổng khi đặt từ giỏ | `BE/models/Order.php` | `checkout` (tham số `$expectedTotal`) |
 | Cập nhật đơn nháp AI | `FE/src/helpers/ai/checkoutDraft.js` | `refreshCheckoutDraftStock` |

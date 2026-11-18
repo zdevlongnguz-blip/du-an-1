@@ -87,7 +87,10 @@ const savings = computed(() => items.value.reduce((sum, item, index) => (
     : sum
 ), 0))
 // computed: tổng số sản phẩm (cộng số lượng các món).
-const totalQuantity = computed(() => quantities.value.reduce((sum, qty) => sum + qty, 0))
+// Món hết hàng/ngừng bán không được đếm, cho khớp với tổng tiền (cũng không cộng món này).
+const totalQuantity = computed(() => quantities.value.reduce((sum, qty, index) => (
+  items.value[index]?.available === false ? sum : sum + qty
+), 0))
 // computed: true nếu có món đã hết hàng/ngừng bán (đánh dấu sau khi tra lại kho). Khi đó khóa nút đặt hàng
 // vì BE chắc chắn từ chối đơn (409); khách cần bỏ món đó trước.
 const hasUnavailableItem = computed(() => items.value.some((item) => item.available === false))

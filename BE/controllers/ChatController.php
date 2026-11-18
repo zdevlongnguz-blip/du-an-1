@@ -286,10 +286,8 @@ class ChatController
      */
     private function describeDraftItems($items = [])
     {
-        $variants = [];
-        foreach ((new Product())->getActiveVariantsBySkus(array_column($items, 'sku')) as $row) {
-            $variants[mb_strtolower((string)$row['sku'], 'UTF-8')] = $row;
-        }
+        // Kết quả đã có key là SKU viết thường (xem Product::getActiveVariantsBySkus).
+        $variants = (new Product())->getActiveVariantsBySkus(array_column($items, 'sku'));
 
         $lines = [];
         foreach ($items as $item) {

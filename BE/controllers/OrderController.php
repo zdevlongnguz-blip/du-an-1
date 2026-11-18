@@ -237,13 +237,10 @@ class OrderController
 
         // Trả lại tồn kho của các đơn SePay quá hạn chưa thanh toán trước khi đọc, giống bước tạo đơn,
         // để không báo "hết hàng" oan cho món mà lúc xác nhận server vẫn cho đặt.
-        $this->order->expireStaleOnlineOrders(SEPAY_PAYMENT_TIMEOUT_MINUTES);
+        Order::releaseExpiredStock();
 
-        // Chỉ biến thể đang bán mới có trong kết quả. Map theo SKU viết thường để khớp với SKU khách gửi.
-        $variants = [];
-        foreach ((new Product())->getActiveVariantsBySkus($skus) as $row) {
-            $variants[mb_strtolower((string) $row['sku'], 'UTF-8')] = $row;
-        }
+        // Chỉ biến thể đang bán mới có trong kết quả; key là SKU viết thường để khớp với SKU khách gửi.
+        $variants = (new Product())->getActiveVariantsBySkus($skus);
 
         $items = [];
         foreach ($skus as $sku) {
@@ -263,18 +260,10 @@ class OrderController
                 continue;
             }
 
-            $stock = max(0, (int) $variant['stock']);
-            $items[] = [
-                'sku' => $variant['sku'],
-                'name' => $variant['product_name'],
-                'variant_name' => $variant['variant_name'],
-                'image' => $variant['image'],
-                'price' => (float) $variant['final_price'],
-                // Giá niêm yết chỉ gửi khi đang giảm giá, để FE gạch giá cũ (giống tool lên đơn nháp).
-                'original_price' => $variant['sale_price'] !== null ? (float) $variant['price'] : null,
-                'stock' => min($stock, Order::MAX_ITEM_QUANTITY),
-                'available' => $stock > 0,
-            ];
+            // Dựng theo cùng quy tắc với tool AI lên đơn nháp (Product::buildDraftItem), để hai nơi không lệch nhau.
+            $item = Product::buildDraftItem($variant);
+            $item['available'] = $item['stock'] > 0;
+            $items[] = $item;
         }
 
         response_json(['status' => 'success', 'items' => $items], 200);

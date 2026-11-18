@@ -245,15 +245,20 @@ class Product extends BaseModel
      * Chỉ đọc để lên đơn nháp, không khóa dòng; lúc khách xác nhận, Order::checkoutItems sẽ khóa và kiểm tra lại.
      *
      * @param array $skus Danh sách SKU (chuỗi), tối đa 20 phần tử
-     * @return array Mảng [sku => dòng biến thể], SKU không tồn tại hoặc ngừng bán thì không có key
+     * @return array Mảng [sku VIẾT THƯỜNG => dòng biến thể], SKU không tồn tại hoặc ngừng bán thì không có key.
+     *               Nơi gọi tra bằng mb_strtolower($sku, 'UTF-8'); giá trị 'sku' trong dòng vẫn là SKU gốc trong DB.
      */
     public function getActiveVariantsBySkus($skus = [])
     {
-        // Chỉ giữ chuỗi không rỗng, bỏ trùng, giới hạn 20 SKU để câu truy vấn không quá dài.
-        $skus = array_slice(array_values(array_unique(array_filter(
-            is_array($skus) ? $skus : [],
-            static fn($sku) => is_string($sku) && trim($sku) !== ''
-        ))), 0, 20);
+        // Chỉ giữ chuỗi không rỗng, bỏ trùng (không phân biệt hoa thường, vì cột sku cũng vậy),
+        // giới hạn 20 SKU để câu truy vấn không quá dài.
+        $unique = [];
+        foreach (is_array($skus) ? $skus : [] as $sku) {
+            if (is_string($sku) && trim($sku) !== '') {
+                $unique[mb_strtolower(trim($sku), 'UTF-8')] = trim($sku);
+            }
+        }
+        $skus = array_slice(array_values($unique), 0, 20);
         if ($skus === []) {
             return [];
         }
@@ -276,12 +281,39 @@ class Product extends BaseModel
         }
         $stmt->execute();
 
+        // Key theo SKU viết thường: cột sku không phân biệt hoa thường, nên DB có thể trả "MOROCCANOIL"
+        // khi khách gửi "moroccanoil". Nơi gọi chỉ cần mb_strtolower để tra, không phải tự đổi key nữa.
         $result = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $result[$row['sku']] = $row;
+            $result[mb_strtolower((string) $row['sku'], 'UTF-8')] = $row;
         }
 
         return $result;
+    }
+
+    /**
+     * Dựng một món của đơn nháp (phần chung) từ một dòng biến thể của getActiveVariantsBySkus.
+     * Dùng chung cho tool AI lên đơn nháp (GeminiToolCreateOrderDraft) và API tra lại kho (api-order-draft-items),
+     * để hai nơi luôn tính giá, giá gốc, tồn kho theo cùng một quy tắc.
+     *
+     * @param array $variant Dòng biến thể (sku, product_name, variant_name, image, price, sale_price, final_price, stock)
+     * @return array ['sku', 'name', 'variant_name', 'image', 'price', 'original_price', 'stock']
+     */
+    public static function buildDraftItem($variant = [])
+    {
+        $variant = is_array($variant) ? $variant : [];
+        return [
+            'sku' => (string) ($variant['sku'] ?? ''),
+            'name' => (string) ($variant['product_name'] ?? ''),
+            'variant_name' => (string) ($variant['variant_name'] ?? ''),
+            'image' => $variant['image'] ?? null,
+            // final_price là giá bán thật (giá giảm nếu có, không thì giá gốc) do DB tính.
+            'price' => (float) ($variant['final_price'] ?? 0),
+            // Giá niêm yết chỉ gửi khi đang giảm giá, để FE gạch giá cũ.
+            'original_price' => ($variant['sale_price'] ?? null) !== null ? (float) $variant['price'] : null,
+            // Tồn kho kẹp tối đa số lượng cho phép mỗi món: FE dùng làm giới hạn khi khách tăng số lượng.
+            'stock' => min(max(0, (int) ($variant['stock'] ?? 0)), Order::MAX_ITEM_QUANTITY),
+        ];
     }
 
     /**
