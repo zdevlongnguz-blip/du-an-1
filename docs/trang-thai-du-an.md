@@ -1,8 +1,44 @@
 # Trạng thái dự án
 
-Nơi ghi những việc **chưa xong hẳn**: ca kiểm thử chưa chạy được, lỗi đã biết chưa sửa, việc cần làm tiếp. Xong việc nào thì đánh dấu `[x]`, ghi ngày và người kiểm tra.
+Nơi ghi những việc **chưa xong hẳn**: ca kiểm thử chưa chạy được, lỗi đã biết chưa sửa, việc cần làm tiếp. Xong việc nào thì đánh dấu `[x]`, ghi ngày và người kiểm tra. Kèm theo các **mốc `dev` ổn định** để quay về khi cần.
 
 Cập nhật lần cuối: 18/11/2026.
+
+## Mốc `dev` ổn định (dùng khi cần roll back)
+
+Admin Long chọn 2 trạng thái `dev` dưới đây là **tốt nhất tuần 3**. Ở cả hai mốc, 2 trang đặt hàng (tay và AI) đã được kiểm thử trên trình duyệt và chạy đúng. Nếu sau này gộp nhầm làm hỏng `dev`, quay về một trong hai mốc này.
+
+| Mốc | Commit merge | Tag git | `dev` lúc đó có gì |
+| --- | --- | --- | --- |
+| Sau PR #71 | `b3816ed` | `dev-good-w3-pr71` | Sửa đơn treo: tra lại kho/giá, 409 có thông báo rõ, trả kho đơn SePay quá hạn (#69). Tool `cancel_order_draft` cho Louis hủy đơn nháp, nút "Xem đơn nháp" trong khung chat (#71). **Chưa có** `StateBlock`. |
+| Sau PR #73 (**mới nhất, ưu tiên**) | `6e43c68` | `dev-good-w3-pr73` | Như mốc trên, thêm `StateBlock` cho Danh sách đơn, Chi tiết đơn, Giỏ hàng (#72) và quy tắc FE mục 2, 13: bắt buộc dùng `StateBlock`, cấm sửa 2 trang đặt hàng (#73). |
+
+Tag git chỉ có trên GitHub khi đã được push. Nếu chưa thấy tag, dùng mã commit ở cột "Commit merge" (luôn còn trong lịch sử).
+
+### Cách roll back an toàn
+
+`dev` có ruleset bắt buộc gộp qua PR: **không** `git reset` hay force-push để đè `dev`. Luôn hỏi admin trước khi roll back.
+
+1. Tìm PR gây lỗi: so `dev` hiện tại với mốc tốt.
+   ```bash
+   git fetch origin
+   git log --oneline 6e43c68..origin/dev          # các commit được gộp sau mốc tốt
+   git diff --stat 6e43c68 origin/dev            # các file đã đổi so với mốc tốt
+   ```
+2. Tạo nhánh mới từ `dev`:
+   ```bash
+   git switch -c fix/rollback-<mô-tả> --no-track origin/dev
+   ```
+3. Chọn một trong hai cách:
+   - **Hoàn tác cả một PR bị gộp nhầm** (tạo commit đảo ngược, lịch sử cũ giữ nguyên):
+     ```bash
+     git revert -m 1 <commit merge của PR lỗi>
+     ```
+   - **Chỉ lấy lại vài file** từ mốc tốt:
+     ```bash
+     git checkout 6e43c68 -- FE/src/views/payment/CheckoutView.vue
+     ```
+4. Build và kiểm thử lại trên trình duyệt (nhất là 2 trang đặt hàng), rồi `git push -u origin <nhánh>` và tạo PR vào `dev`.
 
 ## Việc cần kiểm thử
 
