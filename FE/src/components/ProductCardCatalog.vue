@@ -3,6 +3,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { formatPrice } from '@/helpers/format/price'
+import { listVariantAttributes } from '@/helpers/format/variantAttributes'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
 
 const props = defineProps({
@@ -37,6 +38,24 @@ const isOutOfStock = computed(() => {
 // Lượt xem và lượt bán luôn hiển thị để giữ đủ thông tin như trước.
 const viewCount = computed(() => Number(props.product.view_count ?? 0).toLocaleString('vi-VN'))
 const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocaleString('vi-VN'))
+
+// Biến thể khớp nhất do tìm kiếm thông minh trả về (chỉ có ở chế độ vector); null nếu không có.
+const matchedVariant = computed(() => props.product.matched_variant || null)
+
+// Điểm khớp (cosine, càng gần 1 càng giống nghĩa), hiện 2 chữ số thập phân. Không có điểm thì rỗng.
+const scoreText = computed(() => {
+  const score = Number(props.product.score)
+  return Number.isFinite(score) ? score.toFixed(2) : ''
+})
+
+// Danh sách thuộc tính có nhãn để hiện, đã bỏ giá trị null/rỗng (BE luôn gửi đủ 5 khóa, khóa chưa rõ là null).
+const matchedAttributes = computed(() => listVariantAttributes(matchedVariant.value?.attributes))
+
+// Tên biến thể khớp; "Mặc định" do hệ thống tự đặt nên không hiện.
+const matchedVariantName = computed(() => {
+  const name = matchedVariant.value?.variant_name
+  return name && name !== 'Mặc định' ? name : ''
+})
 </script>
 
 <template>
@@ -81,6 +100,30 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
           <span>Lượt bán {{ salesCount }}</span>
         </p>
       </RouterLink>
+
+      <!-- Chỉ ở chế độ tìm kiếm thông minh: biến thể khớp nhất, điểm khớp và các thuộc tính (metadata). -->
+      <div v-if="matchedVariant" class="catalog-product-match">
+        <p class="catalog-product-match-head">
+          <span>
+            Phù hợp nhất<template v-if="matchedVariantName">: <strong>{{ matchedVariantName }}</strong></template>
+            <template v-if="matchedVariant.final_price !== undefined && matchedVariant.final_price !== null">
+              · {{ formatPrice(Number(matchedVariant.final_price)) }}
+            </template>
+          </span>
+          <span
+            v-if="scoreText"
+            class="catalog-product-score"
+            title="Điểm khớp theo nghĩa giữa mô tả của bạn và sản phẩm, càng gần 1 càng phù hợp"
+          >
+            Điểm khớp {{ scoreText }}
+          </span>
+        </p>
+        <ul v-if="matchedAttributes.length > 0" class="catalog-product-attributes">
+          <li v-for="attribute in matchedAttributes" :key="attribute.key">
+            <span>{{ attribute.label }}:</span> {{ attribute.value }}
+          </li>
+        </ul>
+      </div>
 
       <!-- Hai nút như Stitch: "Xem" (viền) và "Chọn mua" (đồng); cả hai dẫn tới trang chi tiết để chọn phiên bản. -->
       <div class="catalog-product-actions">
@@ -245,6 +288,54 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
 
 .catalog-product-availability--out {
   color: #b3261e;
+}
+
+/* Khối "phù hợp nhất" của tìm kiếm thông minh: nền kem, chữ nhỏ, điểm khớp dạng nhãn đồng. */
+.catalog-product-match {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f7f4ee;
+  color: #4a5565;
+  font-size: 12px;
+}
+
+.catalog-product-match-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+}
+
+.catalog-product-match-head strong {
+  color: #1c2a3a;
+}
+
+.catalog-product-score {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #b8893e;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.catalog-product-attributes {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  line-height: 1.45;
+}
+
+.catalog-product-attributes span {
+  color: #6b6560;
+  font-weight: 600;
 }
 
 /* Hai nút cùng hàng, chia đôi chiều ngang, ngăn cách với phần thông tin bằng viền trên. */
