@@ -445,7 +445,8 @@ class Product extends BaseModel
             $variantStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
             $variantStatement->bindValue(':sku', $data['code'], PDO::PARAM_STR);
             $variantStatement->bindValue(':variant_name', 'Mặc định', PDO::PARAM_STR);
-            $variantStatement->bindValue(':attributes', '{}', PDO::PARAM_STR);
+            // Biến thể mới có sẵn 5 thuộc tính mặc định với value = null (cột chỉ nhận mảng JSON).
+            $variantStatement->bindValue(':attributes', VariantAttributes::defaultsJson(), PDO::PARAM_STR);
             $variantStatement->bindValue(':price', $data['price'], PDO::PARAM_STR);
             $variantStatement->bindValue(':sale_price', $data['sale_price'], $data['sale_price'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
             $variantStatement->bindValue(':stock', $data['stock'], PDO::PARAM_INT);
