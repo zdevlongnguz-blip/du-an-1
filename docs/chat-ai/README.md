@@ -18,6 +18,7 @@ Trợ lý tên **Louis Dé Fule**, dùng model Gemini (`gemini-2.5-flash`) qua R
 | [08-van-hanh.md](08-van-hanh.md) | Cài đặt, cấu hình, migration, cách thêm tool/bài hát | Cần cài lại hoặc mở rộng |
 | [09-van-dap.md](09-van-dap.md) | Câu hỏi thường gặp khi bảo vệ, trả lời ngắn gọn | Chuẩn bị vấn đáp |
 | [len-don-nhanh/](len-don-nhanh/README.md) | **Bộ tài liệu riêng** cho tính năng Louis lên đơn nháp và API xác nhận đơn (10 file, đủ sơ đồ) | Làm việc với tính năng lên đơn |
+| [tim-kiem-vector/](tim-kiem-vector/README.md) | **Bộ tài liệu riêng** cho tìm kiếm thông minh bằng vector của `api-products` (`search_mode=vector`), server Python `embed-service`. Không thuộc khung chat | Làm việc với tìm kiếm sản phẩm theo nghĩa |
 
 ## Tóm tắt một dòng
 
