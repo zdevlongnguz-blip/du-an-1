@@ -4,12 +4,13 @@ USE `du-an-1`;
 -- DỮ LIỆU DEMO cho tìm kiếm nâng cao (vector search):
 -- viết lại mô tả và bổ sung 5 thuộc tính mặc định vào product_variants.attributes.
 --
--- 5 khóa mặc định (định nghĩa trong BE/embedServices/ProductEmbedText.php):
---   dung_tich, do_giu_nep, do_bong, phu_hop, kieu_toc. Chưa rõ thì để null.
--- Khóa không dấu, giá trị tiếng Việt có dấu.
+-- attributes là MẢNG [{key, label, value}] (định nghĩa trong BE/extensions/VariantAttributes.php,
+-- chuyển đổi bởi migration 20261119_02). 5 khóa mặc định luôn nằm cố định ở đầu mảng:
+--   $[0] dung_tich, $[1] do_giu_nep, $[2] do_bong, $[3] phu_hop, $[4] kieu_toc; khóa tự do từ $[5].
+-- Khóa không dấu, giá trị tiếng Việt có dấu, chưa rõ thì value = null.
 --
 -- Chỉ sửa 6 sản phẩm theo code. Sản phẩm HOANG-VINH-01 giữ nguyên.
--- Không sửa giá, tồn kho, tên biến thể. dung_tich đang có thì giữ nguyên.
+-- Không sửa giá, tồn kho, tên biến thể. dung_tich ($[0]) đang có thì giữ nguyên.
 --
 -- Chạy lại nhiều lần an toàn: chỉ UPDATE theo code, kết quả mỗi lần như nhau.
 -- Tên file bắt đầu bằng "products_" để chạy SAU catalog_product_variants.sql
@@ -44,50 +45,52 @@ WHERE `code` = 'POMADE-LAYRITE-ORIGINAL';
 -- Thuộc tính biến thể. Các biến thể của cùng sản phẩm chỉ khác dung tích,
 -- nên 4 khóa còn lại giống nhau cho mọi biến thể của sản phẩm đó.
 --
--- JSON_INSERT: chỉ thêm khóa khi CHƯA có (giữ nguyên dung_tich đang có, chưa có thì thêm null).
--- JSON_SET: thêm mới hoặc ghi đè khóa. Truyền NULL sẽ lưu giá trị JSON null.
+-- JSON_SET với đường dẫn '$[i].value': ghi giá trị của phần tử thứ i trong mảng (đếm từ 0).
+-- Không đụng $[0] (dung_tich) để giữ dung tích riêng của từng hũ.
+-- '$[5]' (Suavecito): vị trí đầu tiên sau 5 khóa mặc định. Chưa có thì JSON_SET thêm vào cuối mảng,
+-- đã có thì ghi đè, nên chạy lại vẫn đúng (Suavecito chỉ có một khóa tự do là mui_huong).
 -- ---------------------------------------------------------------------
 UPDATE `product_variants` AS `v`
 JOIN `products` AS `p` ON `p`.`id` = `v`.`product_id`
 SET `v`.`attributes` = JSON_SET(
-  JSON_INSERT(`v`.`attributes`, '$.dung_tich', NULL),
-  '$.do_giu_nep', 'rất mạnh',
-  '$.do_bong', 'không bóng, mờ tự nhiên',
-  '$.phu_hop', 'tóc dày, tóc cứng, tóc rễ tre, tóc mỏng cần tạo phồng',
-  '$.kieu_toc', 'textured crop, quiff, tóc rối tự nhiên, side part'
+  `v`.`attributes`,
+  '$[1].value', 'rất mạnh',
+  '$[2].value', 'không bóng, mờ tự nhiên',
+  '$[3].value', 'tóc dày, tóc cứng, tóc rễ tre, tóc mỏng cần tạo phồng',
+  '$[4].value', 'textured crop, quiff, tóc rối tự nhiên, side part'
 )
 WHERE `p`.`code` = 'CLAYMATION';
 
 UPDATE `product_variants` AS `v`
 JOIN `products` AS `p` ON `p`.`id` = `v`.`product_id`
 SET `v`.`attributes` = JSON_SET(
-  JSON_INSERT(`v`.`attributes`, '$.dung_tich', NULL),
-  '$.do_giu_nep', 'rất mạnh',
-  '$.do_bong', 'bóng nhẹ',
-  '$.phu_hop', 'tóc dày, tóc cứng, tóc ngắn',
-  '$.kieu_toc', 'dựng đứng, chĩa gai (spiky), mohican'
+  `v`.`attributes`,
+  '$[1].value', 'rất mạnh',
+  '$[2].value', 'bóng nhẹ',
+  '$[3].value', 'tóc dày, tóc cứng, tóc ngắn',
+  '$[4].value', 'dựng đứng, chĩa gai (spiky), mohican'
 )
 WHERE `p`.`code` = 'GOT2B-GLUED';
 
 UPDATE `product_variants` AS `v`
 JOIN `products` AS `p` ON `p`.`id` = `v`.`product_id`
 SET `v`.`attributes` = JSON_SET(
-  JSON_INSERT(`v`.`attributes`, '$.dung_tich', NULL),
-  '$.do_giu_nep', 'trung bình',
-  '$.do_bong', 'bóng cao',
-  '$.phu_hop', 'tóc mỏng, tóc mềm, tóc thẳng',
-  '$.kieu_toc', 'vuốt ngược (slick back), pompadour cổ điển'
+  `v`.`attributes`,
+  '$[1].value', 'trung bình',
+  '$[2].value', 'bóng cao',
+  '$[3].value', 'tóc mỏng, tóc mềm, tóc thẳng',
+  '$[4].value', 'vuốt ngược (slick back), pompadour cổ điển'
 )
 WHERE `p`.`code` = 'POMADE-REUZEL-RED';
 
 UPDATE `product_variants` AS `v`
 JOIN `products` AS `p` ON `p`.`id` = `v`.`product_id`
 SET `v`.`attributes` = JSON_SET(
-  JSON_INSERT(`v`.`attributes`, '$.dung_tich', NULL),
-  '$.do_giu_nep', 'mạnh',
-  '$.do_bong', 'bóng vừa',
-  '$.phu_hop', 'tóc dày, tóc cứng, tóc rễ tre',
-  '$.kieu_toc', 'side part, pompadour'
+  `v`.`attributes`,
+  '$[1].value', 'mạnh',
+  '$[2].value', 'bóng vừa',
+  '$[3].value', 'tóc dày, tóc cứng, tóc rễ tre',
+  '$[4].value', 'side part, pompadour'
 )
 WHERE `p`.`code` = 'POMADE-REUZEL-BLUE';
 
@@ -95,23 +98,23 @@ WHERE `p`.`code` = 'POMADE-REUZEL-BLUE';
 UPDATE `product_variants` AS `v`
 JOIN `products` AS `p` ON `p`.`id` = `v`.`product_id`
 SET `v`.`attributes` = JSON_SET(
-  JSON_INSERT(`v`.`attributes`, '$.dung_tich', NULL),
-  '$.do_giu_nep', 'trung bình',
-  '$.do_bong', 'bóng nhẹ',
-  '$.phu_hop', 'tóc thường, tóc mỏng, người mới tập vuốt tóc',
-  '$.kieu_toc', 'side part, vuốt ngược, tóc công sở gọn gàng',
-  '$.mui_huong', 'mùi cam chanh'
+  `v`.`attributes`,
+  '$[1].value', 'trung bình',
+  '$[2].value', 'bóng nhẹ',
+  '$[3].value', 'tóc thường, tóc mỏng, người mới tập vuốt tóc',
+  '$[4].value', 'side part, vuốt ngược, tóc công sở gọn gàng',
+  '$[5]', JSON_OBJECT('key', 'mui_huong', 'label', 'Mùi hương', 'value', 'mùi cam chanh')
 )
 WHERE `p`.`code` = 'POMADE-SUAVECITO-ORIGINAL';
 
 UPDATE `product_variants` AS `v`
 JOIN `products` AS `p` ON `p`.`id` = `v`.`product_id`
 SET `v`.`attributes` = JSON_SET(
-  JSON_INSERT(`v`.`attributes`, '$.dung_tich', NULL),
-  '$.do_giu_nep', 'trung bình',
-  '$.do_bong', 'bóng vừa',
-  '$.phu_hop', 'tóc thường, tóc dày vừa phải',
-  '$.kieu_toc', 'side part, pompadour, quiff'
+  `v`.`attributes`,
+  '$[1].value', 'trung bình',
+  '$[2].value', 'bóng vừa',
+  '$[3].value', 'tóc thường, tóc dày vừa phải',
+  '$[4].value', 'side part, pompadour, quiff'
 )
 WHERE `p`.`code` = 'POMADE-LAYRITE-ORIGINAL';
 

@@ -66,7 +66,8 @@ flowchart LR
 | Python | `embed-service/main.py` | FastAPI: `GET /health`, `POST /embed`; nạp model một lần, tách từ bằng pyvi |
 | Python | `embed-service/README.md` | Cách cài, chạy, contract của server Python |
 | BE | `BE/embedServices/EmbedService.php` | Gọi server Python (`embed`, `health`), tính `cosineSimilarity` |
-| BE | `BE/embedServices/ProductEmbedText.php` | **Nơi duy nhất** định nghĩa 5 khóa `attributes` mặc định + mẫu câu; ghép `embed_text`; tính hash |
+| BE | `BE/extensions/VariantAttributes.php` | **Nơi duy nhất** định nghĩa định dạng `attributes` (mảng `{key, label, value}`) và 5 khóa mặc định; `decode`, `normalize`, `get` |
+| BE | `BE/embedServices/ProductEmbedText.php` | Mẫu câu của 5 khóa; ghép `embed_text`; tính hash |
 | BE | `BE/embedServices/ProductEmbedSync.php` | Đồng bộ vector theo `text_hash` (dùng chung cho admin và script) |
 | BE | `BE/models/ProductVariantEmbedding.php` | Bảng `product_variant_embeddings`: đọc dữ liệu cần ghép, `upsert`, `getVariantVectors` |
 | BE | `BE/models/Product.php` | `getFiltered()` (tìm thường, đã mở rộng), `getCatalogCandidates()` (vòng bo), `buildCatalogFilters()` (lọc dùng chung) |
@@ -74,5 +75,7 @@ flowchart LR
 | BE | `BE/configs/config.php` | `EMBED_SERVICE_URL`, `VECTOR_SEARCH_ENABLED`, `PATH_EMBED_SERVICE` |
 | BE | `BE/index.php` | Autoload thêm thư mục `embedServices/` |
 | DB | `BE/database/migrations/20261119_01_create_product_variant_embeddings_table.sql` | Tạo bảng vector |
+| DB | `BE/database/migrations/20261119_02_variant_attributes_key_label_value.sql` | Đổi `attributes` từ object sang mảng `{key, label, value}`, CHECK phải là mảng |
 | DB | `BE/database/seed/products_search_attributes.sql` | Mô tả + 5 khóa `attributes` cho 6 sản phẩm demo |
+| FE | `FE/src/helpers/format/variantAttributes.js` | Đọc `attributes` để hiển thị (`listVariantAttributes`, `getVariantAttribute`) |
 | DB | `BE/database/embed_products.php` | Script CLI tạo/tạo lại vector (`--force` để làm lại toàn bộ) |

@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/helpers/api/client'
 import { formatPrice } from '@/helpers/format/price'
 import { resolveSystemImageUrl } from '@/helpers/media/imageUrl'
+import { getVariantAttribute } from '@/helpers/format/variantAttributes'
 import ProductCardCatalog from '@/components/ProductCardCatalog.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import StateBlock from '@/components/StateBlock.vue'
@@ -79,13 +80,16 @@ const smartReply = computed(() => {
 
     const top = products.value[0]
     const variant = top.matched_variant || {}
-    const attributes = variant.attributes || {}
+    // attributes là mảng [{ key, label, value }]; getVariantAttribute trả chuỗi rỗng khi khóa chưa có giá trị.
+    const holding = getVariantAttribute(variant.attributes, 'do_giu_nep')
+    const shine = getVariantAttribute(variant.attributes, 'do_bong')
+    const suitable = getVariantAttribute(variant.attributes, 'phu_hop')
 
-    // Chỉ lấy vài đặc điểm khách hay quan tâm; giá trị null/rỗng thì bỏ qua.
+    // Chỉ lấy vài đặc điểm khách hay quan tâm; giá trị trống thì bỏ qua.
     const traits = []
-    if (attributes.do_giu_nep) traits.push(`giữ nếp ${attributes.do_giu_nep}`)
-    if (attributes.do_bong) traits.push(attributes.do_bong)
-    if (attributes.phu_hop) traits.push(`hợp ${attributes.phu_hop}`)
+    if (holding) traits.push(`giữ nếp ${holding}`)
+    if (shine) traits.push(shine)
+    if (suitable) traits.push(`hợp ${suitable}`)
 
     // Tên biến thể "Mặc định" do hệ thống tự đặt, không có nghĩa với khách nên không hiện.
     const variantName = variant.variant_name && variant.variant_name !== 'Mặc định' ? variant.variant_name : ''

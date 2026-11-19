@@ -18,6 +18,7 @@ if (PHP_SAPI !== 'cli') {
 require_once __DIR__ . '/../configs/config.php';
 require_once __DIR__ . '/../models/BaseModel.php';
 require_once __DIR__ . '/../models/ProductVariantEmbedding.php';
+require_once __DIR__ . '/../extensions/VariantAttributes.php';
 require_once __DIR__ . '/../embedServices/EmbedService.php';
 require_once __DIR__ . '/../embedServices/ProductEmbedText.php';
 require_once __DIR__ . '/../embedServices/ProductEmbedSync.php';

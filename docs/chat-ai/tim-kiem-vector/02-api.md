@@ -75,10 +75,13 @@ Khung chung (giữ nguyên các key cũ, thêm `search_mode_used`, `notice`, và
     "variant_name": "Mặc định",
     "final_price": 250000,
     "stock": 30,
-    "attributes": {
-      "dung_tich": null, "do_giu_nep": "rất mạnh", "do_bong": "bóng nhẹ",
-      "phu_hop": "tóc dày, tóc cứng, tóc ngắn", "kieu_toc": "dựng đứng, chĩa gai (spiky), mohican"
-    },
+    "attributes": [
+      {"key": "dung_tich",  "label": "Dung tích",  "value": null},
+      {"key": "do_giu_nep", "label": "Độ giữ nếp", "value": "rất mạnh"},
+      {"key": "do_bong",    "label": "Độ bóng",    "value": "bóng nhẹ"},
+      {"key": "phu_hop",    "label": "Phù hợp",    "value": "tóc dày, tóc cứng, tóc ngắn"},
+      {"key": "kieu_toc",   "label": "Kiểu tóc",   "value": "dựng đứng, chĩa gai (spiky), mohican"}
+    ],
     "embed_text": "Gel Vuốt Tóc Got2b Glued Spiking Wax. Danh mục: Gel, Sáp vuốt tóc. ... Hợp kiểu tóc dựng đứng, chĩa gai (spiky), mohican."
   }
 }
@@ -88,7 +91,7 @@ Khung chung (giữ nguyên các key cũ, thêm `search_mode_used`, `notice`, và
 | --- | --- |
 | `score` | Cosine giữa câu tìm kiếm và biến thể khớp nhất, làm tròn 4 chữ số. Chỉ dùng để so trong cùng một lần tìm, **không** so giữa các câu khác nhau. |
 | `matched_variant` | Biến thể điểm cao nhất của sản phẩm (nằm trong khoảng giá nếu có lọc giá). |
-| `matched_variant.attributes` | Thuộc tính của biến thể (xem [03-du-lieu.md](03-du-lieu.md)). Có thể có giá trị `null`. |
+| `matched_variant.attributes` | Mảng `{key, label, value}` của biến thể (xem [03-du-lieu.md](03-du-lieu.md)): 5 khóa mặc định đứng đầu, `value` có thể `null`. Cùng định dạng với `attributes` của `api-product-detail` và `api-cart`. |
 | `matched_variant.embed_text` | Đoạn văn đã dùng tạo vector, để biết vì sao sản phẩm được điểm như vậy. |
 
 ## 3. Lỗi (400)
@@ -125,4 +128,4 @@ URL chung: `http://localhost/du-an-1/BE/?action=api-products`, nhập tham số 
 - Thêm ô khoảng giá, dropdown sắp xếp, nút bật/tắt "Tìm kiếm thông minh" (bật thì gửi `search_mode=vector`).
 - Khi `search_mode_used === 'vector'`: ẩn phân trang và dropdown sắp xếp, hiện như "danh sách đề xuất".
 - Khi `notice` khác `null`: hiện dòng thông báo cho khách.
-- Hiển thị `matched_variant.attributes` thì **bỏ qua giá trị `null`**.
+- Hiển thị `attributes` thì dùng `label` từ API và **bỏ qua giá trị `null`** (helper `FE/src/helpers/format/variantAttributes.js`).

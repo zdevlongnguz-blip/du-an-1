@@ -8,6 +8,7 @@ import { useToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
 import { setCartCountFromItems } from '@/helpers/cart/cartCount'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
+import { getVariantAttribute } from '@/helpers/format/variantAttributes'
 import StateBlock from '@/components/StateBlock.vue'
 
 const { showToast } = useToast()
@@ -124,14 +125,12 @@ async function removeItem(item) {
 }
 
 // Giỏ hàng chỉ cần nhận ra đúng phiên bản, nên chỉ hiện dung tích (không hiện độ bóng, kiểu tóc...).
-// attributes có thể chứa nhiều khóa và giá trị null, ví dụ {"dung_tich": "113g", "do_bong": "bóng nhẹ", "phu_hop": null}.
+// attributes là mảng [{ key, label, value }], lấy giá trị của khóa dung_tich qua helper dùng chung.
 // Ẩn luôn nếu tên phiên bản đã chứa dung tích, tránh lặp "Hũ 56g · 56g" (cùng quy tắc với ProductDetail).
 function variantAttributesLine(item) {
-  const capacity = item.attributes?.dung_tich
-  if (capacity === null || capacity === undefined || String(capacity).trim() === '') return ''
-  const text = String(capacity).trim()
-  if (item.variant_name?.toLowerCase().includes(text.toLowerCase())) return ''
-  return text
+  const capacity = getVariantAttribute(item.attributes, 'dung_tich')
+  if (!capacity || item.variant_name?.toLowerCase().includes(capacity.toLowerCase())) return ''
+  return capacity
 }
 
 onMounted(() => fetchCart())

@@ -126,9 +126,9 @@ class ProductVariantEmbedding extends BaseModel
 
         $rows = [];
         foreach ($stmt->fetchAll() as $row) {
-            // Đổi chuỗi JSON thành mảng: embedding để tính cosine, attributes để trả cho FE hiển thị.
+            // Đổi chuỗi JSON thành mảng: embedding để tính cosine, attributes (dạng chuẩn [{key, label, value}])
+            // để trả cho FE hiển thị.
             $vector = json_decode((string) $row['embedding'], true);
-            $attributes = json_decode((string) $row['attributes'], true);
             $rows[] = [
                 'product_id' => (int) $row['product_id'],
                 'variant_id' => (int) $row['variant_id'],
@@ -136,7 +136,7 @@ class ProductVariantEmbedding extends BaseModel
                 'variant_name' => $row['variant_name'],
                 'final_price' => (float) $row['final_price'],
                 'stock' => (int) $row['stock'],
-                'attributes' => is_array($attributes) ? $attributes : [],
+                'attributes' => VariantAttributes::decode($row['attributes']),
                 'embed_text' => $row['embed_text'],
                 'vector' => is_array($vector) ? $vector : [],
             ];

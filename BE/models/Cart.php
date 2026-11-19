@@ -52,7 +52,8 @@ class Cart extends BaseModel
             $item['product_id'] = (int) $item['product_id'];
             $item['quantity'] = (int) $item['quantity'];
             $item['stock'] = (int) $item['stock'];
-            $item['attributes'] = json_decode((string) $item['attributes'], true) ?: [];
+            // Mảng chuẩn [{key, label, value}, ...], luôn có 5 khóa mặc định ở đầu (xem VariantAttributes).
+            $item['attributes'] = VariantAttributes::decode($item['attributes']);
             $item['is_available'] = (int) $item['is_active'] === 1 && $item['stock'] > 0;
             unset($item['is_active']);
 

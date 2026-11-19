@@ -30,35 +30,44 @@ erDiagram
 
 Đây là **dữ liệu suy ra**: xóa cả bảng vẫn tạo lại được bằng `php BE/database/embed_products.php`.
 
-## 2. Quy ước `product_variants.attributes` (JSON "dẻo")
+## 2. Quy ước `product_variants.attributes`
 
-Cột `attributes` đã có sẵn (JSON object). Tính năng này **tận dụng** nó, không thêm cột mới.
+Cột `attributes` (JSON) là **mảng các phần tử `{ key, label, value }`** (từ migration `20261119_02`; trước đó là object `{"dung_tich": "113g"}`).
+Định dạng và 5 khóa mặc định được định nghĩa ở **một chỗ duy nhất**: `BE/extensions/VariantAttributes.php`.
 
-- **Khóa**: không dấu, chữ thường, `snake_case` (chỉ `a-z`, `0-9`, `_`). Lý do: chữ có dấu có thể lưu theo 2 kiểu Unicode (NFC/NFD), nhìn giống nhau nhưng máy coi là khác; khóa không dấu tránh được.
-- **Giá trị**: tiếng Việt có dấu, viết tự nhiên.
-- **Luôn có đủ 5 khóa mặc định**; chưa rõ hoặc không áp dụng thì để `null`.
-- Ngoài 5 khóa đó được thêm **khóa tự do** (vd `mui_huong`, `xuat_xu`).
-- Không lọc SQL theo các khóa này; chúng chỉ phục vụ tìm kiếm vector (và hiển thị).
+```json
+[
+  {"key": "dung_tich",  "label": "Dung tích",  "value": "113g"},
+  {"key": "do_giu_nep", "label": "Độ giữ nếp", "value": "mạnh"},
+  {"key": "do_bong",    "label": "Độ bóng",    "value": "bóng vừa"},
+  {"key": "phu_hop",    "label": "Phù hợp",    "value": "tóc dày, tóc cứng, tóc rễ tre"},
+  {"key": "kieu_toc",   "label": "Kiểu tóc",   "value": "side part, pompadour"},
+  {"key": "mui_huong",  "label": "Mùi hương",  "value": "mùi cam chanh"}
+]
+```
 
-### 5 khóa mặc định (định nghĩa duy nhất ở `ProductEmbedText::DEFAULT_ATTRIBUTES`)
+Vì sao dùng mảng thay vì object: giữ đúng thứ tự (object JSON bị MySQL tự sắp lại khóa) và mỗi thuộc tính có **nhãn tiếng Việt đúng dấu**, kể cả khóa tự do; FE hiển thị thẳng `label`, không giữ bảng nhãn riêng.
 
-| Khóa | Nhãn | Mẫu câu khi ghép | Ví dụ giá trị |
+Quy tắc (BE chuẩn hóa bằng `VariantAttributes::decode()` / `normalize()`):
+- **5 khóa mặc định luôn có và luôn đứng đầu** theo thứ tự cố định (`$[0]`..`$[4]`); nhãn của chúng lấy từ BE, không tin nhãn bên ngoài; chưa rõ thì `value = null`.
+- **Khóa tự do** (vd `mui_huong`, `xuat_xu`) đứng sau, giữ thứ tự nhập, có `label` riêng.
+- **`key`**: không dấu, chữ thường, `snake_case` (`a-z`, `0-9`, `_`, tối đa 50 ký tự), không trùng. Lý do không dấu: chữ có dấu có thể lưu theo 2 kiểu Unicode (NFC/NFD), nhìn giống nhau nhưng máy coi là khác.
+- **`value`**: chuỗi tiếng Việt có dấu, hoặc `null`.
+- DB có CHECK `chk_product_variants_attributes_array`: `attributes` phải là mảng. Biến thể mới tạo (admin) được ghi sẵn 5 khóa `null`.
+- Không lọc SQL theo các khóa này; chúng phục vụ tìm kiếm vector và hiển thị.
+
+### 5 khóa mặc định và mẫu câu ghép `embed_text`
+
+| Khóa | Nhãn (`VariantAttributes::DEFAULTS`) | Mẫu câu (`ProductEmbedText::TEMPLATES`) | Ví dụ giá trị |
 | --- | --- | --- | --- |
 | `dung_tich` | Dung tích | `Dung tích {v}.` | `113g` |
 | `do_giu_nep` | Độ giữ nếp | `Độ giữ nếp {v}.` | `nhẹ`, `trung bình`, `mạnh`, `rất mạnh` |
 | `do_bong` | Độ bóng | `Độ bóng: {v}.` | `không bóng`, `bóng nhẹ`, `bóng vừa`, `bóng cao` |
-| `phu_hop` | Phù hợp với | `Phù hợp với {v}.` | `tóc dày, tóc rễ tre` |
+| `phu_hop` | Phù hợp | `Phù hợp với {v}.` | `tóc dày, tóc rễ tre` |
 | `kieu_toc` | Kiểu tóc | `Hợp kiểu tóc {v}.` | `side part, pompadour` |
-| *khóa tự do* | | `{v}.` | `mùi cam chanh` |
+| *khóa tự do* | *label riêng* | `{v}.` | `mùi cam chanh` |
 
 Viết giá trị sao cho ghép vào mẫu câu đọc xuôi: `kieu_toc` ghi `"dựng đứng, mohican"`, **không** ghi `"tóc dựng đứng"` (sẽ thành "Hợp kiểu tóc tóc dựng đứng").
-
-Ví dụ một biến thể:
-
-```json
-{"dung_tich": "113g", "do_giu_nep": "mạnh", "do_bong": "bóng vừa",
- "phu_hop": "tóc dày, tóc cứng, tóc rễ tre", "kieu_toc": "side part, pompadour"}
-```
 
 ## 3. Cách ghép `embed_text` (`ProductEmbedText::build`)
 
@@ -68,7 +77,7 @@ Thứ tự cố định (cùng dữ liệu luôn ra cùng đoạn văn, nhờ đ
 2. `Danh mục: {tên danh mục}.`
 3. `{mô tả sản phẩm}` (thêm dấu chấm nếu thiếu)
 4. 5 khóa mặc định theo mẫu câu; giá trị `null`/rỗng thì **bỏ cả câu**
-5. Khóa tự do, sắp theo tên khóa, chỉ lấy giá trị
+5. Khóa tự do theo thứ tự trong mảng, chỉ lấy giá trị
 
 **Không** đưa vào: giá, giá giảm, tồn kho, lượt xem, lượt bán, SKU, mã sản phẩm.
 
@@ -76,7 +85,7 @@ Ví dụ kết quả:
 
 > Pomade Reuzel Blue Strong Hold - Hũ 113g. Danh mục: Pomade. Pomade gốc nước của Reuzel, giữ nếp mạnh, độ bóng vừa. Hợp kiểu side part, pompadour cần đứng nếp cả ngày, dễ gội sạch. Dung tích 113g. Độ giữ nếp mạnh. Độ bóng: bóng vừa. Phù hợp với tóc dày, tóc cứng, tóc rễ tre. Hợp kiểu tóc side part, pompadour.
 
-Muốn thêm/đổi khóa mặc định: sửa **chỉ** `ProductEmbedText::DEFAULT_ATTRIBUTES`, rồi chạy `embed_products.php` (hash đổi nên vector tự được tạo lại).
+Muốn thêm/đổi khóa mặc định: sửa `VariantAttributes::DEFAULTS` (nhãn, thứ tự) và `ProductEmbedText::TEMPLATES` (mẫu câu), viết migration bổ sung khóa cho dữ liệu cũ, rồi chạy `embed_products.php` (hash đổi nên vector tự được tạo lại).
 
 ## 4. Đặc điểm chung ở đâu, đặc điểm riêng ở đâu
 
@@ -91,8 +100,9 @@ Nếu sau này cần mô tả dài cho từng biến thể, có thể thêm cộ
 ## 5. Seed demo `products_search_attributes.sql`
 
 - Viết lại `description` và điền 5 khóa cho biến thể của 6 sản phẩm: `CLAYMATION`, `GOT2B-GLUED`, `POMADE-REUZEL-RED`, `POMADE-REUZEL-BLUE`, `POMADE-SUAVECITO-ORIGINAL` (thêm `mui_huong`), `POMADE-LAYRITE-ORIGINAL`.
-- **Không** sửa sản phẩm `HOANG-VINH-01`, giá, tồn kho, tên biến thể. `dung_tich` đang có thì giữ (`JSON_INSERT`), chưa có thì thêm `null`.
+- Ghi theo vị trí trong mảng (`JSON_SET(..., '$[1].value', ...)`), dựa vào việc 5 khóa mặc định luôn ở `$[0]`..`$[4]`. Không đụng `$[0]` (`dung_tich`) để giữ dung tích riêng từng hũ.
+- **Không** sửa sản phẩm `HOANG-VINH-01`, giá, tồn kho, tên biến thể. (Migration `20261119_02` vẫn đổi định dạng dữ liệu của Vinh Râu và thêm các khóa mặc định còn thiếu với `null`; giá trị cũ giữ nguyên.)
 - Chạy lặp được. Tên file bắt đầu bằng `products_` để chạy **sau** `catalog_product_variants.sql` khi dùng `run.php --seed`.
 - Chạy seed xong phải chạy `embed_products.php` để tạo lại vector.
 
-> Tác động phụ: `ProductDetail.vue` và `CartView.vue` đang in **toàn bộ** giá trị `attributes` cạnh tên biến thể (`Object.values(...).join(' · ')`). Sau seed, dòng này dài ra và có chỗ trống do giá trị `null`. Việc của FE: chỉ hiện `dung_tich` và bỏ qua `null`.
+> FE đọc `attributes` qua helper `FE/src/helpers/format/variantAttributes.js` (`listVariantAttributes`, `getVariantAttribute`): trang chi tiết thả xuống bảng thông số (bỏ `null`), giỏ hàng chỉ hiện dung tích.
