@@ -11,8 +11,6 @@ import { useToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
 import { saveReturnUrl } from '@/helpers/auth/returnUrl'
-import { listVariantAttributes } from '@/helpers/format/variantAttributes'
-import StateBlock from '@/components/StateBlock.vue'
 
 // Số bình luận mỗi trang, khớp với query per_page đã thống nhất với BE.
 const COMMENTS_PER_PAGE = 10
@@ -133,25 +131,16 @@ function onVariantQuantityChange(variant, event) {
   event.target.value = getVariantQuantity(variant)
 }
 
-// Thông số của biến thể để hiện trong phần thả xuống: có nhãn, đã bỏ giá trị null/rỗng (helper dùng chung).
-// Bỏ thêm thông số mà tên biến thể đã chứa, tránh lặp "Hũ 113g" rồi "Dung tích: 113g".
-function variantDetails(variant) {
-  const name = String(variant.variant_name || '').toLowerCase()
-  return listVariantAttributes(variant.attributes).filter((attribute) => !name.includes(attribute.value.toLowerCase()))
+// Ghép giá trị thuộc tính thành chuỗi hiển thị, ví dụ {"dung_tich":"113g"} -> "113g".
+function formatVariantAttributes(attributes) {
+  return Object.values(attributes || {}).join(' · ')
 }
 
-// Biến thể nào đang mở phần chi tiết: object { [variant.id]: true }. Mặc định tất cả đều thu gọn.
-// Gán object mới (không sửa trực tiếp) để Vue nhận ra thay đổi và vẽ lại giao diện.
-const expandedVariants = ref({})
-
-// true nếu biến thể đang mở phần chi tiết.
-function isVariantExpanded(variant) {
-  return expandedVariants.value[variant.id] === true
-}
-
-// Bấm "Chi tiết"/"Thu gọn": đảo trạng thái mở của đúng biến thể đó, các biến thể khác giữ nguyên.
-function toggleVariant(variant) {
-  expandedVariants.value = { ...expandedVariants.value, [variant.id]: !isVariantExpanded(variant) }
+// Ẩn dòng thuộc tính nếu tên biến thể đã chứa nội dung đó, tránh lặp "Hũ 56g" rồi "56g".
+function variantAttributesLine(variant) {
+  const attrs = formatVariantAttributes(variant.attributes)
+  if (!attrs || variant.variant_name?.toLowerCase().includes(attrs.toLowerCase())) return ''
+  return attrs
 }
 
 const canManageComment = (comment) => currentUserId != null && String(comment.user_id) === String(currentUserId)
@@ -397,8 +386,6 @@ watch(
     newCommentError.value = ''
     cancelEditComment()
     variantQuantities.value = {}
-    // Sang sản phẩm khác thì mọi biến thể quay về trạng thái thu gọn.
-    expandedVariants.value = {}
     activeImageIndex.value = 0
     failedImages.value = new Set()
 
@@ -413,17 +400,18 @@ watch(
 
 <template>
   <div class="pd-page">
-    <!-- StateBlock xử lý trạng thái tải sản phẩm theo thứ tự: đang tải -> lỗi -> không có dữ liệu.
-         Lỗi (slug không tồn tại hoặc server lỗi) không truyền onRetry: phần lớn là 404, thử lại cũng vậy;
-         thay vào đó có link quay lại danh sách ngay bên dưới. Có sản phẩm thì hiện nội dung trong slot. -->
-    <StateBlock
-      :loading="productLoading"
-      :error="productError"
-      :empty="!product"
-      loading-text="Đang tải sản phẩm..."
-      empty-text="Không tìm thấy sản phẩm."
-    >
-    <article class="pd-card">
+    <!-- Trạng thái đang tải sản phẩm. -->
+    <div v-if="productLoading" class="pd-card pd-state" role="status">Đang tải sản phẩm...</div>
+
+    <!-- Lỗi tải sản phẩm: slug không tồn tại hoặc server lỗi. -->
+    <div v-else-if="productError" class="pd-card pd-state pd-state--error" role="alert">
+      <p>{{ productError }}</p>
+      <RouterLink class="pd-btn pd-btn--outline pd-btn--inline" :to="{ name: 'catalog' }">
+        Quay lại danh sách sản phẩm
+      </RouterLink>
+    </div>
+
+    <article v-else-if="product" class="pd-card">
       <!-- Breadcrumb cho desktop/tablet; mobile dùng link quay lại bên dưới. -->
       <nav class="pd-breadcrumb" aria-label="Breadcrumb">
         <RouterLink :to="{ name: 'catalog' }">Danh sách sản phẩm</RouterLink>
@@ -496,22 +484,10 @@ watch(
                 :class="{ 'is-out': variantMaxQuantity(variant) <= 0 }"
               >
                 <div class="pd-variant-info">
-                  <!-- Dòng đầu: tên biến thể + nút "Chi tiết" (chỉ có khi biến thể có thông số để xem).
-                       Thông số mặc định ẩn để thẻ gọn; bấm nút thì thả xuống bảng thông số bên dưới. -->
-                  <div class="pd-variant-head">
-                    <strong class="pd-variant-name">{{ variant.variant_name }}</strong>
-                    <button
-                      v-if="variantDetails(variant).length > 0"
-                      type="button"
-                      class="pd-variant-toggle"
-                      :aria-expanded="isVariantExpanded(variant)"
-                      :aria-controls="`pd-variant-details-${variant.id}`"
-                      @click="toggleVariant(variant)"
-                    >
-                      {{ isVariantExpanded(variant) ? 'Thu gọn' : 'Chi tiết' }}
-                      <span class="pd-variant-chevron" :class="{ 'is-open': isVariantExpanded(variant) }" aria-hidden="true">▾</span>
-                    </button>
-                  </div>
+                  <strong class="pd-variant-name">{{ variant.variant_name }}</strong>
+                  <span v-if="variantAttributesLine(variant)" class="pd-variant-attrs">
+                    {{ variantAttributesLine(variant) }}
+                  </span>
                   <div class="pd-variant-price">
                     <strong :class="{ 'is-sale': variantIsOnSale(variant) }">{{ formatPrice(variant.final_price) }}</strong>
                     <del v-if="variantIsOnSale(variant)">{{ formatPrice(variant.price) }}</del>
@@ -520,18 +496,6 @@ watch(
                     {{ variantMaxQuantity(variant) > 0 ? `Còn ${variantMaxQuantity(variant)} sản phẩm` : (variantInCart(variant) > 0 ? 'Đã đủ số lượng trong giỏ' : 'Hết hàng') }}
                     <template v-if="variantInCart(variant) > 0"> · Trong giỏ: {{ variantInCart(variant) }}</template>
                   </span>
-
-                  <!-- Bảng thông số của biến thể (thả xuống khi bấm "Chi tiết"): nhãn tiếng Việt, đã bỏ giá trị trống. -->
-                  <dl
-                    v-if="isVariantExpanded(variant)"
-                    :id="`pd-variant-details-${variant.id}`"
-                    class="pd-variant-details"
-                  >
-                    <div v-for="attribute in variantDetails(variant)" :key="attribute.key" class="pd-variant-detail">
-                      <dt>{{ attribute.label }}</dt>
-                      <dd>{{ attribute.value }}</dd>
-                    </div>
-                  </dl>
                 </div>
 
                 <div v-if="loggedIn" class="pd-variant-actions">
@@ -720,14 +684,6 @@ watch(
         </div>
       </section>
     </article>
-    </StateBlock>
-
-    <!-- Link quay lại khi tải sản phẩm lỗi (StateBlock chưa có chỗ đặt link trong khối lỗi). -->
-    <div v-if="!productLoading && productError" class="pd-error-actions">
-      <RouterLink class="pd-btn pd-btn--outline pd-btn--inline" :to="{ name: 'catalog' }">
-        Quay lại danh sách sản phẩm
-      </RouterLink>
-    </div>
   </div>
 </template>
 
@@ -744,10 +700,18 @@ watch(
   box-shadow: 0 4px 16px rgb(28 42 58 / 10%);
 }
 
-/* Khối chứa link "Quay lại danh sách sản phẩm" bên dưới StateBlock khi tải lỗi. */
-.pd-error-actions {
-  margin-top: 16px;
+.pd-state {
+  padding: 56px 24px;
+  color: #4a5565;
   text-align: center;
+}
+
+.pd-state p {
+  margin: 0 0 16px;
+}
+
+.pd-state--error {
+  color: #93000a;
 }
 
 .pd-breadcrumb {
@@ -994,84 +958,10 @@ watch(
   gap: 4px;
 }
 
+.pd-variant-attrs,
 .pd-variant-stock {
   color: #4a5565;
   font-size: 14px;
-}
-
-/* Dòng đầu biến thể: tên bên trái, nút "Chi tiết" bên phải. */
-.pd-variant-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-/* Nút thả xuống: chữ nhỏ màu đồng, mũi tên xoay 180 độ khi mở. */
-.pd-variant-toggle {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border: 1px solid #d9d4ca;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #9e7432;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.pd-variant-toggle:hover {
-  border-color: #b8893e;
-}
-
-.pd-variant-toggle:focus-visible {
-  outline: 3px solid #b8893e;
-  outline-offset: 2px;
-}
-
-.pd-variant-chevron {
-  display: inline-block;
-  transition: transform 160ms ease;
-}
-
-.pd-variant-chevron.is-open {
-  transform: rotate(180deg);
-}
-
-/* Bảng thông số thả xuống: nền kem, mỗi dòng "nhãn | giá trị". */
-.pd-variant-details {
-  display: grid;
-  gap: 6px;
-  margin: 4px 0 0;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: #f7f4ee;
-  font-size: 13px;
-}
-
-.pd-variant-detail {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.pd-variant-detail dt {
-  color: #6b6560;
-  font-weight: 600;
-}
-
-.pd-variant-detail dd {
-  margin: 0;
-  color: #1c2a3a;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pd-variant-chevron {
-    transition: none;
-  }
 }
 
 .pd-variant-price {

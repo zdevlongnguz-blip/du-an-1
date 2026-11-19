@@ -123,15 +123,16 @@ async function removeItem(item) {
   }
 }
 
-// Giỏ hàng chỉ cần nhận ra đúng phiên bản, nên chỉ hiện dung tích (không hiện độ bóng, kiểu tóc...).
-// attributes có thể chứa nhiều khóa và giá trị null, ví dụ {"dung_tich": "113g", "do_bong": "bóng nhẹ", "phu_hop": null}.
-// Ẩn luôn nếu tên phiên bản đã chứa dung tích, tránh lặp "Hũ 56g · 56g" (cùng quy tắc với ProductDetail).
+// Ghép thuộc tính thành chuỗi, ví dụ {"dung_tich":"113g"} -> "113g".
+function formatAttributes(attributes) {
+  return Object.values(attributes || {}).join(' · ')
+}
+
+// Ẩn dòng thuộc tính nếu tên phiên bản đã chứa nội dung đó, tránh lặp "Hũ 56g · 56g" (cùng quy tắc với ProductDetail).
 function variantAttributesLine(item) {
-  const capacity = item.attributes?.dung_tich
-  if (capacity === null || capacity === undefined || String(capacity).trim() === '') return ''
-  const text = String(capacity).trim()
-  if (item.variant_name?.toLowerCase().includes(text.toLowerCase())) return ''
-  return text
+  const attrs = formatAttributes(item.attributes)
+  if (!attrs || item.variant_name?.toLowerCase().includes(attrs.toLowerCase())) return ''
+  return attrs
 }
 
 onMounted(() => fetchCart())
