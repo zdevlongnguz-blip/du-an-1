@@ -1,0 +1,3 @@
+# Môi trường ảo Python, mỗi máy tự tạo, không commit
+.venv/
+__pycache__/

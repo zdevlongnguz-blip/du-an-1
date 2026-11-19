@@ -1,13 +1,46 @@
 <?php
 class ProductController{
+    // Tìm kiếm vector: câu tìm kiếm tối đa 200 ký tự (model chỉ đọc khoảng 256 token).
+    const VECTOR_MAX_QUERY_LENGTH = 200;
+
+    // Tìm kiếm vector không tự loại sản phẩm nào (sản phẩm nào cũng có điểm), nên phải cắt:
+    // chỉ giữ sản phẩm có điểm >= 80% điểm cao nhất (ngưỡng tương đối), tối đa 20 sản phẩm.
+    const VECTOR_RELATIVE_THRESHOLD = 0.8;
+    const VECTOR_MAX_RESULTS = 20;
+
     private Product $product;
     public function __construct()
     {
         $this->product = new Product();
     }
 
+    /**
+     * Danh sách sản phẩm có lọc và 2 chế độ tìm kiếm. Không yêu cầu đăng nhập.
+     *
+     * Cờ search_mode CHỈ ảnh hưởng ô tìm kiếm. Danh mục và khoảng giá luôn lọc bằng SQL ở cả 2 chế độ.
+     * - keyword (mặc định): bộ lọc + LIKE + sắp xếp + phân trang, tất cả bằng SQL (như trước đây).
+     * - vector: bộ lọc chạy trước ra "vòng bo" -> so nghĩa câu tìm kiếm trong vòng bo -> cắt ngưỡng
+     *   -> trả DANH SÁCH ĐỀ XUẤT theo thứ tự liên quan. Không phân trang, không sắp xếp lại (bỏ qua sort, page, per_page).
+     *   search rỗng, công tắc VECTOR_SEARCH_ENABLED tắt hoặc server Python lỗi thì TỰ DÙNG keyword (không báo lỗi).
+     *
+     * Method: GET. Query (đều không bắt buộc; không gửi tham số mới thì kết quả y như trước):
+     * - search (hoặc q), category, page, per_page (hoặc perPage): như cũ
+     * - search_mode: keyword | vector (mặc định keyword)
+     * - sort (chỉ keyword): newest | price_asc | price_desc | views | sales (mặc định newest)
+     * - min_price, max_price: số >= 0 (VND), giữ sản phẩm có ít nhất 1 biến thể đang bán trong khoảng giá
+     *
+     * Thành công 200: { status, products: { data, pagination }, filters, search_mode_used, notice }
+     *   search_mode_used: keyword | vector, chế độ thực tế đã dùng.
+     *   notice: chuỗi khi muốn vector nhưng phải dùng keyword, ngược lại là null.
+     *   Khi dùng vector: mỗi sản phẩm có thêm score; pagination là 1 trang chứa toàn bộ danh sách;
+     *   filters.page, filters.per_page, filters.sort là null (không áp dụng).
+     * Lỗi 400: tham số sai.
+     */
     public function index(){
         $search = $_GET['search'] ?? $_GET['q'] ?? '';
+        if (!is_string($search)) {
+            response_json(['status' => 'error', 'message' => 'Từ khóa tìm kiếm không hợp lệ'], 400);
+        }
         $category = $_GET['category'] ?? '';
         if (!is_string($category) || strlen(trim($category)) > 255) {
             response_json([
@@ -17,29 +50,202 @@ class ProductController{
         }
         $category = trim($category);
         $category = $category === '' ? null : $category;
+
+        $searchMode = $_GET['search_mode'] ?? 'keyword';
+        if (!in_array($searchMode, ['keyword', 'vector'], true)) {
+            response_json(['status' => 'error', 'message' => 'search_mode phải là keyword hoặc vector'], 400);
+        }
+        if ($searchMode === 'vector' && mb_strlen(trim($search)) > self::VECTOR_MAX_QUERY_LENGTH) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Từ khóa tìm kiếm thông minh tối đa ' . self::VECTOR_MAX_QUERY_LENGTH . ' ký tự',
+            ], 400);
+        }
+
+        $sort = $_GET['sort'] ?? 'newest';
+        if (!is_string($sort) || !array_key_exists($sort, Product::CATALOG_SORT_SQL)) {
+            response_json([
+                'status' => 'error',
+                'message' => 'sort phải là một trong: ' . implode(', ', array_keys(Product::CATALOG_SORT_SQL)),
+            ], 400);
+        }
+
+        $minPrice = $this->readPriceParam('min_price');
+        $maxPrice = $this->readPriceParam('max_price');
+        if ($minPrice !== null && $maxPrice !== null && $minPrice > $maxPrice) {
+            response_json(['status' => 'error', 'message' => 'min_price không được lớn hơn max_price'], 400);
+        }
+
         // Trả lại kho của đơn SePay quá hạn trước khi đọc tồn kho, để danh sách không hiện "hết hàng" oan.
         Order::releaseExpiredStock();
         $page = $_GET['page'] ?? 1;
         $perPage = $_GET['per_page'] ?? $_GET['perPage'] ?? 8;
 
-        $products = $this->product->getFiltered(
-            $search,
-            $category,
-            $page,
-            $perPage
-        );
+        // ---- Chọn chế độ tìm kiếm thực tế ----
+        $products = null;
+        $modeUsed = 'keyword';
+        $notice = null;
+        if ($searchMode === 'vector' && trim($search) !== '') {
+            if (!defined('VECTOR_SEARCH_ENABLED') || VECTOR_SEARCH_ENABLED !== true) {
+                $notice = 'Tìm kiếm thông minh đang tắt, đã dùng tìm kiếm thường.';
+            } else {
+                $products = $this->vectorSearch(trim($search), $category, $minPrice, $maxPrice);
+                if ($products === null) {
+                    $notice = 'Tìm kiếm thông minh tạm thời không khả dụng, đã dùng tìm kiếm thường.';
+                } else {
+                    $modeUsed = 'vector';
+                }
+            }
+        }
+
+        // Tìm kiếm thường (hoặc vector không dùng được): SQL thuần, có sắp xếp và phân trang.
+        if ($products === null) {
+            $products = $this->product->getFiltered(
+                $search,
+                $category,
+                $page,
+                $perPage,
+                $minPrice,
+                $maxPrice,
+                $sort
+            );
+        }
         $products['data'] = array_map([$this, 'formatProductListItem'], $products['data']);
 
+        $isVector = $modeUsed === 'vector';
         response_json([
             'status' => 'success',
             'products' => $products,
             'filters' => [
                 'search' => $search,
                 'category' => $category,
-                'page' => $page,
-                'per_page' => $perPage,
+                // Chế độ vector không phân trang, không sắp xếp lại nên 3 giá trị này không áp dụng.
+                'page' => $isVector ? null : $page,
+                'per_page' => $isVector ? null : $perPage,
+                'search_mode' => $searchMode,
+                'sort' => $isVector ? null : $sort,
+                'min_price' => $minPrice,
+                'max_price' => $maxPrice,
             ],
+            'search_mode_used' => $modeUsed,
+            'notice' => $notice,
         ]);
+    }
+
+    /**
+     * Tìm kiếm vector: so nghĩa câu tìm kiếm TRONG vòng bo đã lọc bằng SQL, trả danh sách đề xuất.
+     *
+     * Các bước:
+     * 1. SQL lấy toàn bộ vòng bo (danh mục + khoảng giá), không LIMIT.
+     * 2. Tạo vector cho câu tìm kiếm, so cosine với từng biến thể; mỗi sản phẩm lấy điểm biến thể cao nhất.
+     * 3. Cắt ngưỡng: giữ sản phẩm có điểm >= 80% điểm cao nhất, tối đa 20, xếp theo điểm giảm dần.
+     * Sản phẩm chưa có vector (server Python tắt lúc admin lưu) sẽ không có điểm và không xuất hiện.
+     *
+     * @param string      $search   Câu tìm kiếm (khác rỗng)
+     * @param string|null $category Slug danh mục
+     * @param float|null  $minPrice Giá thấp nhất
+     * @param float|null  $maxPrice Giá cao nhất
+     * @return array|null ['data', 'pagination' (1 trang chứa toàn bộ)]; null nếu server Python lỗi (để lùi về keyword)
+     */
+    private function vectorSearch($search = '', $category = null, $minPrice = null, $maxPrice = null)
+    {
+        $candidates = $this->product->getCatalogCandidates($category, $minPrice, $maxPrice);
+
+        $scoreByProduct = [];
+        if ($candidates !== []) {
+            try {
+                $queryVector = (new EmbedService())->embed([$search])[0];
+            } catch (Throwable $e) {
+                // Trả null để index() lùi về tìm kiếm thường, không để lỗi Python làm hỏng trang sản phẩm.
+                return null;
+            }
+
+            // Điểm của mỗi sản phẩm = điểm cao nhất trong các biến thể của nó.
+            $variants = (new ProductVariantEmbedding())->getVariantVectors(array_column($candidates, 'id'), $minPrice, $maxPrice);
+            foreach ($variants as $variant) {
+                $score = EmbedService::cosineSimilarity($queryVector, $variant['vector']);
+                $productId = $variant['product_id'];
+                if (!isset($scoreByProduct[$productId]) || $score > $scoreByProduct[$productId]) {
+                    $scoreByProduct[$productId] = $score;
+                }
+            }
+        }
+
+        // Cắt ngưỡng tương đối. Điểm cao nhất <= 0 nghĩa là không có gì liên quan.
+        $results = [];
+        $topScore = $scoreByProduct !== [] ? max($scoreByProduct) : 0.0;
+        if ($topScore > 0) {
+            $threshold = $topScore * self::VECTOR_RELATIVE_THRESHOLD;
+            foreach ($candidates as $product) {
+                $score = $scoreByProduct[(int) $product['id']] ?? null;
+                if ($score !== null && $score >= $threshold) {
+                    $product['score'] = round($score, 4);
+                    $results[] = $product;
+                }
+            }
+            // usort: hàm so sánh trả số dương nghĩa là $b đứng trước $a, nên điểm cao lên đầu.
+            usort($results, static fn($a, $b) => $b['score'] <=> $a['score']);
+            $results = array_slice($results, 0, self::VECTOR_MAX_RESULTS);
+        }
+
+        // Không phân trang: trả cả danh sách đề xuất. Vẫn giữ khóa pagination (1 trang chứa toàn bộ)
+        // để FE đang đọc products.pagination không bị lỗi.
+        $totalItems = count($results);
+
+        return [
+            'data' => $results,
+            'pagination' => [
+                'current_page' => 1,
+                'per_page' => $totalItems,
+                'total_items' => $totalItems,
+                'total_pages' => 1,
+            ],
+        ];
+    }
+
+    /**
+     * Đọc tham số giá từ query. Không truyền hoặc rỗng = null (không lọc), sai định dạng hoặc âm thì trả 400.
+     *
+     * @param string $name Tên tham số (min_price hoặc max_price)
+     * @return float|null Giá trị hợp lệ hoặc null
+     */
+    private function readPriceParam($name = '')
+    {
+        if (!isset($_GET[$name]) || $_GET[$name] === '') {
+            return null;
+        }
+
+        // FILTER_VALIDATE_FLOAT chấp nhận số nguyên hoặc thập phân, sai định dạng trả false.
+        $value = filter_var($_GET[$name], FILTER_VALIDATE_FLOAT);
+        if ($value === false || $value < 0) {
+            response_json(['status' => 'error', 'message' => $name . ' phải là số không âm'], 400);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Đồng bộ vector tìm kiếm của một sản phẩm sau khi admin tạo/sửa thành công.
+     *
+     * Không bao giờ làm hỏng việc lưu sản phẩm: công tắc VECTOR_SEARCH_ENABLED tắt thì bỏ qua;
+     * server Python lỗi thì nuốt lỗi, sản phẩm tạm chưa có trong tìm kiếm thông minh
+     * cho tới khi chạy lại BE/database/embed_products.php.
+     * Sửa giá/tồn kho không đổi đoạn văn nên không gọi server Python (xem ProductEmbedSync).
+     *
+     * @param int $productId ID sản phẩm vừa lưu
+     * @return void
+     */
+    private function syncSearchEmbedding($productId = 0)
+    {
+        if ((int) $productId <= 0 || !defined('VECTOR_SEARCH_ENABLED') || VECTOR_SEARCH_ENABLED !== true) {
+            return;
+        }
+
+        try {
+            ProductEmbedSync::sync([(int) $productId]);
+        } catch (Throwable $e) {
+            // Cố ý bỏ qua: tìm kiếm thông minh là phần phụ, không chặn admin lưu sản phẩm.
+        }
     }
 
     private function formatProductListItem(array $product): array
@@ -205,6 +411,9 @@ class ProductController{
             throw $exception;
         }
 
+        // Tạo vector để sản phẩm mới xuất hiện trong tìm kiếm thông minh (lỗi thì bỏ qua, không chặn việc tạo).
+        $this->syncSearchEmbedding($productId);
+
         response_json([
             'status' => 'success',
             'message' => 'Đã tạo sản phẩm',
@@ -274,6 +483,9 @@ class ProductController{
             }
             response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }
+
+        // Tên/mô tả đổi thì tạo lại vector; chỉ đổi giá/tồn kho thì không gọi server Python.
+        $this->syncSearchEmbedding($productId);
 
         response_json(['status' => 'success', 'message' => 'Đã cập nhật sản phẩm']);
     }
