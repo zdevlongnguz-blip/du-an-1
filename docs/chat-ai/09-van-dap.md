@@ -102,6 +102,7 @@ A: Thêm tool và route không cần sửa kiến trúc. Lượng request bị g
 
 **Q: Vì sao không dùng vector database hay RAG?**
 A: Dữ liệu sản phẩm nhỏ và có cấu trúc. Tra SQL theo từ khóa đủ chính xác, và dễ giải thích hơn. RAG phù hợp hơn khi dữ liệu là văn bản dài.
+(Câu này nói về tool `search_product` của Louis, vẫn tìm bằng SQL. Trang danh sách sản phẩm thì có thêm chế độ tìm theo nghĩa bằng vector, lưu ngay trong MySQL, không dùng vector database: xem [tim-kiem-vector/](tim-kiem-vector/README.md).)
 
 **Q: Dự án có test tự động không?**
 A: Chưa. Kiểm thử là script thủ công kiểm tra logic và DB, cùng test tay trên giao diện. Đây là hạn chế cần nêu rõ.
