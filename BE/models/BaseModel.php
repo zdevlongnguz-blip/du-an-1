@@ -6,7 +6,11 @@ abstract class BaseModel
     // kết nối CSDL
     public function __construct()
     {
-        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8', DB_HOST, DB_PORT, DB_NAME);
+        // charset=utf8mb4: mỗi ký tự tối đa 4 byte, đủ cho emoji (😀) và chữ đặc biệt như 𝓟.
+        // Không dùng "utf8" (trong MySQL chỉ tối đa 3 byte): bảng của dự án là utf8mb4, nên khi
+        // so sánh (LIKE, =) với chuỗi chứa ký tự 4 byte, MySQL báo lỗi "Illegal mix of collations"
+        // và API sập; khi đọc/ghi thì emoji bị đổi thành "?".
+        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_PORT, DB_NAME);
         try {
             $this->pdo = new PDO($dsn, DB_USERNAME, DB_PASSWORD, DB_OPTIONS);
         } catch (PDOException $e) {
