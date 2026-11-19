@@ -3,6 +3,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { formatPrice } from '@/helpers/format/price'
+import { listVariantAttributes } from '@/helpers/format/variantAttributes'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
 
 const props = defineProps({
@@ -38,18 +39,6 @@ const isOutOfStock = computed(() => {
 const viewCount = computed(() => Number(props.product.view_count ?? 0).toLocaleString('vi-VN'))
 const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocaleString('vi-VN'))
 
-// Nhãn tiếng Việt cho các khóa attributes của biến thể. Khớp với 5 khóa mặc định định nghĩa ở
-// BE/embedServices/ProductEmbedText.php, thêm vài khóa tự do hay gặp. Khóa lạ thì hiện tên khóa thay "_" bằng dấu cách.
-const ATTRIBUTE_LABELS = {
-  dung_tich: 'Dung tích',
-  do_giu_nep: 'Độ giữ nếp',
-  do_bong: 'Độ bóng',
-  phu_hop: 'Phù hợp',
-  kieu_toc: 'Kiểu tóc',
-  mui_huong: 'Mùi hương',
-  xuat_xu: 'Xuất xứ',
-}
-
 // Biến thể khớp nhất do tìm kiếm thông minh trả về (chỉ có ở chế độ vector); null nếu không có.
 const matchedVariant = computed(() => props.product.matched_variant || null)
 
@@ -59,13 +48,8 @@ const scoreText = computed(() => {
   return Number.isFinite(score) ? score.toFixed(2) : ''
 })
 
-// Danh sách thuộc tính để hiện: bỏ giá trị null/rỗng (BE luôn gửi đủ 5 khóa, khóa chưa rõ là null).
-const matchedAttributes = computed(() => {
-  const attributes = matchedVariant.value?.attributes || {}
-  return Object.entries(attributes)
-    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
-    .map(([key, value]) => ({ key, label: ATTRIBUTE_LABELS[key] || key.replace(/_/g, ' '), value: String(value) }))
-})
+// Danh sách thuộc tính có nhãn để hiện, đã bỏ giá trị null/rỗng (BE luôn gửi đủ 5 khóa, khóa chưa rõ là null).
+const matchedAttributes = computed(() => listVariantAttributes(matchedVariant.value?.attributes))
 
 // Tên biến thể khớp; "Mặc định" do hệ thống tự đặt nên không hiện.
 const matchedVariantName = computed(() => {
