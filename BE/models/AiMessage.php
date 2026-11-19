@@ -6,19 +6,8 @@
  */
 class AiMessage extends BaseModel
 {
+    // Không cần constructor riêng: BaseModel đã kết nối bằng utf8mb4 nên emoji trong tin nhắn được lưu và đọc đúng.
     protected $table = 'ai_messages';
-
-    /**
-     * Mở kết nối DB rồi chuyển bộ mã của kết nối sang utf8mb4.
-     *
-     * Vì sao: BaseModel kết nối bằng charset=utf8 (mỗi ký tự tối đa 3 byte), nên emoji (4 byte)
-     * bị đổi thành "?" khi đọc lại. Chỉ đổi cho model này để không ảnh hưởng các phần khác dùng BaseModel.
-     */
-    public function __construct()
-    {
-        parent::__construct();
-        $this->pdo->exec('SET NAMES utf8mb4');
-    }
 
     /**
      * Lấy các lượt gần nhất của cuộc hội thoại, theo thứ tự cũ -> mới, đúng định dạng Gemini.
