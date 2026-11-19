@@ -93,7 +93,8 @@ class ProductVariantEmbedding extends BaseModel
      * @param array      $productIds ID các sản phẩm trong vòng bo
      * @param float|null $minPrice   Giá bán thấp nhất (null = không lọc)
      * @param float|null $maxPrice   Giá bán cao nhất (null = không lọc)
-     * @return array Mỗi phần tử: product_id, variant_id, vector (mảng số thực đã giải mã)
+     * @return array Mỗi phần tử: product_id, variant_id, sku, variant_name, final_price, stock,
+     *               attributes (mảng), embed_text, vector (mảng số thực đã giải mã)
      */
     public function getVariantVectors($productIds = [], $minPrice = null, $maxPrice = null)
     {
@@ -102,7 +103,8 @@ class ProductVariantEmbedding extends BaseModel
             return [];
         }
 
-        $sql = 'SELECT `v`.`product_id`, `v`.`id` AS `variant_id`, `e`.`embedding` '
+        $sql = 'SELECT `v`.`product_id`, `v`.`id` AS `variant_id`, `v`.`sku`, `v`.`variant_name`, '
+            . '`v`.`final_price`, `v`.`stock`, `v`.`attributes`, `e`.`embed_text`, `e`.`embedding` '
             . 'FROM `product_variant_embeddings` AS `e` '
             . 'JOIN `product_variants` AS `v` ON `v`.`id` = `e`.`variant_id` '
             . 'WHERE `v`.`is_active` = 1 '
@@ -124,11 +126,18 @@ class ProductVariantEmbedding extends BaseModel
 
         $rows = [];
         foreach ($stmt->fetchAll() as $row) {
-            // Đổi chuỗi JSON thành mảng số để tính cosine.
+            // Đổi chuỗi JSON thành mảng: embedding để tính cosine, attributes để trả cho FE hiển thị.
             $vector = json_decode((string) $row['embedding'], true);
+            $attributes = json_decode((string) $row['attributes'], true);
             $rows[] = [
                 'product_id' => (int) $row['product_id'],
                 'variant_id' => (int) $row['variant_id'],
+                'sku' => $row['sku'],
+                'variant_name' => $row['variant_name'],
+                'final_price' => (float) $row['final_price'],
+                'stock' => (int) $row['stock'],
+                'attributes' => is_array($attributes) ? $attributes : [],
+                'embed_text' => $row['embed_text'],
                 'vector' => is_array($vector) ? $vector : [],
             ];
         }

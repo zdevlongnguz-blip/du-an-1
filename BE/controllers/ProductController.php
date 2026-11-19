@@ -32,7 +32,9 @@ class ProductController{
      * Thành công 200: { status, products: { data, pagination }, filters, search_mode_used, notice }
      *   search_mode_used: keyword | vector, chế độ thực tế đã dùng.
      *   notice: chuỗi khi muốn vector nhưng phải dùng keyword, ngược lại là null.
-     *   Khi dùng vector: mỗi sản phẩm có thêm score; pagination là 1 trang chứa toàn bộ danh sách;
+     *   Khi dùng vector: mỗi sản phẩm có thêm score và matched_variant (biến thể khớp nhất:
+     *   variant_id, sku, variant_name, final_price, stock, attributes, embed_text = đoạn văn đã dùng tạo vector);
+     *   pagination là 1 trang chứa toàn bộ danh sách;
      *   filters.page, filters.per_page, filters.sort là null (không áp dụng).
      * Lỗi 400: tham số sai.
      */
@@ -152,6 +154,8 @@ class ProductController{
         $candidates = $this->product->getCatalogCandidates($category, $minPrice, $maxPrice);
 
         $scoreByProduct = [];
+        // Biến thể điểm cao nhất của mỗi sản phẩm, trả kèm để biết biến thể nào khớp và vì sao (embed_text).
+        $bestVariantByProduct = [];
         if ($candidates !== []) {
             try {
                 $queryVector = (new EmbedService())->embed([$search])[0];
@@ -167,6 +171,9 @@ class ProductController{
                 $productId = $variant['product_id'];
                 if (!isset($scoreByProduct[$productId]) || $score > $scoreByProduct[$productId]) {
                     $scoreByProduct[$productId] = $score;
+                    // Bỏ vector (768 số) khỏi dữ liệu trả về, chỉ giữ thông tin cần hiển thị.
+                    unset($variant['vector'], $variant['product_id']);
+                    $bestVariantByProduct[$productId] = $variant;
                 }
             }
         }
@@ -180,6 +187,7 @@ class ProductController{
                 $score = $scoreByProduct[(int) $product['id']] ?? null;
                 if ($score !== null && $score >= $threshold) {
                     $product['score'] = round($score, 4);
+                    $product['matched_variant'] = $bestVariantByProduct[(int) $product['id']];
                     $results[] = $product;
                 }
             }
