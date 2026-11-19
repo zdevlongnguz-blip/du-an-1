@@ -22,7 +22,7 @@ MySQL không rollback được DDL, nên nếu một migration lỗi giữa ch�
 
 ## Ràng buộc DB đảm bảo
 SKU duy nhất; tên biến thể duy nhất trong sản phẩm; tối đa 1 biến thể mặc định/sản phẩm; mặc định phải đang bán;
-giá >= 0; giá giảm < giá gốc; attributes phải là JSON object; tồn kho không âm (UNSIGNED);
+giá >= 0; giá giảm < giá gốc; attributes phải là mảng JSON `[{key, label, value}]` (migration `20261119_01`); tồn kho không âm (UNSIGNED);
 số lượng giỏ/đơn >= 1; dòng đơn chỉ gắn được biến thể thuộc đúng sản phẩm (khóa ngoại kép);
 không xóa được danh mục còn sản phẩm.
 

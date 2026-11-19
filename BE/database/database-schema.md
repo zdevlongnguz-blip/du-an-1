@@ -139,7 +139,7 @@ Bảng `banners` và `schema_migrations` không có quan hệ với bảng nào.
 | product_id | INT | NOT NULL, FK → products.id (CASCADE) | Sản phẩm cha |
 | sku | VARCHAR(100) | NOT NULL, UNIQUE toàn hệ thống, không rỗng | Mã SKU |
 | variant_name | VARCHAR(255) | NOT NULL, UNIQUE theo (product_id, variant_name) | Tên hiển thị, ví dụ `Hũ 113g` |
-| attributes | JSON | NOT NULL, default `{}`, phải là JSON object | Thuộc tính mềm dẻo, ví dụ `{"dung_tich":"113g","mui_huong":"Thảo dược"}`. Không chứa giá/kho |
+| attributes | JSON | NOT NULL, default `[]`, phải là mảng JSON (từ migration `20261119_01`) | Mảng `[{key, label, value}]`: luôn có 5 khóa mặc định đứng đầu (`dung_tich`, `do_giu_nep`, `do_bong`, `phu_hop`, `kieu_toc`, value `null` nếu chưa rõ), khóa tự do đứng sau. Ví dụ `[{"key":"dung_tich","label":"Dung tích","value":"113g"}, ..., {"key":"mui_huong","label":"Mùi hương","value":"Thảo dược"}]`. Định nghĩa ở `BE/extensions/VariantAttributes.php`. Không chứa giá/kho |
 | price | DECIMAL(10,2) | NOT NULL, >= 0 | Giá niêm yết (VND) |
 | sale_price | DECIMAL(10,2) | NULL; nếu có thì >= 0 và < price | Giá khuyến mãi, NULL = không giảm |
 | final_price | DECIMAL(10,2) | GENERATED STORED = COALESCE(sale_price, price) | Giá bán thực tế, dùng để sắp xếp/lọc |
@@ -213,7 +213,7 @@ Cột: id, category_id, code, name, slug, image, description, view_count, sales_
 ## 5. Quy tắc DB tự bảo đảm
 
 - SKU duy nhất; tên biến thể duy nhất trong cùng sản phẩm; mỗi sản phẩm tối đa 1 biến thể mặc định và nó phải đang bán.
-- Giá >= 0, giá giảm < giá gốc, `attributes` phải là JSON object, tồn kho không âm.
+- Giá >= 0, giá giảm < giá gốc, `attributes` phải là mảng JSON, tồn kho không âm.
 - Số lượng trong giỏ và đơn >= 1; mỗi biến thể 1 dòng trong 1 giỏ.
 - Dòng đơn chỉ gắn được biến thể thuộc đúng sản phẩm.
 

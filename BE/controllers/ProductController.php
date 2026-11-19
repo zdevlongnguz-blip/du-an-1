@@ -122,12 +122,12 @@ class ProductController{
         $product['sales_count'] = (int)$product['sales_count'];
 
         $product['variants'] = array_map(function (array $variant): array {
-            $attributes = json_decode((string)$variant['attributes'], true);
             return [
                 'id' => (int)$variant['id'],
                 'sku' => $variant['sku'],
                 'variant_name' => $variant['variant_name'],
-                'attributes' => is_array($attributes) ? $attributes : [],
+                // Mảng chuẩn [{key, label, value}], luôn đủ 5 khóa mặc định (xem extensions/VariantAttributes.php).
+                'attributes' => VariantAttributes::decode($variant['attributes']),
                 'price' => (float)$variant['price'],
                 'sale_price' => $variant['sale_price'] === null ? null : (float)$variant['sale_price'],
                 'final_price' => (float)$variant['final_price'],
