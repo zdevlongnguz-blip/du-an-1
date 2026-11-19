@@ -278,6 +278,8 @@ switch ($action) {
         (new CommentController)->adminDelete();
         break;
 
+    // API danh sách sản phẩm (lọc danh mục, khoảng giá, sắp xếp, phân trang), không yêu cầu đăng nhập.
+    // search_mode=vector: tìm kiếm thông minh trong danh sách đã lọc, tự lùi về tìm thường nếu embed-service không chạy.
     case 'api-products':
         // (new AuthMiddleware())->requireAuth();
         (new ProductController)->index();
