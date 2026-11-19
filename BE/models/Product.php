@@ -3,48 +3,13 @@ class Product extends BaseModel
 {
     protected $table = 'products';
 
-    // Các kiểu sắp xếp danh sách sản phẩm => mệnh đề ORDER BY tương ứng.
-    // Chỉ dùng chuỗi trong danh sách này, không đưa giá trị từ request vào SQL (chống SQL injection).
-    // "(cột IS NULL)" đẩy sản phẩm chưa có giá (không có biến thể đang bán) xuống cuối khi sắp theo giá.
-    const CATALOG_SORT_SQL = [
-        'newest' => '`products`.`id` DESC',
-        'price_asc' => '(`products`.`min_final_price` IS NULL), `products`.`min_final_price` ASC, `products`.`id` DESC',
-        'price_desc' => '(`products`.`min_final_price` IS NULL), `products`.`min_final_price` DESC, `products`.`id` DESC',
-        'views' => '`products`.`view_count` DESC, `products`.`id` DESC',
-        'sales' => '`products`.`sales_count` DESC, `products`.`id` DESC',
-    ];
-
-    // Phần SELECT/FROM của danh sách sản phẩm, dùng chung cho getFiltered() và getCatalogCandidates().
-    // v_product_catalog là view đã tính sẵn giá thấp/cao nhất và tổng tồn kho của mỗi sản phẩm.
-    const CATALOG_SELECT_SQL = "SELECT `products`.*, `products`.`total_stock` AS `stock`, `dv`.`price`, `dv`.`sale_price`, `categories`.`name` AS `category_name`
-                FROM `v_product_catalog` AS `products`
-                LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
-                LEFT JOIN `product_variants` AS `dv` ON `dv`.`product_id` = `products`.`id` AND `dv`.`is_default` = 1 AND `dv`.`is_active` = 1";
-
-    /**
-     * Lấy danh sách sản phẩm cho tìm kiếm THƯỜNG: lọc, tìm bằng LIKE, sắp xếp và phân trang hoàn toàn bằng SQL.
-     *
-     * 3 tham số cuối có giá trị mặc định = hành vi cũ (không lọc giá, mới nhất trước),
-     * nên các chỗ gọi cũ với 4 tham số vẫn chạy y như trước.
-     *
-     * @param string      $search   Từ khóa tìm theo tên, mã, mô tả (rỗng = không tìm)
-     * @param string|null $category Slug danh mục (null = tất cả)
-     * @param int         $page     Trang hiện tại, bắt đầu từ 1
-     * @param int         $perPage  Số sản phẩm mỗi trang
-     * @param float|null  $minPrice Giá bán thấp nhất (null = không lọc)
-     * @param float|null  $maxPrice Giá bán cao nhất (null = không lọc)
-     * @param string      $sort     Khóa trong CATALOG_SORT_SQL, sai thì dùng newest
-     * @return array ['data' => danh sách, 'pagination' => thông tin phân trang]
-     */
-    public function getFiltered($search = '', $category = null, $page = 1, $perPage = 8, $minPrice = null, $maxPrice = null, $sort = 'newest')
+    public function getFiltered($search = '', $category = null, $page = 1, $perPage = 8)
     {
         $page = max(1, (int)$page);
         $perPage = max(1, (int)$perPage);
-        // OFFSET = số bản ghi cần bỏ qua. Trang 1 bỏ 0, trang 2 bỏ $perPage, ...
         $offset = ($page - 1) * $perPage;
-
-        // Điều kiện lọc danh mục + khoảng giá dùng chung với chế độ tìm kiếm vector.
-        [$conditions, $params] = $this->buildCatalogFilters($category, $minPrice, $maxPrice);
+        $params = [];
+        $conditions = [];
 
         $search = trim((string)$search);
         if ($search !== '') {
@@ -52,12 +17,19 @@ class Product extends BaseModel
             $params['keyword'] = "%{$search}%";
         }
 
-        $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
-        $orderSql = self::CATALOG_SORT_SQL[$sort] ?? self::CATALOG_SORT_SQL['newest'];
+        if ($category !== null && $category !== '') {
+            $conditions[] = "`categories`.`slug` = :category";
+            $params['category'] = (string)$category;
+        }
 
-        $sql = self::CATALOG_SELECT_SQL . "
+        $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
+
+        $sql = "SELECT `products`.*, `products`.`total_stock` AS `stock`, `dv`.`price`, `dv`.`sale_price`, `categories`.`name` AS `category_name`
+                FROM `v_product_catalog` AS `products`
+                LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
+                LEFT JOIN `product_variants` AS `dv` ON `dv`.`product_id` = `products`.`id` AND `dv`.`is_default` = 1 AND `dv`.`is_active` = 1
                 {$whereSql}
-                ORDER BY {$orderSql}
+                ORDER BY `products`.`id` DESC
                 LIMIT :limit OFFSET :offset";
 
         $stmt = $this->pdo->prepare($sql);
@@ -92,68 +64,6 @@ class Product extends BaseModel
                 'total_pages' => $totalPages,
             ],
         ];
-    }
-
-    /**
-     * Tìm kiếm VECTOR, bước 1: lấy TOÀN BỘ "vòng bo" (sản phẩm đã lọc danh mục + khoảng giá).
-     * Không LIKE, không LIMIT: vector sẽ chấm điểm trên cả vòng bo này rồi mới chọn kết quả.
-     *
-     * @param string|null $category Slug danh mục (null = tất cả)
-     * @param float|null  $minPrice Giá bán thấp nhất (null = không lọc)
-     * @param float|null  $maxPrice Giá bán cao nhất (null = không lọc)
-     * @return array Danh sách sản phẩm, cùng cột với getFiltered()
-     */
-    public function getCatalogCandidates($category = null, $minPrice = null, $maxPrice = null)
-    {
-        [$conditions, $params] = $this->buildCatalogFilters($category, $minPrice, $maxPrice);
-        $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
-
-        $stmt = $this->pdo->prepare(self::CATALOG_SELECT_SQL . $whereSql . ' ORDER BY `products`.`id` DESC');
-        foreach ($params as $key => $value) {
-            $stmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
-        }
-        $stmt->execute();
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Điều kiện lọc DÙNG CHUNG cho tìm kiếm thường và tìm kiếm vector: danh mục + khoảng giá.
-     *
-     * Lọc giá theo biến thể: sản phẩm được giữ nếu có ÍT NHẤT MỘT biến thể đang bán nằm trong khoảng giá.
-     * EXISTS (truy vấn con) chỉ kiểm tra "có tồn tại dòng nào thỏa không", không lấy dữ liệu ra.
-     * Giá là số thập phân nên bind dạng chuỗi; MySQL tự so sánh đúng với cột DECIMAL.
-     *
-     * @param string|null $category Slug danh mục (null = tất cả)
-     * @param float|null  $minPrice Giá bán thấp nhất (null = không lọc)
-     * @param float|null  $maxPrice Giá bán cao nhất (null = không lọc)
-     * @return array [mảng điều kiện SQL, mảng tham số bind theo tên (không có dấu :)]
-     */
-    private function buildCatalogFilters($category = null, $minPrice = null, $maxPrice = null)
-    {
-        $conditions = [];
-        $params = [];
-
-        if ($category !== null && $category !== '') {
-            $conditions[] = "`categories`.`slug` = :category";
-            $params['category'] = (string)$category;
-        }
-
-        if ($minPrice !== null || $maxPrice !== null) {
-            $priceSql = 'EXISTS (SELECT 1 FROM `product_variants` AS `pv` '
-                . 'WHERE `pv`.`product_id` = `products`.`id` AND `pv`.`is_active` = 1';
-            if ($minPrice !== null) {
-                $priceSql .= ' AND `pv`.`final_price` >= :min_price';
-                $params['min_price'] = (string)$minPrice;
-            }
-            if ($maxPrice !== null) {
-                $priceSql .= ' AND `pv`.`final_price` <= :max_price';
-                $params['max_price'] = (string)$maxPrice;
-            }
-            $conditions[] = $priceSql . ')';
-        }
-
-        return [$conditions, $params];
     }
 
     /**

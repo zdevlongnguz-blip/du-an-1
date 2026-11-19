@@ -67,8 +67,6 @@ define('PATH_CONTROLLER', PATH_ROOT . 'controllers/');
 define('BASE_ASSETS_JS', BASE_URL . 'assets/js/');
 define('PATH_EXTENSION', PATH_ROOT . 'extensions/');
 define('PATH_GEMINI_SERVICE', PATH_ROOT . 'geminiServices/');
-// Thư mục chứa service gọi server Python embed-service (biến câu thành vector).
-define('PATH_EMBED_SERVICE', PATH_ROOT . 'embedServices/');
 
 // Các thiết lập không phải bí mật được giữ trực tiếp trong file cấu hình.
 define('APP_ENV', 'development');
@@ -122,10 +120,3 @@ define('GEMINI_API_KEYS', array_values(array_unique(array_filter(
 ))));
 // Tên model Gemini dùng mặc định, đổi được qua GEMINI_MODEL trong BE/.env mà không phải sửa code.
 define('GEMINI_MODEL', getenv('GEMINI_MODEL') ?: 'gemini-2.5-flash');
-
-// Địa chỉ server Python embed-service (thư mục embed-service/ ở gốc repo), không phải bí mật.
-// Server này biến câu tiếng Việt thành vector để tìm kiếm theo nghĩa. Đổi cổng thì sửa ở đây.
-define('EMBED_SERVICE_URL', 'http://127.0.0.1:8001');
-// Công tắc tổng cho tìm kiếm thông minh (vector). false = mọi request search_mode=vector tự dùng tìm kiếm thường,
-// ví dụ khi demo trên máy không chạy được server Python. Không cần sửa FE.
-define('VECTOR_SEARCH_ENABLED', true);
