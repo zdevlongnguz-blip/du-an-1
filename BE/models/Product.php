@@ -68,11 +68,15 @@ class Product extends BaseModel
 
     /**
      * Lấy tối đa 5 sản phẩm xếp theo lượt xem hoặc lượt bán.
+     * Có thể giới hạn trong một danh mục và bỏ một sản phẩm, dùng cho khối "sản phẩm cùng danh mục bán chạy"
+     * ở trang chi tiết (bỏ chính sản phẩm đang xem).
      *
-     * @param string $sortBy Tiêu chí xếp hạng: views hoặc sales
+     * @param string   $sortBy     Tiêu chí xếp hạng: views hoặc sales
+     * @param int|null $categoryId Chỉ lấy sản phẩm thuộc danh mục này (null = toàn shop)
+     * @param int|null $excludeId  Bỏ sản phẩm có ID này khỏi kết quả (null = không bỏ)
      * @return array Danh sách tối đa 5 sản phẩm
      */
-    public function getTop($sortBy = 'sales')
+    public function getTop($sortBy = 'sales', $categoryId = null, $excludeId = null)
     {
         // Chỉ cho phép hai cột đã quy định để không đưa tên cột từ request vào SQL.
         $sortColumns = [
@@ -81,15 +85,33 @@ class Product extends BaseModel
         ];
         $sortColumn = $sortColumns[$sortBy] ?? $sortColumns['sales'];
 
+        // Điều kiện động: chỉ thêm khi có tham số. Giá trị đi qua bindValue (PARAM_INT),
+        // không nối thẳng vào SQL, để chống SQL injection.
+        $conditions = [];
+        $params = [];
+        if ($categoryId !== null) {
+            $conditions[] = '`products`.`category_id` = :category_id';
+            $params['category_id'] = (int) $categoryId;
+        }
+        if ($excludeId !== null) {
+            $conditions[] = '`products`.`id` <> :exclude_id';
+            $params['exclude_id'] = (int) $excludeId;
+        }
+        $whereSql = $conditions !== [] ? ' WHERE ' . implode(' AND ', $conditions) : '';
+
         // Dùng cùng nguồn và cùng cột với danh sách sản phẩm (view + biến thể mặc định) để FE nhận đủ giá và tồn kho.
         $sql = "SELECT `products`.*, `products`.`total_stock` AS `stock`, `dv`.`price`, `dv`.`sale_price`, `categories`.`name` AS `category_name`
                 FROM `v_product_catalog` AS `products`
                 LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
                 LEFT JOIN `product_variants` AS `dv` ON `dv`.`product_id` = `products`.`id` AND `dv`.`is_default` = 1 AND `dv`.`is_active` = 1
+                {$whereSql}
                 ORDER BY {$sortColumn} DESC, `products`.`id` DESC
                 LIMIT 5";
 
         $stmt = $this->pdo->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value, PDO::PARAM_INT);
+        }
         $stmt->execute();
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);

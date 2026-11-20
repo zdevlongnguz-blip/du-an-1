@@ -58,6 +58,13 @@ Trong test: đặt 3 sản phẩm biến thể 4 làm kho giảm 100 -> 97 và `
 | GET | `api-products-top`?sort_by=sales | api-products-top sort sales | 200 | 200 | PASS |
 | GET | `api-products-top`?sort_by=views | api-products-top sort views | 200 | 200 | PASS |
 | GET | `api-products-top`?sort_by=invalid | api-products-top sort sai | 400 | 400 | PASS |
+| GET | `api-products-top`?category_id=10 | api-products-top chỉ trong danh mục (20/11/2026) | 200 | 200 | PASS |
+| GET | `api-products-top`?category_id=10&exclude_id=27 | api-products-top cùng danh mục, bỏ sản phẩm đang xem | 200 | 200 | PASS |
+| GET | `api-products-top`?category_id=1&exclude_id=5&sort_by=views | api-products-top danh mục + bỏ + xếp theo lượt xem | 200 | 200 | PASS |
+| GET | `api-products-top`?category_id=999 | api-products-top danh mục không có sản phẩm (mảng rỗng) | 200 | 200 | PASS |
+| GET | `api-products-top`?category_id=&exclude_id= | api-products-top tham số rỗng thì bỏ qua (như không truyền) | 200 | 200 | PASS |
+| GET | `api-products-top`?category_id=abc (cả 0, -3, 1.5, mảng) | api-products-top category_id sai | 400 | 400 | PASS |
+| GET | `api-products-top`?exclude_id=x | api-products-top exclude_id sai | 400 | 400 | PASS |
 | GET | `api-product-detail`?slug=xit-duong-toc-buoi-cocoon | api-product-detail hợp lệ | 200 | 200 | PASS |
 | GET | `api-product-detail` | api-product-detail thiếu slug | 400 | 400 | PASS |
 | GET | `api-product-detail`?slug=khong-ton-tai-xyz | api-product-detail slug không tồn tại | 404 | 404 | PASS |
