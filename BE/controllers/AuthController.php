@@ -368,4 +368,34 @@ class AuthController
             ]
         ]);
     }
+
+    /**
+     * Xác nhận người gọi là admin, dùng cho FE trước khi mở khu quản trị (/admin).
+     *
+     * Việc kiểm tra nằm ở router: AdminMiddleware::requireAdmin() chạy TRƯỚC hàm này
+     * (token hợp lệ, khớp DB: is_active, token_version, role; rồi role phải là admin).
+     * Vào được tới đây nghĩa là đã qua hết, hàm chỉ trả lại thông tin tối thiểu của admin.
+     * Không đọc DB thêm: payload đã được middleware đối chiếu với DB.
+     *
+     * Mã HTTP: 200 là admin; 401 token thiếu/sai/hết hạn/bị thu hồi; 403 không phải admin
+     * (401/403 do middleware trả); 405 nếu không phải GET.
+     *
+     * @param array $authPayload Payload JWT đã được AdminMiddleware xác minh
+     * @return void
+     */
+    public function adminMe(array $authPayload = [])
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        response_json([
+            'status' => 'success',
+            'user' => [
+                'id' => (int) ($authPayload['sub'] ?? 0),
+                'email' => $authPayload['email'] ?? null,
+                'role' => $authPayload['role'] ?? null,
+            ],
+        ]);
+    }
 }

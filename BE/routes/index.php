@@ -182,6 +182,13 @@ switch ($action) {
         (new OrderController)->cancel($authPayload);
         break;
 
+    // API kiểm tra quyền vào khu quản trị (FE gọi khi mở /admin). Cần Bearer token VÀ role admin:
+    // dùng chung AdminMiddleware với mọi API admin, nên điều kiện "là admin" chỉ định nghĩa ở một nơi.
+    case 'api-admin-me':
+        $authPayload = (new AdminMiddleware())->requireAdmin();
+        (new AuthController)->adminMe($authPayload);
+        break;
+
     // API admin lấy danh sách tất cả đơn hàng.
     case 'api-admin-orders':
         $authPayload = (new AdminMiddleware())->requireAdmin();

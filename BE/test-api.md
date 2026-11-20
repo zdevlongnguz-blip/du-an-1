@@ -187,6 +187,19 @@ Trong test: đặt 3 sản phẩm biến thể 4 làm kho giảm 100 -> 97 và `
 | - | (đối chiếu dữ liệu) | sales_count hoàn về như ban đầu | 61 | 61 | PASS |
 | POST | `api-order-cancel`?id=25 | Hủy lần hai | 409 | 409 | PASS |
 
+### Kiểm tra quyền vào khu quản trị (api-admin-me), 20/11/2026
+
+| Method | Route | Test | Mong đợi | Nhận được | Kết quả |
+|---|---|---|---|---|---|
+| GET | `api-admin-me` | Token admin | 200 `{user: {id, email, role: admin}}` | 200 | PASS |
+| GET | `api-admin-me` | Không token | 401 | 401 | PASS |
+| GET | `api-admin-me` | Token rác (sai chữ ký) | 401 | 401 | PASS |
+| GET | `api-admin-me` | Token user thường (role user) | 403 | 403 | PASS |
+| POST | `api-admin-me` | Token admin, sai method | 405 | 405 | PASS |
+| GET | `api-admin-me` | Nâng role trong DB nhưng dùng token cũ (role trong token lệch DB) | 401 | 401 | PASS |
+| GET | `api-admin-me` | Đăng nhập lại sau khi nâng role | 200 | 200 | PASS |
+| GET | `api-admin-me` | Token đã đăng xuất (token_version bị tăng) | 401 | 401 | PASS |
+
 ### Admin đơn hàng (api-admin-orders, api-admin-order-update)
 
 | Method | Route | Test | Mong đợi | Nhận được | Kết quả |
