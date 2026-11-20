@@ -66,6 +66,8 @@ class ProductController{
     /**
      * Lấy tối đa 5 sản phẩm được xem nhiều nhất hoặc bán nhiều nhất.
      * Mặc định sắp xếp theo lượt bán; sort_by sai trả HTTP 400.
+     * Tùy chọn: category_id (chỉ lấy trong danh mục), exclude_id (bỏ một sản phẩm, ví dụ sản phẩm đang xem).
+     * Hai tham số này sai định dạng trả HTTP 400; không truyền thì bỏ qua.
      */
     public function top()
     {
@@ -77,9 +79,14 @@ class ProductController{
             ], 400);
         }
 
+        // 2 tham số tùy chọn cho khối "cùng danh mục bán chạy" ở trang chi tiết. Không truyền (hoặc rỗng) thì bỏ qua,
+        // nên trang chủ gọi như cũ vẫn nhận top 5 toàn shop.
+        $categoryId = $this->readOptionalId('category_id');
+        $excludeId = $this->readOptionalId('exclude_id');
+
         // Trả lại kho của đơn SePay quá hạn trước khi đọc tồn kho (xem Order::releaseExpiredStock).
         Order::releaseExpiredStock();
-        $products = $this->product->getTop($sortBy);
+        $products = $this->product->getTop($sortBy, $categoryId, $excludeId);
         $products = array_map([$this, 'formatProductListItem'], $products);
 
         response_json([
@@ -87,6 +94,32 @@ class ProductController{
             'sort_by' => $sortBy,
             'products' => $products,
         ]);
+    }
+
+    /**
+     * Đọc một ID tùy chọn từ query string (ví dụ category_id, exclude_id).
+     * Không truyền hoặc chuỗi rỗng thì trả null (bỏ qua bộ lọc). Sai định dạng thì trả HTTP 400.
+     *
+     * @param string $name Tên tham số trên URL
+     * @return int|null ID số nguyên dương, hoặc null nếu không truyền
+     */
+    private function readOptionalId($name = '')
+    {
+        $raw = $_GET[$name] ?? null;
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        // filter_var(..., FILTER_VALIDATE_INT): chỉ nhận chuỗi là số nguyên ("10"), từ chối "abc", "1.5", mảng (?x[]=1).
+        $id = is_string($raw) ? filter_var($raw, FILTER_VALIDATE_INT) : false;
+        if ($id === false || $id < 1) {
+            response_json([
+                'status' => 'error',
+                'message' => $name . ' phải là số nguyên dương',
+            ], 400);
+        }
+
+        return $id;
     }
 
     /**

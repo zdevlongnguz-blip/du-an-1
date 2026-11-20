@@ -1,86 +1,115 @@
-# Task Tuần 3 - Vinh: Sản Phẩm Cùng Danh Mục Trên Trang Chi Tiết
+# Task Tuần 3 - Vinh: Lưới Top 5, Sản Phẩm Cùng Danh Mục Bán Chạy Và Bố Cục Trang Chi Tiết
 
 Tuần: 3
-Ngày giao task này: 17/11/2026
-Phạm vi: hiển thị danh sách sản phẩm cùng danh mục (có giới hạn số lượng) ở cuối trang chi tiết sản phẩm. Task này cần một thay đổi nhỏ ở BE. Phần BE do owner BE làm riêng, Vinh không sửa `BE/`.
+Ngày giao task này: 20/11/2026 (thay toàn bộ task cũ ngày 17/11/2026 về `api-product-related`; task cũ hủy, không làm theo)
+Phạm vi: chỉ FE. Phần BE đã làm xong và đã test (xem mục "API đã sẵn sàng"). Vinh không sửa `BE/`.
 
 ## Tạo Branch Trước Khi Làm
 
-- Kiểm tra `git status`, fetch `origin`, rồi tạo branch từ `origin/dev` mới nhất.
-- Branch đề xuất: `feature/week3-vinh-related-products`.
-- Không code trực tiếp trên `dev` hoặc branch của người khác.
+- Kiểm tra `git status`, fetch `origin`, rồi tạo branch từ `origin/dev` mới nhất (phải có commit mở rộng `api-products-top`).
+- Branch đề xuất: `feature/week3-vinh-top5-related-detail`.
+- Dùng `git switch -c feature/week3-vinh-top5-related-detail --no-track origin/dev` rồi `git push -u origin feature/week3-vinh-top5-related-detail`, để nút Sync của VS Code không đẩy thẳng lên `dev`.
+- Không code trực tiếp trên `dev` hoặc branch của người khác. Branch cũ `feature/week3-vinh-related-products` không dùng nữa.
 
 ## Điều Kiện Bắt Đầu
 
-- Chạy file SQL đầy đủ theo quy trình của team để chuẩn bị database local/dev, và xác nhận có sản phẩm cùng danh mục để test. Thiếu file hoặc lỗi thì dừng và báo admin.
-- Không chạy script có thể xóa dữ liệu trên môi trường dùng chung/production.
+- Chạy migration và seed theo quy trình của team để database local có đủ sản phẩm ở ít nhất 2 danh mục (dữ liệu demo hiện có: danh mục 1 "Gel, Sáp vuốt tóc" 3 sản phẩm, danh mục 10 "Pomade" 4 sản phẩm).
+- Thiếu dữ liệu hoặc chạy lỗi thì dừng và báo admin. Không tự sửa SQL, không sửa BE.
 
-## Hiện Trạng Đã Rà Soát
+## Mục Tiêu
 
-- `api-product-detail` (`BE/controllers/ProductController.php`) trả `category_id` và `category_name`, **không trả slug danh mục**.
-- `api-products` lọc theo `category` là **slug** (`categories.slug`), không lọc được theo `category_id`. Vì vậy FE không thể dùng trực tiếp `api-products` với dữ liệu trang chi tiết hiện có.
-- `api-products` có `per_page` nhưng không có tham số loại trừ sản phẩm đang xem, và không giới hạn trần cho `per_page`.
-- Kết luận: cần một thay đổi nhỏ ở BE. Cách làm đề xuất bên dưới, chờ owner BE xác nhận trước khi FE code.
+1. **Thiết kế lại lưới top 5 sản phẩm** ở trang chủ.
+2. **Thêm khối "Sản phẩm cùng danh mục bán chạy"** ở trang chi tiết sản phẩm.
+3. **Sắp xếp lại bố cục trang chi tiết sản phẩm** cho gọn, dễ đọc, đúng thiết kế Stitch.
 
-## Xung Đột Quyền Sở Hữu Cần Giải Quyết Trước
+## API Đã Sẵn Sàng (BE đã làm, đã test 17/17 ca)
 
-- `FE/src/views/products/ProductDetail.vue` là file đang do **Văn Hoàng** sở hữu trong task tuần 3 (xem `vanhoang.md`).
-- Vinh chỉ được sửa file này sau khi Văn Hoàng bàn giao, hoặc admin xác nhận cho phép sửa song song.
-- Để giảm xung đột: phần UI đặt trong component mới `FE/src/components/ProductRelated.vue`. Trong `ProductDetail.vue` chỉ thêm đúng một dòng gọi component, đặt ở cuối trang.
+Không có endpoint mới. `api-products-top` được mở rộng thêm 2 tham số **tùy chọn**:
 
-## Contract Đề Xuất (chờ owner BE xác nhận)
+```
+GET /?action=api-products-top&sort_by=sales&category_id=<id danh mục>&exclude_id=<id sản phẩm đang xem>
+```
 
-### Phương án đề xuất: endpoint mới
+| Tham số | Bắt buộc | Ý nghĩa |
+|---|---|---|
+| `sort_by` | Không (mặc định `sales`) | `sales` (lượt bán) hoặc `views` (lượt xem). Sai thì 400 |
+| `category_id` | Không | Chỉ lấy sản phẩm thuộc danh mục này. Không truyền hoặc rỗng thì lấy toàn shop |
+| `exclude_id` | Không | Bỏ sản phẩm có ID này (sản phẩm đang xem). Không truyền hoặc rỗng thì không bỏ |
 
-- `GET /?action=api-product-related&slug=<slug>&limit=<n>`, không yêu cầu đăng nhập (giống `api-product-detail`).
-- Logic: lấy `category_id` của sản phẩm có `slug` đó; trả sản phẩm cùng `category_id`, **loại trừ chính sản phẩm đó**, sắp theo lượt xem giảm dần hoặc id giảm dần (owner BE chọn và ghi rõ).
-- `limit`: mặc định 4, tối thiểu 1, tối đa 8. Ngoài khoảng thì trả 422 hoặc kẹp về giới hạn (owner BE chọn và ghi rõ).
-- Thành công HTTP 200: `{ "status": "success", "products": [ ...các item cùng dạng với api-products... ] }`.
-- Lỗi: 400 khi thiếu/sai slug; 404 khi slug không tồn tại; 405 sai method.
-- Mỗi item dùng cùng shape với `formatProductListItem` của `api-products` để FE tái sử dụng `ProductCard`.
+- Luôn trả **tối đa 5** sản phẩm, xếp giảm dần theo `sort_by`, hòa thì sản phẩm mới hơn (ID lớn) đứng trước.
+- Thành công 200: `{ "status": "success", "sort_by": "sales", "products": [ ... ] }`. Mỗi sản phẩm **cùng dạng** với item của trang chủ hiện tại (`id`, `name`, `slug`, `image`, `category_id`, `category_name`, `min_final_price`, `max_final_price`, `stock`, `in_stock`, `view_count`, `sales_count`...), nên dùng lại được card có sẵn.
+- `category_id`/`exclude_id` sai định dạng (chữ, 0, số âm, số lẻ, mảng) trả **400** `{ "status": "error", "message": "category_id phải là số nguyên dương" }`.
+- Danh mục không có sản phẩm nào khác: 200 với `products: []`.
+- Trang chủ gọi như cũ (không truyền 2 tham số mới) vẫn nhận đúng top 5 toàn shop, không bị ảnh hưởng.
 
-### Phương án dự phòng (nếu không muốn endpoint mới)
+Lấy dữ liệu cho khối cùng danh mục từ `api-product-detail` đang có sẵn trên trang chi tiết: `product.category_id` và `product.id`.
 
-- Thêm `category_slug` vào response `api-product-detail` (thay đổi cộng thêm, không phá contract cũ).
-- FE gọi `api-products?category=<slug>&per_page=<limit+1>`, rồi tự loại sản phẩm đang xem. Nhược điểm: lấy dư dữ liệu và không có giới hạn trần.
-
-Không được tự dựng contract. Owner BE phải xác nhận trước khi Vinh code phần gọi API.
+Ví dụ: đang xem Pomade Layrite (`id = 27`, `category_id = 10`):
+`/?action=api-products-top&sort_by=sales&category_id=10&exclude_id=27` trả về 3 pomade còn lại.
 
 ## Phạm Vi Thực Hiện (FE)
 
-- Tạo `FE/src/components/ProductRelated.vue`: nhận `slug` (hoặc danh sách sản phẩm), gọi API, có trạng thái đang tải, lỗi kèm nút thử lại, và rỗng (ẩn cả khối nếu không có sản phẩm nào).
-- Dùng lại `ProductCard`/`ProductCardCatalog` hiện có để hiển thị; không tạo card mới nếu không cần.
-- Trong `ProductDetail.vue` (sau khi có quyền sửa): thêm đúng một dòng gọi `<ProductRelated>` ở cuối trang. Không thay đổi phần khác.
-- Chỉ dùng `api` từ `@/helpers/api/client`. Không dùng `fetch`, không `axios.create`, không hardcode URL.
-- Comment tiếng Việt theo mục 8 của `FE/CLAUDE.md`. Đầu `<script setup>` của component mới có 1-3 dòng mô tả.
-- Không đổi `router/index.js`, `App.vue`, `style.css`, `client.js`.
+### File được sửa
+
+| File | Việc |
+|---|---|
+| `FE/src/views/HomeView.vue` | Lưới top 5 (bố cục, khoảng cách, responsive) |
+| `FE/src/components/ProductCardTop5.vue` | Thẻ sản phẩm trong lưới top 5 |
+| `FE/src/views/products/ProductDetail.vue` | Sắp xếp lại bố cục; gắn khối sản phẩm cùng danh mục |
+| `FE/src/components/ProductRelated.vue` (**mới**) | Khối "Sản phẩm cùng danh mục bán chạy": nhận `categoryId`, `excludeId`, tự gọi API |
+
+Admin đã giao 3 file có sẵn ở trên cho Vinh trong task này (trước đây `ProductDetail.vue` thuộc Văn Hoàng, `ProductCardTop5.vue` thuộc Tuấn Anh). Không sửa file nào khác. Cần sửa thêm file nào thì hỏi admin trước.
+
+### 1. Lưới top 5 (trang chủ)
+
+- Giữ nguyên lời gọi `api-products-top` hiện có (không truyền tham số mới).
+- Thiết kế lại lưới theo Stitch (mục 12 `FE/CLAUDE.md`): bảng màu, font Playfair Display / Inter, bo góc 6-8px. Đẹp ở cả điện thoại (~400px), tablet và desktop.
+- Giá đi qua `formatPrice`. Không tự nối "đ" ở template.
+- Trạng thái tải / lỗi / rỗng dùng `StateBlock` (mục 13 `FE/CLAUDE.md`). Nếu cần kiểu "khung xương" dạng lưới mà `StateBlock` chưa có thì hỏi admin trước, không tự viết khối riêng.
+
+### 2. Khối sản phẩm cùng danh mục (trang chi tiết)
+
+- Component mới `ProductRelated.vue`, props: `categoryId` (bắt buộc), `excludeId` (bắt buộc). Đầu `<script setup>` có 1-3 dòng comment nói component làm gì, gọi API nào.
+- Gọi `api.get('/?action=api-products-top', { params: { sort_by: 'sales', category_id, exclude_id } })` qua `@/helpers/api/client`. Không dùng `fetch`, không hardcode URL.
+- `watch` theo `categoryId` / `excludeId`: bấm sang sản phẩm khác (cùng route `/product-detail/:slug`) thì tải lại danh sách.
+- Trạng thái: đang tải, lỗi có nút "Thử lại", rỗng. Dùng `StateBlock`. Đây là khối nhỏ trong trang: nếu thấy `StateBlock` không hợp (ví dụ muốn ẩn hẳn khối khi rỗng) thì hỏi admin trước. **Lỗi API không được hiện thành "không có sản phẩm"**.
+- Mỗi sản phẩm dùng lại card có sẵn (`ProductCard.vue` hoặc `ProductCardTop5.vue`), không tạo card mới nếu không cần. Bấm vào chuyển đến `/product-detail/<slug>`.
+- Có tiêu đề rõ, ví dụ "Cùng danh mục bán chạy".
+
+### 3. Bố cục trang chi tiết
+
+- Chỉ đổi `<template>` (cấu trúc, class) và `<style scoped>`. **Giữ nguyên mọi logic và binding** đang chạy: chọn biến thể, nút "Chi tiết" thả xuống bảng thông số, thêm giỏ theo số lượng, tồn kho từng biến thể, bình luận (gửi/sửa/xóa), `StateBlock` khi tải sản phẩm.
+- Đề xuất thứ tự: breadcrumb → (ảnh | tên, giá, chọn biến thể, thêm giỏ) → mô tả → bình luận → khối cùng danh mục. Có thể đổi nếu hợp lý hơn, ghi lý do trong báo cáo.
+- Điện thoại (~400px): xếp một cột, không cuộn ngang.
+
+### Không được
+
+- Không sửa `BE/`, `router/index.js`, `App.vue`, `style.css`, `helpers/api/client.js`, `StateBlock.vue`.
+- Không sửa 2 trang đặt hàng `payment/CheckoutView.vue`, `ai/AiCheckout.vue`.
+- Không thêm thư viện (`npm install`).
+- Comment tiếng Việt có dấu theo mục 8 `FE/CLAUDE.md` (mỗi hàm, mỗi lần gọi API, mỗi `ref`/`computed`/`watch` không hiển nhiên, comment HTML cho từng khối lớn).
 
 ## Tiêu Chí Nghiệm Thu
 
-- Trang chi tiết hiển thị tối đa `limit` sản phẩm cùng danh mục; không có sản phẩm nào là chính trang đang xem.
-- Có trạng thái loading, lỗi (có nút thử lại), rỗng (ẩn khối).
-- Lỗi API không hiển thị thành "không có sản phẩm liên quan".
-- Click vào sản phẩm liên quan chuyển sang trang chi tiết đúng slug.
-- `npm run build` trong `FE/` pass; ghi kết quả thật.
-- Kiểm tra trình duyệt ở ~400px và desktop; ghi rõ phần nào chưa kiểm tra.
-- `git diff`: chỉ có `ProductRelated.vue` mới và một dòng trong `ProductDetail.vue` (sau handoff). Không có thay đổi trong `BE/`.
-
-## Phần BE (giao riêng, owner: Long)
-
-- Viết endpoint `api-product-related` (hoặc thêm `category_slug` theo phương án dự phòng) theo contract đã xác nhận.
-- Thêm vào `BE/routes/index.php` và `BE/controllers/ProductController.php`, theo đúng pattern của `api-products-top`.
-- Kiểm tra bằng curl: đúng sản phẩm cùng danh mục, không có chính nó, `limit` ngoài khoảng, slug sai (400), slug không có (404).
-- Cập nhật `BE/test-api.md` (chỉ phần BE do Long phụ trách).
+- Trang chủ: lưới top 5 mới hiển thị đúng 5 sản phẩm như trước, đẹp ở ~400px và desktop.
+- Trang chi tiết: khối cùng danh mục hiện tối đa 5 sản phẩm **cùng danh mục**, **không có sản phẩm đang xem**, xếp theo lượt bán giảm dần.
+- Bấm một sản phẩm trong khối: sang đúng trang chi tiết, khối tự tải lại cho sản phẩm mới.
+- Tắt server (hoặc làm API lỗi): khối hiện lỗi kèm nút "Thử lại", không hiện "không có sản phẩm".
+- Danh mục chỉ có 1 sản phẩm: khối hiện trạng thái rỗng (hoặc ẩn, theo cách admin chốt).
+- Các chức năng cũ của trang chi tiết vẫn chạy: chọn biến thể, "Chi tiết", thêm giỏ, bình luận.
+- `npm run build` trong `FE/` pass. Ghi kết quả thật.
+- `git diff`: chỉ có 4 file trong bảng "File được sửa".
 
 ## Thứ Tự Thực Hiện
 
-1. Owner BE xác nhận contract (phương án chính hoặc dự phòng).
-2. Long làm phần BE và báo Vinh khi xong.
-3. Admin xác nhận quyền sửa `ProductDetail.vue` (sau handoff của Văn Hoàng).
-4. Vinh code `ProductRelated.vue` và gắn vào trang chi tiết.
-5. Kiểm thử và báo cáo.
+1. Kéo `dev` mới (đã có BE mở rộng `api-products-top`), tạo branch.
+2. Làm `ProductRelated.vue`, test với ví dụ Pomade ở trên.
+3. Sắp xếp lại bố cục `ProductDetail.vue` và gắn `ProductRelated`.
+4. Thiết kế lại lưới top 5 (`HomeView.vue`, `ProductCardTop5.vue`).
+5. Kiểm thử ~400px + desktop, chạy build, tạo PR vào `dev`.
 
 ## Ghi Chú Phối Hợp
 
-- Không sửa BE. Nếu phát hiện lỗi BE khi test, ghi request/response thực tế và báo owner BE.
-- Báo cáo sau khi xong: ghi vào `vibecoder/week-3/mission-completed/vinh.md`, mục riêng cho task này. Chỉ ghi điều đã kiểm chứng.
+- Task nâng cấp bộ lọc catalog (`catalog.vue`, `api-products`) là task riêng, dùng branch riêng. Trong task này không đụng `catalog.vue`, `ProductCardCatalog.vue`, để hai PR không chồng nhau.
+- Phát hiện lỗi BE khi test: ghi lại request/response thực tế và báo admin, không tự sửa BE.
+- Báo cáo khi xong: ghi vào `vibecoder/week-3/mission-completed/vinh.md`, mục riêng cho task này. Chỉ ghi điều đã kiểm chứng; phần chưa kiểm tra thì ghi rõ.
