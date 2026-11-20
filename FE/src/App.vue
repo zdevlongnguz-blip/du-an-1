@@ -1,7 +1,7 @@
 <script setup>
 import { RouterView, useRoute } from 'vue-router'
-import { onMounted, ref, watch } from 'vue'
-import { isAuthenticated } from '@/helpers/auth/session'
+import { computed, onMounted, ref, watch } from 'vue'
+import { getUser, isAuthenticated } from '@/helpers/auth/session'
 import { fetchProfile } from '@/helpers/auth/profile'
 import { cartCount, refreshCartCount } from '@/helpers/cart/cartCount'
 import { useToast } from '@/helpers/ui/toast'
@@ -13,10 +13,17 @@ const menuOpen = ref(false)
 const route = useRoute()
 const { toast, showToast, dismissToast } = useToast()
 const currentYear = new Date().getFullYear()
+// true nếu tài khoản đang đăng nhập là admin (role lấy từ auth_user khi đăng nhập), dùng để hiện link "Quản trị".
+// Chỉ để ẩn/hiện link; quyền thật do BE kiểm tra.
+const isAdmin = ref(getUser()?.role === 'admin')
+// computed: true khi đang ở khu quản trị (route có meta.layout = 'admin', xem router/index.js).
+// Khi đó ẩn header, footer, khung chat của shop; AdminLayout tự vẽ menu riêng. Toast vẫn dùng chung.
+const isAdminLayout = computed(() => route.meta.layout === 'admin')
 
 // Đồng bộ trạng thái đăng nhập và số lượng giỏ để menu cập nhật sau login, logout hoặc chuyển trang.
 watch(() => route.fullPath, () => {
   checkAuth.value = isAuthenticated()
+  isAdmin.value = checkAuth.value && getUser()?.role === 'admin'
   menuOpen.value = false
   refreshCartCount()
 })
@@ -49,8 +56,9 @@ onMounted(() => {
 <template>
   <div class="site-shell">
     <div class="site-sticky-stack">
-      <!-- Navbar và alert dùng chung luôn nằm cùng nhau khi cuộn trang. -->
-      <header class="site-header">
+      <!-- Navbar và alert dùng chung luôn nằm cùng nhau khi cuộn trang.
+           Header của shop ẩn ở khu quản trị (AdminLayout có menu riêng). -->
+      <header v-if="!isAdminLayout" class="site-header">
         <nav class="site-navigation" aria-label="Điều hướng chính">
           <router-link class="site-brand" to="/" aria-label="FuLe BaberShop, trang chủ">
             <span class="site-brand-name">FULE BABERSHOP</span>
@@ -73,6 +81,8 @@ onMounted(() => {
           </div>
 
           <div class="site-nav-account">
+            <!-- Link vào khu quản trị, chỉ hiện với tài khoản admin. -->
+            <router-link v-if="isAdmin" class="site-nav-link" to="/admin">Quản trị</router-link>
             <template v-if="!checkAuth">
               <router-link class="site-nav-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined">Đăng nhập</router-link>
               <span class="site-nav-divider" aria-hidden="true"></span>
@@ -183,6 +193,8 @@ onMounted(() => {
                 to="/profile"
                 :aria-current="['/profile', '/change-password'].includes(route.path) ? 'page' : undefined"
               >Hồ sơ</router-link>
+              <!-- Link khu quản trị trên menu điện thoại, chỉ hiện với tài khoản admin. -->
+              <router-link v-if="isAdmin" class="site-mobile-link" to="/admin">Quản trị</router-link>
             </div>
           </div>
         </div>
@@ -207,25 +219,32 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Vùng hiển thị toast toàn cục và view theo route hiện tại. -->
-    <main class="site-main">
+    <!-- Vùng hiển thị toast toàn cục và view theo route hiện tại.
+         Khu quản trị bỏ giới hạn chiều rộng và lề của shop (site-main--admin) để AdminLayout chiếm toàn màn hình. -->
+    <main class="site-main" :class="{ 'site-main--admin': isAdminLayout }">
       <RouterView />
     </main>
 
-    <!-- Footer chung cho trang chủ và các màn hình tài khoản. -->
-    <footer class="site-footer">
+    <!-- Footer chung cho trang chủ và các màn hình tài khoản (ẩn ở khu quản trị). -->
+    <footer v-if="!isAdminLayout" class="site-footer">
       <p>
         <span>&copy; {{ currentYear }} FuLe BaberShop.</span>
         <span>Bảo lưu mọi quyền.</span>
       </p>
     </footer>
 
-    <!-- Khung chat trợ lý AI dạng popup, đặt ở layout chung nên dùng được ở mọi trang. -->
-    <ChatAssistant :authenticated="checkAuth" />
+    <!-- Khung chat trợ lý AI dạng popup, đặt ở layout chung nên dùng được ở mọi trang của shop (ẩn ở khu quản trị). -->
+    <ChatAssistant v-if="!isAdminLayout" :authenticated="checkAuth" />
   </div>
 </template>
 
 <style scoped>
+/* Khu quản trị: bỏ khung 1160px và lề trên/dưới của .site-main (style.css) để AdminLayout chiếm toàn bộ màn hình. */
+.site-main--admin {
+  width: 100%;
+  padding: 0;
+}
+
 /* Nút icon Giỏ hàng / Đơn hàng trên desktop: tròn 42px, cùng kích thước và màu với nút tài khoản (.site-account-button). */
 .site-icon-button {
   position: relative;

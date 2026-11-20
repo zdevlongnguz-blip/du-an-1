@@ -4,7 +4,9 @@ import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import TestView from "../views/TestView.vue";
 import LoginView from "../views/auth/Login.vue";
-import { isAuthenticated } from "@/helpers/auth/session";
+import { getToken, getUser, isAuthenticated } from "@/helpers/auth/session";
+import { showToast } from "@/helpers/ui/toast";
+import api from "@/helpers/api/client";
 import RegisterView from '../views/auth/Register.vue'
 import ProfileView from '../views/auth/Profile.vue'
 import ChangePasswordView from '../views/auth/ChangePassword.vue'
@@ -151,6 +153,25 @@ const routes = [
     meta: { requiresAuth: true },
   },
 
+  // Khu quản trị: cần đăng nhập VÀ role admin (requiresAdmin, kiểm tra trong beforeEach bên dưới).
+  // meta.layout = 'admin': App.vue ẩn header/footer/khung chat của shop, AdminLayout vẽ menu quản trị.
+  // Các trang admin là route CON (children): hiện bên trong <RouterView /> của AdminLayout và thừa hưởng meta của route cha.
+  // Thêm trang admin mới: thêm một phần tử vào children + một mục menu trong components/admin/AdminSidebar.vue.
+  // import động (() => import(...)): code admin tách thành file riêng, khách xem shop không phải tải về.
+  {
+    path: "/admin",
+    component: () => import("../components/admin/AdminLayout.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true, layout: "admin" },
+    children: [
+      // Trang Tổng quan (/admin).
+      {
+        path: "",
+        name: "admin-dashboard",
+        component: () => import("../views/admin/AdminDashboard.vue"),
+      },
+    ],
+  },
+
   {
     path: "/:pathMatch(.*)*",
     name: "not-found",
@@ -164,10 +185,55 @@ const router = createRouter({
   routes,
 });
 
+// Token đã được BE xác nhận là admin trong lần tải trang này (rỗng = chưa xác nhận).
+// Lưu theo token: đăng xuất / đăng nhập tài khoản khác thì token đổi, lần vào /admin sau sẽ hỏi lại BE.
+// Chỉ hỏi 1 lần mỗi lần tải trang vì mọi API admin vẫn tự kiểm tra quyền ở BE trong từng request.
+let verifiedAdminToken = "";
+
+// Hỏi BE người đang đăng nhập có phải admin không: GET api-admin-me (BE dùng AdminMiddleware,
+// cùng điều kiện với mọi API admin: token hợp lệ, khớp DB, role = admin).
+// Trả true nếu là admin (HTTP 200). Lỗi thì ném ra để beforeEach quyết định:
+// 403 = không phải admin; 401 = client.js đã tự xóa phiên và chuyển về /login.
+async function confirmAdminWithServer() {
+  const token = getToken();
+  if (token && token === verifiedAdminToken) return true;
+  const response = await api.get("/?action=api-admin-me");
+  const ok = response.data?.status === "success" && response.data?.user?.role === "admin";
+  verifiedAdminToken = ok ? token : "";
+  return ok;
+}
+
 // Chuyển người chưa đăng nhập về trang Login khi vào route cần xác thực.
-router.beforeEach((to) => {
+// Route cần quyền admin (khu /admin): hỏi BE qua api-admin-me trước khi cho vào.
+// async: beforeEach chờ BE trả lời rồi mới chuyển trang, nên không có lúc nào hiện khung admin cho người không có quyền.
+// Đây là chặn ở giao diện cho trải nghiệm tốt; quyền thật vẫn do BE kiểm tra ở từng API admin (401/403).
+router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !isAuthenticated()) {
     return { name: "login" };
+  }
+  if (to.meta.requiresAdmin) {
+    // Đọc nhanh role trong auth_user: chắc chắn không phải admin thì khỏi gọi BE.
+    if (getUser()?.role !== "admin") {
+      showToast("Tài khoản của bạn không có quyền vào trang quản trị.", "warning");
+      return { name: "home" };
+    }
+    try {
+      if (!(await confirmAdminWithServer())) {
+        showToast("Tài khoản của bạn không có quyền vào trang quản trị.", "warning");
+        return { name: "home" };
+      }
+    } catch (error) {
+      const status = error.response?.status;
+      // 401: client.js đã xóa phiên và chuyển về /login, ở đây chỉ dừng điều hướng.
+      if (status === 401) return { name: "login" };
+      showToast(
+        status === 403
+          ? "Tài khoản của bạn không có quyền vào trang quản trị."
+          : "Chưa kiểm tra được quyền quản trị, vui lòng thử lại.",
+        "warning"
+      );
+      return { name: "home" };
+    }
   }
 });
 
