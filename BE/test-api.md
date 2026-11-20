@@ -221,6 +221,90 @@ Trong test: đặt 3 sản phẩm biến thể 4 làm kho giảm 100 -> 97 và `
 | - | (đối chiếu dữ liệu) | Admin hủy đơn: sales_count hoàn về | 61 | 61 | PASS |
 | PUT | `api-admin-order-update`?id=26 | cancelled -> confirmed (bị chặn) | 409 | 409 | PASS |
 
+### Admin sản phẩm: chi tiết cho form sửa (api-admin-product-detail), 20/11/2026
+
+| Method | Route | Test | Mong đợi | Nhận được | Kết quả |
+|---|---|---|---|---|---|
+| GET | `api-admin-product-detail`?id=25 | Admin, sản phẩm 2 biến thể (1 biến thể đã tắt) | 200, trả cả biến thể `is_active=false`, `attributes` dạng mảng, `images` riêng | 200 | PASS |
+| GET | `api-admin-product-detail`?id=25 | Gọi xong `view_count` không đổi | không tăng | không tăng | PASS |
+| GET | `api-admin-product-detail`?id=25 | Không token / user thường | 401 / 403 | 401 / 403 | PASS |
+| POST | `api-admin-product-detail`?id=25 | Sai method | 405 | 405 | PASS |
+| GET | `api-admin-product-detail` (thiếu id, id=abc) | ID sai | 400 | 400 | PASS |
+| GET | `api-admin-product-detail`?id=99999 | Không tồn tại | 404 | 404 | PASS |
+
+### Admin biến thể (api-admin-variant-*) và thứ tự ảnh slide (api-admin-product-image-update), 20/11/2026
+
+Test trên 1 sản phẩm test (tạo qua API, xóa sau khi test).
+
+| Method | Route | Test | Mong đợi | Nhận được | Kết quả |
+|---|---|---|---|---|---|
+| POST | `api-admin-variant-create` | Thêm biến thể kèm attributes (khóa mặc định + khóa tự do `xuat_xu`) | 201; attributes chuẩn hóa đủ 5 khóa đầu + `xuat_xu`; nhãn khóa mặc định không bị ghi đè | 201, đúng | PASS |
+| POST | `api-admin-variant-create` | Trùng SKU / trùng tên biến thể trong sản phẩm | 409 / 409 | 409 / 409 | PASS |
+| POST | `api-admin-variant-create` | Thiếu trường; KM >= giá; attributes không phải mảng | 422 | 422 | PASS |
+| POST | `api-admin-variant-create` | product_id không tồn tại | 404 | 404 | PASS |
+| PUT | `api-admin-variant-update`?id= | Sửa một phần (kho, giá), KM giữ nguyên | 200, DB đúng | 200 | PASS |
+| PUT | `api-admin-variant-update`?id= | KM >= giá hiện tại (không gửi giá); body rỗng | 422 / 422 | 422 / 422 | PASS |
+| PUT | `api-admin-variant-update`?id= | Tắt bán biến thể không mặc định | 200 | 200 | PASS |
+| PUT | `api-admin-variant-update`?id= | `is_default: true` cho biến thể đang tắt bán | 200; biến thể tự bật bán; biến thể mặc định cũ tự bỏ; đúng 1 mặc định | 200, đúng | PASS |
+| PUT | `api-admin-variant-update`?id= | Tắt bán biến thể mặc định; `is_default: false` | 422 / 422 | 422 / 422 | PASS |
+| DELETE | `api-admin-variant-delete`?id= | Xóa biến thể mặc định | 409 | 409 | PASS |
+| DELETE | `api-admin-variant-delete`?id= | Xóa biến thể đang nằm trong giỏ của user | 200; dòng giỏ bị xóa theo (CASCADE) | 200, đúng | PASS |
+| DELETE | `api-admin-variant-delete`?id= | Xóa lại / id sai | 404 / 400 | 404 / 400 | PASS |
+| PUT | `api-admin-product-image-update`?id= | Đổi sort_order; sort_order âm; ảnh không tồn tại | 200 / 422 / 404 | 200 / 422 / 404 | PASS |
+| GET | `api-admin-product-detail`?id= | Ảnh trả theo sort_order mới | đúng thứ tự | đúng | PASS |
+| POST | `api-admin-variant-create` | User thường | 403 | 403 | PASS |
+| GET | `api-admin-variant-update`?id= | Sai method | 405 | 405 | PASS |
+
+### Khóa nghiệp vụ sản phẩm / biến thể (20/11/2026)
+
+Nguyên tắc: lịch sử đơn là bất biến (order_details lưu ảnh chụp tên, SKU, giá) nên sửa thông tin thoải mái; xóa thì khóa khi đã có đơn; tồn kho không ghi đè khi kho vừa đổi; SKU không đổi sau khi tạo. Lỗi nghiệp vụ trả 409 kèm dữ liệu (`order_count`, `current_stock`). Test với 1 sản phẩm test + 1 đơn COD thật của user tạm (dọn sau khi test).
+
+| Method | Route | Test | Mong đợi | Nhận được | Kết quả |
+|---|---|---|---|---|---|
+| GET | `api-admin-product-detail`?id= | Chưa có đơn / sau khi có đơn | `order_count`, `can_delete` của sản phẩm và từng biến thể đúng (biến thể mặc định luôn `can_delete=false`) | đúng | PASS |
+| DELETE | `api-admin-variant-delete`?id= | Biến thể đã có đơn | 409 + `order_count`, biến thể còn | 409 | PASS |
+| DELETE | `api-admin-product-delete`?id= | Sản phẩm đã có đơn | 409 + `order_count`, sản phẩm còn | 409 | PASS |
+| DELETE | `api-admin-variant-delete`?id= | Biến thể chưa có đơn | 200 | 200 | PASS |
+| PUT | `api-admin-variant-update`?id= | Tắt bán biến thể đã có đơn | 200 (cho phép, thay cho xóa) | 200 | PASS |
+| PUT | `api-admin-variant-update`?id= | Đổi SKU / gửi lại đúng SKU cũ kèm trường khác | 422 / 200 (bỏ qua SKU) | 422 / 200 | PASS |
+| PUT | `api-admin-variant-update`?id= | Sửa kho thiếu `expected_stock` | 422 | 422 | PASS |
+| PUT | `api-admin-variant-update`?id= | `expected_stock` lệch kho thật (đơn đã trừ kho) | 409 + `current_stock`, kho KHÔNG bị ghi đè | 409 | PASS |
+| PUT | `api-admin-variant-update`?id= | `expected_stock` khớp / chỉ sửa giá không gửi kho | 200 / 200 | 200 / 200 | PASS |
+| POST | `api-admin-product-update`?id= | Sửa kho (biến thể mặc định) thiếu `expected_stock` | 422 | 422 | PASS |
+| POST | `api-admin-product-update`?id= | `expected_stock` lệch, gửi kèm đổi tên | 409 + `current_stock`; KHÔNG lưu gì (tên cũng không đổi) | 409 | PASS |
+| POST | `api-admin-product-update`?id= | `expected_stock` khớp | 200 | 200 | PASS |
+
+### File ảnh vật lý trong BE/assets/uploads qua mọi luồng tải lên / xóa (20/11/2026)
+
+So danh sách file trong `uploads` trước và sau toàn bộ kịch bản (trên sản phẩm test, xóa sau khi xong): **không file rác, không mất file**.
+
+| Luồng | Kết quả mong đợi | Kết quả |
+|---|---|---|
+| Tạo sản phẩm kèm ảnh | 201; file tồn tại, tên ngẫu nhiên `cyber_<12 hex>_<time>.png` | PASS |
+| Tạo kèm file giả mạo ảnh (đuôi .png, nội dung là chữ) / ảnh > 2MB | 422; không tạo sản phẩm, không thêm file | PASS |
+| Tạo trùng mã/slug kèm ảnh hợp lệ | 409; file vừa tải lên được dọn | PASS |
+| Sửa kèm file giả | 422; ảnh cũ giữ nguyên, không thêm file | PASS |
+| Sửa đổi ảnh đại diện | 200; ảnh mới có, ảnh cũ được dọn | PASS |
+| Sửa trùng slug kèm ảnh | 409; file mới được dọn, ảnh hiện tại giữ | PASS |
+| Tải ảnh slide (2 ảnh) / ảnh slide giả | 201, 2 file có / 422, không thêm file | PASS |
+| Xóa 1 ảnh slide | file đó được dọn, ảnh còn lại giữ | PASS |
+| Xóa sản phẩm | ảnh đại diện + ảnh slide đều được dọn | PASS |
+| File dùng chung của dữ liệu mẫu (`default.jpg`, `wax.webp`) | còn nguyên | PASS |
+
+Ghi chú: mọi bảng chỉ lưu TÊN file ảnh (`products.image`, `product_images.image_path`, `banners.image`), FE ghép URL bằng `resolveImageUrl`; đã kiểm tra DB không có giá trị nào dạng link/đường dẫn.
+
+### Admin sản phẩm: chỉ xóa file ảnh khi không còn bản ghi nào dùng (20/11/2026)
+
+Dữ liệu mẫu dùng chung file (`default.jpg` cho 4 sản phẩm + album, `wax.webp` cho 3 sản phẩm); trước đây xóa 1 sản phẩm là xóa luôn file của các sản phẩm khác. Test trên 2 sản phẩm test A, B dùng chung file X:
+
+| Method | Route | Test | Mong đợi | Nhận được | Kết quả |
+|---|---|---|---|---|---|
+| DELETE | `api-admin-product-delete`?id=A | B vẫn dùng X | 200, file X còn | 200, còn | PASS |
+| POST (multipart) | `api-admin-product-update`?id=B kèm ảnh mới Y | Đổi ảnh đại diện | 200, lưu Y, dọn X | 200, đúng | PASS |
+| POST (multipart) | `api-admin-product-update`?id=B không kèm ảnh | Sửa trường khác | 200, giữ Y | 200, giữ | PASS |
+| DELETE | `api-admin-product-delete`?id=B | Không còn ai dùng Y | 200, dọn Y | 200, dọn | PASS |
+| - | (đối chiếu file) | `default.jpg`, `wax.webp` của dữ liệu mẫu | không bị đụng | còn nguyên | PASS |
+
 ### Admin sản phẩm: tạo/sửa/xóa kèm biến thể mặc định (api-admin-product-*)
 
 | Method | Route | Test | Mong đợi | Nhận được | Kết quả |

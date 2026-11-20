@@ -42,9 +42,12 @@ watch(() => route.fullPath, () => {
         <span v-if="adminEmail" class="admin-topbar-user">{{ adminEmail }}</span>
       </header>
 
-      <!-- Trang admin con (Tổng quan, Sản phẩm...) hiện ở đây -->
+      <!-- Trang admin con (Tổng quan, Sản phẩm...) hiện ở đây.
+           :key="route.path": đổi đường dẫn (ví dụ /admin/products/5/edit sang /6/edit, hoặc sang /new) thì tạo
+           lại trang mới, không dùng lại trang cũ đang giữ dữ liệu sản phẩm trước. Chỉ đổi query (?search=, ?page=)
+           thì giữ nguyên trang (path không đổi) để danh sách không bị tải lại từ đầu. -->
       <div class="admin-content">
-        <RouterView />
+        <RouterView :key="route.path" />
       </div>
     </div>
   </div>

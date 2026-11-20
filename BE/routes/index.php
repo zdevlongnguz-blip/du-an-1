@@ -201,6 +201,12 @@ switch ($action) {
         (new OrderController)->adminUpdate($authPayload);
         break;
 
+    // API admin lấy chi tiết sản phẩm theo id cho form sửa (mọi biến thể, album; không tăng lượt xem); yêu cầu role admin.
+    case 'api-admin-product-detail':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminDetail();
+        break;
+
     // API admin tạo sản phẩm; yêu cầu JWT có role admin.
     case 'api-admin-product-create':
         (new AdminMiddleware())->requireAdmin();
@@ -229,6 +235,30 @@ switch ($action) {
     case 'api-admin-product-image-delete':
         (new AdminMiddleware())->requireAdmin();
         (new ProductController)->adminImageDelete();
+        break;
+
+    // API admin đổi thứ tự ảnh slide (sort_order); yêu cầu role admin.
+    case 'api-admin-product-image-update':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminImageUpdate();
+        break;
+
+    // API admin thêm biến thể cho sản phẩm; yêu cầu role admin.
+    case 'api-admin-variant-create':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminVariantCreate();
+        break;
+
+    // API admin sửa biến thể (giá, kho, bật/tắt bán, thuộc tính, đặt mặc định); yêu cầu role admin.
+    case 'api-admin-variant-update':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminVariantUpdate();
+        break;
+
+    // API admin xóa biến thể (không xóa được biến thể mặc định); yêu cầu role admin.
+    case 'api-admin-variant-delete':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminVariantDelete();
         break;
 
     // API admin tạo danh mục.

@@ -402,6 +402,94 @@ class Product extends BaseModel
     }
 
     /**
+     * Kiểm tra một file ảnh trong uploads còn được dùng ở đâu không, trước khi xóa file khỏi ổ đĩa.
+     *
+     * Vì sao cần: nhiều bản ghi có thể dùng CHUNG một file (ví dụ dữ liệu mẫu: default.jpg dùng cho 4 sản phẩm
+     * và cả album). Xóa file khi bản ghi khác vẫn trỏ tới thì các sản phẩm đó mất ảnh.
+     * Kiểm tra cả 3 nơi lưu tên file ảnh: products.image, product_images.image_path, banners.image.
+     * Gọi SAU khi đã xóa/sửa bản ghi hiện tại, để chỉ còn đếm các bản ghi khác.
+     *
+     * @param string $imagePath Tên file ảnh (như lưu trong DB)
+     * @return bool true nếu vẫn còn bản ghi dùng file này (KHÔNG được xóa file)
+     */
+    public function isImageInUse(string $imagePath = ''): bool
+    {
+        if ($imagePath === '') {
+            return false;
+        }
+
+        // UNION ALL: gộp kết quả 3 câu SELECT; chỉ cần biết có ít nhất 1 dòng hay không (LIMIT 1).
+        $statement = $this->pdo->prepare(
+            'SELECT 1 FROM `products` WHERE `image` = :p1 '
+            . 'UNION ALL SELECT 1 FROM `product_images` WHERE `image_path` = :p2 '
+            . 'UNION ALL SELECT 1 FROM `banners` WHERE `image` = :p3 '
+            . 'LIMIT 1'
+        );
+        $statement->bindValue(':p1', $imagePath, PDO::PARAM_STR);
+        $statement->bindValue(':p2', $imagePath, PDO::PARAM_STR);
+        $statement->bindValue(':p3', $imagePath, PDO::PARAM_STR);
+        $statement->execute();
+
+        return $statement->fetchColumn() !== false;
+    }
+
+    /**
+     * Lấy chi tiết sản phẩm cho trang quản trị (form sửa), tìm theo ID.
+     *
+     * Khác getBySlug (trang khách xem):
+     * - Không tăng lượt xem (admin mở form sửa không làm sai thống kê).
+     * - Trả MỌI biến thể, kể cả biến thể đã tắt bán (is_active = 0), kèm is_active.
+     * - Album ảnh trả riêng (bảng product_images), không trộn ảnh đại diện vào, để admin quản lý từng phần.
+     *
+     * @param int $productId ID sản phẩm
+     * @return array|null Sản phẩm kèm variants, images; null nếu không tồn tại
+     */
+    public function getAdminDetail(int $productId = 0): ?array
+    {
+        if ($productId < 1) {
+            return null;
+        }
+
+        // LEFT JOIN categories: sản phẩm vẫn trả về dù danh mục bị xóa (category_name = null).
+        $statement = $this->pdo->prepare(
+            'SELECT `products`.*, `categories`.`name` AS `category_name` '
+            . 'FROM `products` '
+            . 'LEFT JOIN `categories` ON `categories`.`id` = `products`.`category_id` '
+            . 'WHERE `products`.`id` = :id LIMIT 1'
+        );
+        $statement->bindValue(':id', $productId, PDO::PARAM_INT);
+        $statement->execute();
+        $product = $statement->fetch(PDO::FETCH_ASSOC);
+        if ($product === false) {
+            return null;
+        }
+
+        // Biến thể mặc định đứng đầu, sau đó theo thứ tự tạo.
+        // order_count: số đơn hàng có chứa biến thể (truy vấn con), để FE khóa nút Xóa trước khi admin bấm.
+        $variantStatement = $this->pdo->prepare(
+            'SELECT `v`.`id`, `v`.`sku`, `v`.`variant_name`, `v`.`attributes`, `v`.`price`, `v`.`sale_price`, `v`.`final_price`, '
+            . '`v`.`stock`, `v`.`is_default`, `v`.`is_active`, '
+            . '(SELECT COUNT(DISTINCT `od`.`order_id`) FROM `order_details` AS `od` WHERE `od`.`variant_id` = `v`.`id`) AS `order_count` '
+            . 'FROM `product_variants` AS `v` WHERE `v`.`product_id` = :product_id '
+            . 'ORDER BY `v`.`is_default` DESC, `v`.`id` ASC'
+        );
+        $variantStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $variantStatement->execute();
+        $product['variants'] = $variantStatement->fetchAll(PDO::FETCH_ASSOC);
+
+        $imageStatement = $this->pdo->prepare(
+            'SELECT `id`, `image_path`, `sort_order` FROM `product_images` '
+            . 'WHERE `product_id` = :product_id ORDER BY `sort_order` ASC, `id` ASC'
+        );
+        $imageStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $imageStatement->execute();
+        $product['images'] = $imageStatement->fetchAll(PDO::FETCH_ASSOC);
+        $product['order_count'] = $this->countOrdersForProduct($productId);
+
+        return $product;
+    }
+
+    /**
      * Tăng lượt xem cho sản phẩm và trả về số mới để response phản ánh cập nhật.
      *
      * @param int $productId ID sản phẩm.
@@ -527,9 +615,11 @@ class Product extends BaseModel
      *
      * @param int $productId ID sản phẩm cần cập nhật.
      * @param array $data Các trường thay đổi.
+     * @param int|null $expectedStock Số kho admin thấy lúc mở form; bắt buộc khi $data có 'stock' (controller kiểm tra).
      * @return bool True nếu sản phẩm tồn tại và có trường hợp lệ để cập nhật.
+     * @throws BusinessConflictException Khi tồn kho đã bị thay đổi so với $expectedStock.
      */
-    public function updateAdmin(int $productId = 0, array $data = []): bool
+    public function updateAdmin(int $productId = 0, array $data = [], ?int $expectedStock = null): bool
     {
         $productColumns = [
             'category_id' => PDO::PARAM_INT,
@@ -560,6 +650,11 @@ class Product extends BaseModel
 
         $this->pdo->beginTransaction();
         try {
+            // Có sửa tồn kho (của biến thể mặc định): khóa dòng và so với số kho admin thấy lúc mở form.
+            if (array_key_exists('stock', $data) && $expectedStock !== null) {
+                $this->assertStockUnchanged('`product_id` = :product_id AND `is_default` = 1', ['product_id' => $productId], $expectedStock);
+            }
+
             if ($productSets !== []) {
                 $statement = $this->pdo->prepare(
                     'UPDATE `products` SET ' . implode(', ', $productSets) . ' WHERE `id` = :id'
@@ -608,26 +703,126 @@ class Product extends BaseModel
      */
     public function deleteAdmin(int $productId = 0): ?array
     {
-        $product = $this->find($productId);
-        if ($product === false) {
-            return null;
-        }
+        // Transaction + khóa dòng: khóa mọi biến thể rồi đến sản phẩm (FOR UPDATE), sau đó mới đếm đơn hàng.
+        // Checkout cũng khóa các dòng biến thể này, nên không thể có đơn mới chen vào giữa lúc "kiểm tra" và "xóa".
+        // THỨ TỰ KHÓA quan trọng: checkout khóa biến thể TRƯỚC rồi mới đụng tới products (khi ghi order_details).
+        // Ở đây cũng khóa biến thể trước; nếu khóa products trước sẽ ngược thứ tự và có thể deadlock (InnoDB hủy 1 bên).
+        $this->pdo->beginTransaction();
+        try {
+            $lockVariants = $this->pdo->prepare('SELECT `id` FROM `product_variants` WHERE `product_id` = :product_id FOR UPDATE');
+            $lockVariants->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $lockVariants->execute();
+            $productStatement = $this->pdo->prepare('SELECT * FROM `products` WHERE `id` = :id FOR UPDATE');
+            $productStatement->bindValue(':id', $productId, PDO::PARAM_INT);
+            $productStatement->execute();
+            $product = $productStatement->fetch(PDO::FETCH_ASSOC);
+            if ($product === false) {
+                $this->pdo->rollBack();
+                return null;
+            }
 
-        $imageStatement = $this->pdo->prepare(
-            'SELECT `image_path` FROM `product_images` WHERE `product_id` = :product_id'
+            // KHÓA NGHIỆP VỤ: sản phẩm đã có trong đơn hàng thì không xóa hẳn (giữ lịch sử, hoàn kho khi hủy đơn...).
+            $orderCount = $this->countOrdersForProduct($productId);
+            if ($orderCount > 0) {
+                throw new BusinessConflictException(
+                    "Sản phẩm đã có trong {$orderCount} đơn hàng nên không xóa được. Hãy tắt bán các biến thể thay vì xóa.",
+                    ['order_count' => $orderCount]
+                );
+            }
+
+            $imageStatement = $this->pdo->prepare(
+                'SELECT `image_path` FROM `product_images` WHERE `product_id` = :product_id'
+            );
+            $imageStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $imageStatement->execute();
+            $images = array_column($imageStatement->fetchAll(PDO::FETCH_ASSOC), 'image_path');
+            if (!empty($product['image'])) {
+                $images[] = $product['image'];
+            }
+
+            $deleteStatement = $this->pdo->prepare('DELETE FROM `products` WHERE `id` = :id');
+            $deleteStatement->bindValue(':id', $productId, PDO::PARAM_INT);
+            $deleteStatement->execute();
+            $this->pdo->commit();
+
+            return $images;
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    /**
+     * Đếm số đơn hàng (không trùng) có chứa sản phẩm này, theo product_id hoặc theo bất kỳ biến thể nào của nó.
+     * Tính cả đơn đã hủy: đơn hủy vẫn là lịch sử cần giữ liên kết.
+     *
+     * @param int $productId ID sản phẩm
+     * @return int Số đơn hàng
+     */
+    public function countOrdersForProduct(int $productId = 0): int
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT COUNT(DISTINCT `od`.`order_id`) FROM `order_details` AS `od` '
+            . 'WHERE `od`.`product_id` = :product_id '
+            . 'OR `od`.`variant_id` IN (SELECT `id` FROM `product_variants` WHERE `product_id` = :product_id_2)'
         );
-        $imageStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
-        $imageStatement->execute();
-        $images = array_column($imageStatement->fetchAll(PDO::FETCH_ASSOC), 'image_path');
-        if (!empty($product['image'])) {
-            $images[] = $product['image'];
+        $statement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $statement->bindValue(':product_id_2', $productId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return (int) $statement->fetchColumn();
+    }
+
+    /**
+     * Đếm số đơn hàng (không trùng) có chứa biến thể này (tính cả đơn đã hủy).
+     *
+     * @param int $variantId ID biến thể
+     * @return int Số đơn hàng
+     */
+    public function countOrdersForVariant(int $variantId = 0): int
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT COUNT(DISTINCT `order_id`) FROM `order_details` WHERE `variant_id` = :variant_id'
+        );
+        $statement->bindValue(':variant_id', $variantId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return (int) $statement->fetchColumn();
+    }
+
+    /**
+     * KHÓA GHI ĐÈ TỒN KHO (khóa theo phiên bản): khóa dòng biến thể rồi so số kho hiện tại với số kho admin thấy
+     * lúc mở form (expected). Khác nhau nghĩa là trong lúc admin sửa, đã có đơn hàng / hủy đơn làm kho đổi:
+     * ghi đè lúc này sẽ xóa mất thay đổi đó (có thể bán quá số hàng thật), nên ném lỗi để admin tải lại.
+     * PHẢI gọi bên trong transaction (FOR UPDATE giữ khóa tới khi commit/rollback).
+     *
+     * @param string $whereSql      Điều kiện chọn đúng 1 biến thể (cột cố định trong code, không lấy từ request)
+     * @param array  $params        Tham số bind (tên => số nguyên)
+     * @param int    $expectedStock Số kho admin thấy lúc mở form
+     * @return void
+     * @throws BusinessConflictException Khi kho đã thay đổi
+     */
+    private function assertStockUnchanged(string $whereSql = '', array $params = [], int $expectedStock = 0): void
+    {
+        $statement = $this->pdo->prepare("SELECT `stock` FROM `product_variants` WHERE {$whereSql} LIMIT 1 FOR UPDATE");
+        foreach ($params as $name => $value) {
+            $statement->bindValue(':' . $name, $value, PDO::PARAM_INT);
         }
-
-        $deleteStatement = $this->pdo->prepare('DELETE FROM `products` WHERE `id` = :id');
-        $deleteStatement->bindValue(':id', $productId, PDO::PARAM_INT);
-        $deleteStatement->execute();
-
-        return $images;
+        $statement->execute();
+        $current = $statement->fetchColumn();
+        if ($current === false) {
+            // Không còn dòng để so (biến thể vừa bị xóa): không được coi như "khớp" rồi lưu tiếp.
+            throw new BusinessConflictException('Biến thể không còn tồn tại (có thể vừa bị xóa). Tải lại trang rồi thử lại.');
+        }
+        if ((int) $current !== $expectedStock) {
+            throw new BusinessConflictException(
+                'Tồn kho vừa thay đổi (có đơn hàng mới hoặc đơn bị hủy), hiện còn ' . (int) $current
+                . '. Kiểm tra lại số kho rồi lưu.',
+                ['current_stock' => (int) $current]
+            );
+        }
     }
 
     /**
@@ -675,5 +870,213 @@ class Product extends BaseModel
         $deleteStatement->execute();
 
         return (string) $imagePath;
+    }
+
+    /**
+     * Đổi thứ tự hiển thị (sort_order) của một ảnh slide trong album.
+     *
+     * @param int $imageId   ID ảnh album
+     * @param int $sortOrder Thứ tự mới (số nhỏ hiện trước)
+     * @return bool true nếu tìm thấy ảnh (kể cả khi thứ tự không đổi)
+     */
+    public function updateAdminImageOrder(int $imageId = 0, int $sortOrder = 0): bool
+    {
+        $exists = $this->pdo->prepare('SELECT 1 FROM `product_images` WHERE `id` = :id');
+        $exists->bindValue(':id', $imageId, PDO::PARAM_INT);
+        $exists->execute();
+        if ($exists->fetchColumn() === false) {
+            return false;
+        }
+
+        $statement = $this->pdo->prepare('UPDATE `product_images` SET `sort_order` = :sort_order WHERE `id` = :id');
+        $statement->bindValue(':sort_order', $sortOrder, PDO::PARAM_INT);
+        $statement->bindValue(':id', $imageId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return true;
+    }
+
+    // ===================== BIẾN THỂ (quản trị) =====================
+
+    /**
+     * Lấy một biến thể theo ID (dùng để kiểm tra trước khi sửa/xóa).
+     *
+     * @param int $variantId ID biến thể
+     * @return array|null Dòng biến thể (product_id, price, sale_price, is_default, is_active...), null nếu không có
+     */
+    public function getVariantById(int $variantId = 0): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT `id`, `product_id`, `sku`, `variant_name`, `price`, `sale_price`, `stock`, `is_default`, `is_active` '
+            . 'FROM `product_variants` WHERE `id` = :id LIMIT 1'
+        );
+        $statement->bindValue(':id', $variantId, PDO::PARAM_INT);
+        $statement->execute();
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Tạo biến thể mới (không mặc định) cho một sản phẩm.
+     * Trùng SKU (toàn hệ thống) hoặc trùng tên biến thể trong cùng sản phẩm: DB ném PDOException mã 1062.
+     *
+     * @param int   $productId ID sản phẩm cha
+     * @param array $data      sku, variant_name, attributes (chuỗi JSON mảng), price, sale_price, stock, is_active
+     * @return int ID biến thể vừa tạo
+     */
+    public function createVariant(int $productId = 0, array $data = []): int
+    {
+        $statement = $this->pdo->prepare(
+            'INSERT INTO `product_variants` '
+            . '(`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`) '
+            . 'VALUES (:product_id, :sku, :variant_name, :attributes, :price, :sale_price, :stock, 0, :is_active)'
+        );
+        $statement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $statement->bindValue(':sku', $data['sku'], PDO::PARAM_STR);
+        $statement->bindValue(':variant_name', $data['variant_name'], PDO::PARAM_STR);
+        $statement->bindValue(':attributes', $data['attributes'], PDO::PARAM_STR);
+        $statement->bindValue(':price', $data['price'], PDO::PARAM_STR);
+        $statement->bindValue(':sale_price', $data['sale_price'], $data['sale_price'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $statement->bindValue(':stock', $data['stock'], PDO::PARAM_INT);
+        $statement->bindValue(':is_active', $data['is_active'], PDO::PARAM_INT);
+        $statement->execute();
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * Cập nhật một phần biến thể. Chỉ các khóa có trong $data được ghi (danh sách cột cố định, không lấy từ request).
+     * Nếu $makeDefault = true: trong CÙNG transaction, bỏ mặc định của biến thể cũ rồi đặt biến thể này làm mặc định
+     * (và bật bán, vì DB không cho biến thể mặc định ở trạng thái ngừng bán).
+     *
+     * Vì sao phải bỏ mặc định cũ TRƯỚC: DB có ràng buộc UNIQUE "mỗi sản phẩm tối đa 1 biến thể mặc định",
+     * đặt mặc định mới trước sẽ bị từ chối. Transaction đảm bảo không có lúc sản phẩm mất biến thể mặc định.
+     *
+     * @param int   $variantId   ID biến thể
+     * @param int   $productId   ID sản phẩm cha (để bỏ mặc định của biến thể khác cùng sản phẩm)
+     * @param array $data        Các cột cần sửa
+     * @param bool  $makeDefault true nếu đặt biến thể này làm mặc định
+     * @param int|null $expectedStock Số kho admin thấy lúc mở form; bắt buộc khi $data có 'stock' (controller kiểm tra)
+     * @return void
+     * @throws BusinessConflictException Khi tồn kho đã bị thay đổi so với $expectedStock
+     */
+    public function updateVariant(int $variantId = 0, int $productId = 0, array $data = [], bool $makeDefault = false, ?int $expectedStock = null): void
+    {
+        $columnTypes = [
+            'sku' => PDO::PARAM_STR,
+            'variant_name' => PDO::PARAM_STR,
+            'attributes' => PDO::PARAM_STR,
+            'price' => PDO::PARAM_STR,
+            'sale_price' => PDO::PARAM_STR,
+            'stock' => PDO::PARAM_INT,
+            'is_active' => PDO::PARAM_INT,
+        ];
+        if ($makeDefault) {
+            $data['is_active'] = 1;
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            // Khóa dòng biến thể đích TRƯỚC mọi thao tác và chắc chắn nó vẫn còn: nếu vừa bị xóa ở nơi khác mà vẫn
+            // chạy tiếp bước "bỏ mặc định của biến thể khác", sản phẩm sẽ không còn biến thể mặc định nào.
+            $lock = $this->pdo->prepare('SELECT `id` FROM `product_variants` WHERE `id` = :id AND `product_id` = :product_id FOR UPDATE');
+            $lock->bindValue(':id', $variantId, PDO::PARAM_INT);
+            $lock->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $lock->execute();
+            if ($lock->fetchColumn() === false) {
+                throw new BusinessConflictException('Biến thể không còn tồn tại (có thể vừa bị xóa). Tải lại trang rồi thử lại.');
+            }
+
+            // Có sửa tồn kho: so với số kho admin thấy lúc mở form (xem assertStockUnchanged).
+            if (array_key_exists('stock', $data) && $expectedStock !== null) {
+                $this->assertStockUnchanged('`id` = :id', ['id' => $variantId], $expectedStock);
+            }
+
+            if ($makeDefault) {
+                $clear = $this->pdo->prepare(
+                    'UPDATE `product_variants` SET `is_default` = 0 WHERE `product_id` = :product_id AND `id` <> :id'
+                );
+                $clear->bindValue(':product_id', $productId, PDO::PARAM_INT);
+                $clear->bindValue(':id', $variantId, PDO::PARAM_INT);
+                $clear->execute();
+            }
+
+            $sets = [];
+            foreach ($columnTypes as $column => $type) {
+                if (array_key_exists($column, $data)) {
+                    $sets[] = "`{$column}` = :{$column}";
+                }
+            }
+            if ($makeDefault) {
+                $sets[] = '`is_default` = 1';
+            }
+            if ($sets !== []) {
+                $statement = $this->pdo->prepare(
+                    'UPDATE `product_variants` SET ' . implode(', ', $sets) . ' WHERE `id` = :id'
+                );
+                foreach ($columnTypes as $column => $type) {
+                    if (array_key_exists($column, $data)) {
+                        $value = $data[$column];
+                        $statement->bindValue(":{$column}", $value, $value === null ? PDO::PARAM_NULL : $type);
+                    }
+                }
+                $statement->bindValue(':id', $variantId, PDO::PARAM_INT);
+                $statement->execute();
+            }
+
+            $this->pdo->commit();
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    /**
+     * Xóa hẳn một biến thể CHƯA TỪNG lên đơn. Giỏ hàng đang chứa biến thể này bị xóa theo (khóa ngoại CASCADE).
+     * Controller chặn xóa biến thể mặc định trước khi gọi.
+     *
+     * KHÓA NGHIỆP VỤ: biến thể đã có trong đơn hàng (kể cả đơn đã hủy) thì không xóa, vì đơn đang chờ cần
+     * biến thể để hoàn kho khi hủy, và lịch sử cần liên kết; admin dùng "Tắt bán" thay vì xóa.
+     * Khóa dòng (FOR UPDATE) trong transaction để không có đơn mới chen vào giữa lúc kiểm tra và xóa.
+     *
+     * @param int $variantId ID biến thể
+     * @return bool true nếu đã xóa, false nếu không tìm thấy (hoặc là biến thể mặc định)
+     * @throws BusinessConflictException Khi biến thể đã có trong đơn hàng
+     */
+    public function deleteVariant(int $variantId = 0): bool
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $lock = $this->pdo->prepare('SELECT `id` FROM `product_variants` WHERE `id` = :id AND `is_default` = 0 FOR UPDATE');
+            $lock->bindValue(':id', $variantId, PDO::PARAM_INT);
+            $lock->execute();
+            if ($lock->fetchColumn() === false) {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            $orderCount = $this->countOrdersForVariant($variantId);
+            if ($orderCount > 0) {
+                throw new BusinessConflictException(
+                    "Biến thể đã có trong {$orderCount} đơn hàng nên không xóa được. Hãy dùng \"Tắt bán\" để ngừng bán.",
+                    ['order_count' => $orderCount]
+                );
+            }
+
+            $statement = $this->pdo->prepare('DELETE FROM `product_variants` WHERE `id` = :id');
+            $statement->bindValue(':id', $variantId, PDO::PARAM_INT);
+            $statement->execute();
+            $this->pdo->commit();
+
+            return true;
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
     }
 }

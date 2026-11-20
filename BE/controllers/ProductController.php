@@ -210,6 +210,64 @@ class ProductController{
     }
 
     /**
+     * Chi tiết sản phẩm cho form sửa ở trang quản trị: GET ?action=api-admin-product-detail&id=<id>.
+     * Không tăng lượt xem; trả mọi biến thể (kể cả đã tắt) và album ảnh riêng (xem Product::getAdminDetail).
+     * Quyền admin do AdminMiddleware kiểm tra ở router (401/403).
+     * Sai method trả 405; id sai trả 400; không tìm thấy trả 404.
+     *
+     * @return void
+     */
+    public function adminDetail(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $product = $this->product->getAdminDetail($this->getAdminId());
+        if ($product === null) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
+        }
+
+        // Ép kiểu số để FE nhận đúng number/boolean thay vì chuỗi từ MySQL.
+        $product['id'] = (int) $product['id'];
+        $product['category_id'] = $product['category_id'] === null ? null : (int) $product['category_id'];
+        $product['view_count'] = (int) $product['view_count'];
+        $product['sales_count'] = (int) $product['sales_count'];
+        // Cờ nghiệp vụ để FE khóa nút trước (BE vẫn kiểm tra lại khi admin thao tác):
+        // - order_count: số đơn hàng có chứa sản phẩm / biến thể.
+        // - can_delete: false nếu đã có đơn (biến thể: thêm điều kiện không phải mặc định).
+        $product['order_count'] = (int) $product['order_count'];
+        $product['can_delete'] = $product['order_count'] === 0;
+        $product['variants'] = array_map(static function (array $variant): array {
+            $orderCount = (int) $variant['order_count'];
+            return [
+                'id' => (int) $variant['id'],
+                'order_count' => $orderCount,
+                'can_delete' => (int) $variant['is_default'] !== 1 && $orderCount === 0,
+                'sku' => $variant['sku'],
+                'variant_name' => $variant['variant_name'],
+                // Mảng chuẩn [{key, label, value}], luôn đủ 5 khóa mặc định (xem extensions/VariantAttributes.php).
+                'attributes' => VariantAttributes::decode($variant['attributes']),
+                'price' => (float) $variant['price'],
+                'sale_price' => $variant['sale_price'] === null ? null : (float) $variant['sale_price'],
+                'final_price' => (float) $variant['final_price'],
+                'stock' => (int) $variant['stock'],
+                'is_default' => (int) $variant['is_default'] === 1,
+                'is_active' => (int) $variant['is_active'] === 1,
+            ];
+        }, $product['variants']);
+        $product['images'] = array_map(static function (array $image): array {
+            return [
+                'id' => (int) $image['id'],
+                'image_path' => $image['image_path'],
+                'sort_order' => (int) $image['sort_order'],
+            ];
+        }, $product['images']);
+
+        response_json(['status' => 'success', 'product' => $product]);
+    }
+
+    /**
      * Tạo sản phẩm quản trị; nhận JSON hoặc multipart/form-data để tải ảnh đại diện.
      * Sai method/dữ liệu trả 405/400/422; mã hoặc slug trùng trả 409.
      *
@@ -274,6 +332,8 @@ class ProductController{
 
         $input = $this->getAdminInput();
         $data = $this->validateAdminProduct($input, false);
+        // Sửa tồn kho phải kèm expected_stock (số kho lúc mở form) để chống ghi đè mất đơn hàng xen giữa.
+        $expectedStock = array_key_exists('stock', $data) ? $this->readExpectedStock($input) : null;
         // Giá nằm ở biến thể mặc định, không còn ở bảng products. Lấy giá hiện tại từ đó
         // để kiểm tra giá giảm < giá gốc khi request chỉ gửi một trong hai trường.
         $currentPricing = $this->product->getDefaultVariantPricing($productId) ?? ['price' => 0, 'sale_price' => null];
@@ -293,14 +353,23 @@ class ProductController{
         }
 
         try {
-            $updated = $this->product->updateAdmin($productId, $data);
+            $updated = $this->product->updateAdmin($productId, $data, $expectedStock);
+        } catch (BusinessConflictException $exception) {
+            // Kho vừa đổi: không lưu gì (transaction đã rollback), dọn ảnh vừa tải lên, trả 409 kèm số kho hiện tại.
+            if ($uploadedImage !== null) {
+                delete_uploaded_file($uploadedImage);
+            }
+            $this->respondConflict($exception);
         } catch (PDOException $exception) {
             if ($uploadedImage !== null) {
                 delete_uploaded_file($uploadedImage);
             }
-            if ($exception->getCode() === '23000') {
+            // Chỉ lỗi 1062 (trùng UNIQUE) mới là "mã/slug đã tồn tại". SQLSTATE 23000 còn gồm lỗi khóa ngoại
+            // (ví dụ danh mục vừa bị xóa), báo nhầm "trùng mã" sẽ làm admin hiểu sai; các lỗi đó để ném tiếp.
+            if (($exception->errorInfo[1] ?? null) === 1062) {
                 response_json(['status' => 'error', 'message' => 'Mã hoặc slug sản phẩm đã tồn tại'], 409);
             }
+            $this->respondIfPriceCheckFailed($exception);
             throw $exception;
         } catch (Throwable $exception) {
             if ($uploadedImage !== null) {
@@ -314,6 +383,13 @@ class ProductController{
                 delete_uploaded_file($uploadedImage);
             }
             response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
+        }
+
+        // Đã đổi sang ảnh đại diện mới: dọn file ảnh cũ để không đọng file rác trong uploads,
+        // nhưng chỉ khi không còn bản ghi nào khác dùng file đó (xem deleteImageIfUnused).
+        $oldImage = (string) ($currentProduct['image'] ?? '');
+        if ($uploadedImage !== null && $oldImage !== '' && $oldImage !== $uploadedImage) {
+            $this->deleteImageIfUnused($oldImage);
         }
 
         response_json(['status' => 'success', 'message' => 'Đã cập nhật sản phẩm']);
@@ -331,14 +407,18 @@ class ProductController{
             response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
         }
 
-        $images = $this->product->deleteAdmin($this->getAdminId());
+        try {
+            $images = $this->product->deleteAdmin($this->getAdminId());
+        } catch (BusinessConflictException $exception) {
+            // Sản phẩm đã có trong đơn hàng: không xóa (khóa nghiệp vụ), trả 409 kèm số đơn.
+            $this->respondConflict($exception);
+        }
         if ($images === null) {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }
+        // Chỉ xóa file không còn bản ghi nào khác dùng (file dùng chung như default.jpg được giữ lại).
         foreach (array_unique($images) as $image) {
-            if (is_string($image) && $image !== '' && basename($image) === $image) {
-                delete_uploaded_file($image);
-            }
+            $this->deleteImageIfUnused($image);
         }
 
         response_json(['status' => 'success', 'message' => 'Đã xóa sản phẩm']);
@@ -399,9 +479,8 @@ class ProductController{
         if ($imagePath === null) {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy ảnh sản phẩm'], 404);
         }
-        if (basename($imagePath) === $imagePath) {
-            delete_uploaded_file($imagePath);
-        }
+        // Ảnh album có thể trùng file với ảnh đại diện hoặc sản phẩm khác: chỉ xóa file khi không còn ai dùng.
+        $this->deleteImageIfUnused($imagePath);
 
         response_json(['status' => 'success', 'message' => 'Đã xóa ảnh sản phẩm']);
     }
@@ -527,6 +606,334 @@ class ProductController{
             response_json(['status' => 'error', 'message' => 'Không thể lưu ảnh trên máy chủ'], 500);
             return null;
         }
+    }
+
+    /**
+     * Đổi thứ tự ảnh slide: PUT (JSON) hoặc POST ?action=api-admin-product-image-update&id=<id ảnh>, body { sort_order }.
+     * Sai method trả 405; id sai 400; sort_order sai 422; không có ảnh 404. Quyền admin kiểm tra ở router.
+     *
+     * @return void
+     */
+    public function adminImageUpdate(): void
+    {
+        if (!in_array($_SERVER['REQUEST_METHOD'] ?? '', ['PUT', 'POST'], true)) {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $imageId = $this->getAdminId();
+        $input = $this->getAdminInput();
+        $sortOrder = filter_var($input['sort_order'] ?? null, FILTER_VALIDATE_INT);
+        if ($sortOrder === false || $sortOrder < 0 || $sortOrder > 10000) {
+            response_json(['status' => 'error', 'message' => 'Thứ tự ảnh phải là số nguyên từ 0 đến 10000'], 422);
+        }
+        if (!$this->product->updateAdminImageOrder($imageId, $sortOrder)) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy ảnh sản phẩm'], 404);
+        }
+
+        response_json(['status' => 'success', 'message' => 'Đã cập nhật thứ tự ảnh']);
+    }
+
+    /**
+     * Thêm biến thể (không mặc định): POST ?action=api-admin-variant-create, body JSON
+     * { product_id, sku, variant_name, price, sale_price?, stock, is_active?, attributes? }.
+     * Thành công 201 { variant: { id } }. Sai dữ liệu 422; sản phẩm không có 404; trùng SKU / tên 409.
+     *
+     * @return void
+     */
+    public function adminVariantCreate(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $input = $this->getAdminInput();
+        $productId = filter_var($input['product_id'] ?? null, FILTER_VALIDATE_INT);
+        if ($productId === false || $productId < 1) {
+            response_json(['status' => 'error', 'message' => 'Sản phẩm không hợp lệ'], 422);
+        }
+        if ($this->product->find($productId) === false) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
+        }
+
+        $data = $this->validateAdminVariant($input, true);
+        try {
+            $variantId = $this->product->createVariant($productId, $data);
+        } catch (PDOException $exception) {
+            // 1062: vi phạm UNIQUE (SKU trùng toàn hệ thống, hoặc tên biến thể trùng trong cùng sản phẩm).
+            if (($exception->errorInfo[1] ?? null) === 1062) {
+                response_json(['status' => 'error', 'message' => 'SKU đã tồn tại hoặc tên biến thể đã có trong sản phẩm này'], 409);
+            }
+            $this->respondIfPriceCheckFailed($exception);
+            throw $exception;
+        }
+
+        response_json(['status' => 'success', 'message' => 'Đã thêm biến thể', 'variant' => ['id' => $variantId]], 201);
+    }
+
+    /**
+     * Sửa một phần biến thể: PUT (JSON) hoặc POST ?action=api-admin-variant-update&id=<id>.
+     * Body gửi trường nào sửa trường đó: sku, variant_name, price, sale_price, stock, is_active, attributes,
+     * is_default (chỉ nhận true: đặt làm mặc định; biến thể mặc định cũ tự bỏ mặc định).
+     * Quy tắc: không được ngừng bán biến thể mặc định (422) — đặt biến thể khác làm mặc định trước.
+     * Sai dữ liệu 422; không có biến thể 404; trùng SKU / tên 409.
+     *
+     * @return void
+     */
+    public function adminVariantUpdate(): void
+    {
+        if (!in_array($_SERVER['REQUEST_METHOD'] ?? '', ['PUT', 'POST'], true)) {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $variantId = $this->getAdminId();
+        $current = $this->product->getVariantById($variantId);
+        if ($current === null) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy biến thể'], 404);
+        }
+
+        $input = $this->getAdminInput();
+        $makeDefault = false;
+        if (array_key_exists('is_default', $input)) {
+            if (!$this->readBool($input['is_default'])) {
+                response_json(['status' => 'error', 'message' => 'Không thể bỏ mặc định trực tiếp; hãy đặt biến thể khác làm mặc định'], 422);
+            }
+            $makeDefault = (int) $current['is_default'] !== 1;
+        }
+
+        $data = $this->validateAdminVariant($input, false);
+
+        // KHÓA NGHIỆP VỤ: SKU bất biến sau khi tạo. Đơn hàng lưu variant_sku để đối soát, đơn nháp của trợ lý AI
+        // tra kho theo SKU; đổi SKU làm các nơi đó lệch hoặc báo "ngừng bán" sai. Gửi lại đúng SKU cũ thì bỏ qua.
+        if (array_key_exists('sku', $data)) {
+            if ($data['sku'] !== $current['sku']) {
+                response_json(['status' => 'error', 'message' => 'Không đổi được SKU sau khi tạo biến thể (đơn hàng và đơn nháp dùng SKU để đối chiếu).'], 422);
+            }
+            unset($data['sku']);
+        }
+        // Sửa tồn kho phải kèm expected_stock (số kho lúc mở form) để chống ghi đè mất đơn hàng xen giữa.
+        $expectedStock = array_key_exists('stock', $data) ? $this->readExpectedStock($input) : null;
+
+        $isDefaultAfter = $makeDefault || (int) $current['is_default'] === 1;
+        if ($isDefaultAfter && array_key_exists('is_active', $data) && $data['is_active'] === 0) {
+            response_json(['status' => 'error', 'message' => 'Không thể ngừng bán biến thể mặc định; hãy đặt biến thể khác làm mặc định trước'], 422);
+        }
+
+        // Giá khuyến mãi phải thấp hơn giá gốc, so với giá sau khi sửa (trường không gửi thì lấy giá hiện tại).
+        $effectivePrice = (float) ($data['price'] ?? $current['price']);
+        $effectiveSale = array_key_exists('sale_price', $data) ? $data['sale_price'] : $current['sale_price'];
+        if ($effectiveSale !== null && (float) $effectiveSale >= $effectivePrice) {
+            response_json(['status' => 'error', 'message' => 'Giá khuyến mãi phải thấp hơn giá gốc'], 422);
+        }
+        if ($data === [] && !$makeDefault) {
+            response_json(['status' => 'error', 'message' => 'Không có thông tin cần cập nhật'], 422);
+        }
+
+        try {
+            $this->product->updateVariant($variantId, (int) $current['product_id'], $data, $makeDefault, $expectedStock);
+        } catch (BusinessConflictException $exception) {
+            // Kho vừa đổi: không lưu gì (transaction đã rollback), trả 409 kèm số kho hiện tại.
+            $this->respondConflict($exception);
+        } catch (PDOException $exception) {
+            if (($exception->errorInfo[1] ?? null) === 1062) {
+                response_json(['status' => 'error', 'message' => 'SKU đã tồn tại hoặc tên biến thể đã có trong sản phẩm này'], 409);
+            }
+            $this->respondIfPriceCheckFailed($exception);
+            throw $exception;
+        }
+
+        response_json(['status' => 'success', 'message' => $makeDefault ? 'Đã đặt làm biến thể mặc định' : 'Đã cập nhật biến thể']);
+    }
+
+    /**
+     * Xóa hẳn một biến thể: DELETE ?action=api-admin-variant-delete&id=<id>.
+     * Không xóa được biến thể mặc định (409). Giỏ hàng chứa biến thể này bị xóa theo; đơn hàng cũ giữ lịch sử.
+     * Sai method 405; id sai 400; không có biến thể 404.
+     *
+     * @return void
+     */
+    public function adminVariantDelete(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'DELETE') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $variant = $this->product->getVariantById($this->getAdminId());
+        if ($variant === null) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy biến thể'], 404);
+        }
+        if ((int) $variant['is_default'] === 1) {
+            response_json(['status' => 'error', 'message' => 'Không thể xóa biến thể mặc định; hãy đặt biến thể khác làm mặc định trước'], 409);
+        }
+        $deleted = false;
+        try {
+            $deleted = $this->product->deleteVariant((int) $variant['id']);
+        } catch (BusinessConflictException $exception) {
+            // Biến thể đã có trong đơn hàng: không xóa (khóa nghiệp vụ), trả 409 kèm số đơn.
+            $this->respondConflict($exception);
+        }
+        if (!$deleted) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy biến thể'], 404);
+        }
+
+        response_json(['status' => 'success', 'message' => 'Đã xóa biến thể']);
+    }
+
+    /**
+     * Kiểm tra dữ liệu biến thể từ request, giữ nguyên trường không gửi khi sửa.
+     *
+     * @param array $input    Dữ liệu request
+     * @param bool  $isCreate true khi tạo mới (bắt buộc sku, variant_name, price, stock)
+     * @return array Dữ liệu đã chuẩn hóa (attributes là chuỗi JSON mảng)
+     */
+    private function validateAdminVariant(array $input = [], bool $isCreate = false): array
+    {
+        $data = [];
+        foreach (['sku', 'variant_name', 'price', 'stock'] as $field) {
+            if ($isCreate && !array_key_exists($field, $input)) {
+                response_json(['status' => 'error', 'message' => "Thiếu trường {$field}"], 422);
+            }
+        }
+
+        foreach (['sku' => 100, 'variant_name' => 255] as $field => $maxLength) {
+            if (array_key_exists($field, $input)) {
+                $value = is_string($input[$field]) ? trim($input[$field]) : '';
+                if ($value === '' || mb_strlen($value) > $maxLength) {
+                    response_json(['status' => 'error', 'message' => "Trường {$field} không hợp lệ"], 422);
+                }
+                $data[$field] = $value;
+            }
+        }
+        if (array_key_exists('price', $input)) {
+            if (!is_numeric($input['price']) || (float) $input['price'] < 0 || (float) $input['price'] > 99999999.99) {
+                response_json(['status' => 'error', 'message' => 'Giá biến thể không hợp lệ'], 422);
+            }
+            $data['price'] = (string) $input['price'];
+        }
+        if (array_key_exists('sale_price', $input)) {
+            $value = $input['sale_price'];
+            if ($value === '' || $value === null) {
+                $data['sale_price'] = null;
+            } elseif (!is_numeric($value) || (float) $value < 0 || (float) $value > 99999999.99) {
+                response_json(['status' => 'error', 'message' => 'Giá khuyến mãi không hợp lệ'], 422);
+            } else {
+                $data['sale_price'] = (string) $value;
+            }
+        } elseif ($isCreate) {
+            $data['sale_price'] = null;
+        }
+        if ($isCreate && $data['sale_price'] !== null && (float) $data['sale_price'] >= (float) $data['price']) {
+            response_json(['status' => 'error', 'message' => 'Giá khuyến mãi phải thấp hơn giá gốc'], 422);
+        }
+        if (array_key_exists('stock', $input)) {
+            $stock = filter_var($input['stock'], FILTER_VALIDATE_INT);
+            if ($stock === false || $stock < 0 || $stock > 2147483647) {
+                response_json(['status' => 'error', 'message' => 'Tồn kho không hợp lệ'], 422);
+            }
+            $data['stock'] = $stock;
+        }
+        if (array_key_exists('is_active', $input)) {
+            $data['is_active'] = $this->readBool($input['is_active']) ? 1 : 0;
+        } elseif ($isCreate) {
+            $data['is_active'] = 1;
+        }
+
+        // attributes: mảng [{key, label, value}]. normalize luôn trả đủ 5 khóa mặc định ở đầu, bỏ phần tử sai định dạng.
+        if (array_key_exists('attributes', $input)) {
+            if (!is_array($input['attributes']) || count($input['attributes']) > 30) {
+                response_json(['status' => 'error', 'message' => 'Thuộc tính biến thể không hợp lệ'], 422);
+            }
+            $attributes = VariantAttributes::normalize($input['attributes']);
+            foreach ($attributes as $attribute) {
+                if (mb_strlen((string) $attribute['label']) > 100 || mb_strlen((string) ($attribute['value'] ?? '')) > 255) {
+                    response_json(['status' => 'error', 'message' => 'Nhãn thuộc tính tối đa 100 ký tự, giá trị tối đa 255 ký tự'], 422);
+                }
+            }
+            // JSON_UNESCAPED_UNICODE: giữ chữ có dấu thay vì đổi thành \uXXXX.
+            $data['attributes'] = json_encode($attributes, JSON_UNESCAPED_UNICODE);
+        } elseif ($isCreate) {
+            $data['attributes'] = VariantAttributes::defaultsJson();
+        }
+
+        return $data;
+    }
+
+    /**
+     * Đọc expected_stock (số kho admin thấy lúc mở form) — bắt buộc khi request sửa tồn kho.
+     * Thiếu hoặc sai định dạng trả 422. Dùng để khóa ghi đè tồn kho (xem Product::assertStockUnchanged).
+     *
+     * @param array $input Dữ liệu request
+     * @return int Số kho lúc mở form
+     */
+    private function readExpectedStock(array $input = []): int
+    {
+        $expected = filter_var($input['expected_stock'] ?? null, FILTER_VALIDATE_INT);
+        if ($expected === false || $expected < 0) {
+            response_json(['status' => 'error', 'message' => 'Sửa tồn kho cần kèm expected_stock (số kho lúc mở form)'], 422);
+        }
+
+        return $expected;
+    }
+
+    /**
+     * Trả HTTP 409 cho lỗi vi phạm quy tắc nghiệp vụ, kèm dữ liệu thêm (current_stock, order_count...) cho FE.
+     *
+     * Kiểu trả về never: hàm luôn kết thúc request (response_json có exit), code phía sau lời gọi không chạy tiếp.
+     *
+     * @param BusinessConflictException|null $exception Lỗi nghiệp vụ từ model (null: trả thông báo chung)
+     * @return never
+     */
+    private function respondConflict(?BusinessConflictException $exception = null): never
+    {
+        if ($exception === null) {
+            response_json(['status' => 'error', 'message' => 'Thao tác bị từ chối do dữ liệu vừa thay đổi. Tải lại rồi thử lại.'], 409);
+            exit;
+        }
+        response_json(['status' => 'error', 'message' => $exception->getMessage()] + $exception->getDetails(), 409);
+        exit;
+    }
+
+    /**
+     * Lỗi 3819 = vi phạm ràng buộc CHECK của DB. Với bảng biến thể, trường hợp thực tế là
+     * "giá khuyến mãi phải thấp hơn giá gốc" bị phá khi 2 admin sửa giá cùng lúc (kiểm tra ở controller dùng giá cũ).
+     * Trả 422 có thông báo dễ hiểu thay vì để lỗi DB thành 500. Lỗi khác thì bỏ qua để nơi gọi ném tiếp.
+     *
+     * @param PDOException|null $exception Lỗi từ PDO
+     * @return void
+     */
+    private function respondIfPriceCheckFailed(?PDOException $exception = null): void
+    {
+        if ($exception !== null && ($exception->errorInfo[1] ?? null) === 3819) {
+            response_json(['status' => 'error', 'message' => 'Giá khuyến mãi phải thấp hơn giá gốc (giá vừa được thay đổi, hãy tải lại rồi kiểm tra).'], 422);
+        }
+    }
+
+    /**
+     * Đọc giá trị đúng/sai từ request: nhận true/false, 1/0, "1"/"0", "true"/"false".
+     *
+     * @param mixed $value Giá trị đầu vào
+     * @return bool
+     */
+    private function readBool($value = false): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === true;
+    }
+
+    /**
+     * Xóa file ảnh trong uploads, nhưng CHỈ khi không còn bản ghi nào dùng file đó.
+     * Gọi sau khi đã xóa/sửa bản ghi trong DB. Bỏ qua tên file có đường dẫn (chống xóa nhầm ngoài thư mục uploads).
+     *
+     * @param mixed $image Tên file ảnh như lưu trong DB
+     * @return void
+     */
+    private function deleteImageIfUnused($image = ''): void
+    {
+        if (!is_string($image) || $image === '' || basename($image) !== $image) {
+            return;
+        }
+        if ($this->product->isImageInUse($image)) {
+            return;
+        }
+        delete_uploaded_file($image);
     }
 
     /**
