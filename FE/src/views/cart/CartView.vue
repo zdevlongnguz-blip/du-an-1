@@ -1,7 +1,7 @@
 <script setup>
 // Trang giỏ hàng của user đã đăng nhập: xem, đổi số lượng và xóa từng phiên bản sản phẩm.
 // Giá, tồn kho và tổng tiền do BE tính; FE chỉ hiển thị và gửi yêu cầu.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/helpers/api/client'
 import { useToast } from '@/helpers/ui/toast'
@@ -65,11 +65,14 @@ function canEditQuantity(item) {
   return item.is_available && busyItemId.value === null
 }
 
-// Kẹp số lượng về khoảng 1..tồn kho của đúng phiên bản đó.
+// Làm tròn số lượng khách nhập và giữ tối thiểu là 1.
+// KHÔNG kẹp theo item.stock: số tồn kho trên trang là số của lần tải gần nhất, có thể đã cũ
+// (ví dụ khách khác vừa hủy đơn, hàng được hoàn kho). Để BE kiểm tra với kho thật:
+// vượt kho thì BE trả 409, trang báo lỗi và tải lại giỏ để thấy số kho mới.
 function clampQuantity(item, rawValue) {
   const parsed = Math.floor(Number(rawValue))
   if (!Number.isFinite(parsed)) return item.quantity
-  return Math.min(Math.max(1, parsed), Math.max(1, item.stock))
+  return Math.max(1, parsed)
 }
 
 // Gửi số lượng mới lên BE; trả về true nếu thành công để ô nhập biết có giữ giá trị hay không.
@@ -133,7 +136,22 @@ function variantAttributesLine(item) {
   return capacity
 }
 
-onMounted(() => fetchCart())
+// Khách quay lại tab giỏ hàng (sau khi xem tab khác): tải lại giỏ trong im lặng để số tồn kho và giá không bị cũ.
+// Bỏ qua khi đang tải lần đầu hoặc đang gửi cập nhật, tránh ghi đè kết quả của yêu cầu đó.
+function onVisibilityChange() {
+  if (document.visibilityState !== 'visible' || loading.value || busyItemId.value !== null) return
+  fetchCart({ silent: true })
+}
+
+// onMounted: tải giỏ khi trang vừa hiện ra, đồng thời lắng nghe sự kiện đổi tab của trình duyệt.
+onMounted(() => {
+  fetchCart()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+// Rời trang thì gỡ bộ lắng nghe, tránh gọi API khi trang giỏ hàng không còn hiển thị.
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+})
 </script>
 
 <template>
@@ -200,6 +218,10 @@ onMounted(() => fetchCart())
                     Chỉ còn {{ item.stock }}
                   </span>
                 </p>
+                <!-- Số tồn kho của phiên bản (theo lần tải giỏ gần nhất), giống dòng "Còn N sản phẩm" ở trang chi tiết. -->
+                <span v-if="item.is_available && item.quantity <= item.stock" class="cart-item-stock">
+                  Còn {{ item.stock }} sản phẩm
+                </span>
               </div>
 
               <!-- Bộ tăng giảm số lượng + nút xóa. -->
@@ -211,18 +233,20 @@ onMounted(() => fetchCart())
                     aria-label="Giảm số lượng"
                     @click="stepQuantity(item, -1)"
                   >−</button>
+                  <!-- Không đặt max theo tồn kho (số đó có thể đã cũ); BE kiểm tra với kho thật khi gửi. -->
                   <input
                     type="number"
                     min="1"
-                    :max="Math.max(1, item.stock)"
                     :value="item.quantity"
                     :disabled="!canEditQuantity(item)"
                     aria-label="Nhập số lượng"
                     @change="onQuantityChange(item, $event)"
                   />
+                  <!-- Nút "+" không khóa theo tồn kho cũ: bấm khi đã chạm kho thì vẫn gọi API để BE kiểm tra lại,
+                       nhờ vậy hàng vừa được hoàn kho (đơn khác bị hủy) vẫn tăng được mà không cần tải lại trang. -->
                   <button
                     type="button"
-                    :disabled="!canEditQuantity(item) || item.quantity >= item.stock"
+                    :disabled="!canEditQuantity(item)"
                     aria-label="Tăng số lượng"
                     @click="stepQuantity(item, 1)"
                   >+</button>
@@ -510,6 +534,12 @@ onMounted(() => fetchCart())
 .cart-tag--warn {
   background: #fef3d6;
   color: #8a5a0a;
+}
+
+/* Dòng "Còn N sản phẩm": chữ nhỏ màu phụ, cùng kiểu với dòng tồn kho ở trang chi tiết. */
+.cart-item-stock {
+  color: #4a5565;
+  font-size: 12px;
 }
 
 .cart-item-qty {
