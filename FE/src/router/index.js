@@ -169,6 +169,24 @@ const routes = [
         name: "admin-dashboard",
         component: () => import("../views/admin/AdminDashboard.vue"),
       },
+      // Danh sách sản phẩm dạng bảng (/admin/products), có tìm kiếm, lọc danh mục, phân trang.
+      {
+        path: "products",
+        name: "admin-products",
+        component: () => import("../views/admin/products/AdminProductList.vue"),
+      },
+      // Form tạo sản phẩm (/admin/products/new) và sửa sản phẩm (/admin/products/5/edit) dùng chung một view.
+      // (\\d+): chỉ nhận id là số, URL kiểu /admin/products/abc/edit sẽ ra trang 404.
+      {
+        path: "products/new",
+        name: "admin-product-new",
+        component: () => import("../views/admin/products/AdminProductForm.vue"),
+      },
+      {
+        path: "products/:id(\\d+)/edit",
+        name: "admin-product-edit",
+        component: () => import("../views/admin/products/AdminProductForm.vue"),
+      },
     ],
   },
 

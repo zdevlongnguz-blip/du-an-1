@@ -1,30 +1,32 @@
 <script setup>
 // Menu bên trái của khu quản trị (dùng trong AdminLayout). Không gọi API.
 // Thêm trang admin mới: thêm route con trong router/index.js (nhóm /admin) rồi thêm một mục vào ADMIN_MENU bên dưới.
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 // emit: báo cho AdminLayout biết khách vừa bấm một mục, để đóng menu trên điện thoại.
 const emit = defineEmits(['navigate'])
 const route = useRoute()
+const router = useRouter()
 
 // Danh sách mục menu. to: tên route (name) trong router; exact: chỉ sáng khi đúng trang đó (dùng cho Tổng quan).
 // Mục chưa có trang thì để ready: false: hiện mờ, không bấm được, để nhóm thấy việc còn lại.
 const ADMIN_MENU = [
   { label: 'Tổng quan', to: { name: 'admin-dashboard' }, exact: true, ready: true },
-  { label: 'Sản phẩm', to: null, ready: false },
+  { label: 'Sản phẩm', to: { name: 'admin-products' }, ready: true },
   { label: 'Danh mục', to: null, ready: false },
   { label: 'Đơn hàng', to: null, ready: false },
   { label: 'Bình luận', to: null, ready: false },
   { label: 'Banner', to: null, ready: false },
 ]
 
-// true nếu mục menu ứng với trang đang mở. Mục không exact thì sáng cho cả các trang con
-// (ví dụ "Sản phẩm" sáng ở /admin/products và /admin/products/5/edit).
+// true nếu mục menu ứng với trang đang mở. Mục không exact thì sáng cho mọi trang có đường dẫn bắt đầu
+// bằng đường dẫn của mục (ví dụ "Sản phẩm" sáng ở /admin/products, /admin/products/new, /admin/products/5/edit).
+// router.resolve: đổi tên route (to.name) thành đường dẫn thật (/admin/products) để so sánh.
 function isActive(item) {
   if (!item.ready || !item.to) return false
-  const target = item.to.name
-  if (item.exact) return route.name === target
-  return route.matched.some((record) => record.name === target)
+  if (item.exact) return route.name === item.to.name
+  const basePath = router.resolve(item.to).path
+  return route.path === basePath || route.path.startsWith(`${basePath}/`)
 }
 </script>
 

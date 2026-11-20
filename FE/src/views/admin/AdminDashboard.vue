@@ -5,7 +5,7 @@ import { RouterLink } from 'vue-router'
 
 // Các mục quản trị. api: các API BE đã có sẵn cho mục đó (để người làm task biết dùng gì).
 const SECTIONS = [
-  { title: 'Sản phẩm', desc: 'Thêm, sửa, xóa sản phẩm và ảnh.', api: 'api-admin-product-*', to: null, ready: false },
+  { title: 'Sản phẩm', desc: 'Xem danh sách, tìm kiếm, lọc theo danh mục.', api: 'api-products', to: { name: 'admin-products' }, ready: true },
   { title: 'Danh mục', desc: 'Quản lý danh mục sản phẩm.', api: 'api-admin-category-*', to: null, ready: false },
   { title: 'Đơn hàng', desc: 'Xem và cập nhật trạng thái đơn.', api: 'api-admin-orders, api-admin-order-update', to: null, ready: false },
   { title: 'Bình luận', desc: 'Duyệt hoặc xóa bình luận.', api: 'api-admin-comment-*', to: null, ready: false },
