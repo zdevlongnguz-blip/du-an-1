@@ -2,7 +2,60 @@
 
 Nơi ghi những việc **chưa xong hẳn**: ca kiểm thử chưa chạy được, lỗi đã biết chưa sửa, việc cần làm tiếp. Xong việc nào thì đánh dấu `[x]`, ghi ngày và người kiểm tra. Kèm theo các **mốc `dev` ổn định** để quay về khi cần.
 
-Cập nhật lần cuối: 18/11/2026.
+Cập nhật lần cuối: 20/11/2026 (sau PR #85).
+
+## Thay đổi lớn ngày 19–20/11/2026 (PR #78 → #85)
+
+| PR | Nội dung | Ghi chú |
+| --- | --- | --- |
+| #78 | **Gỡ tìm kiếm thông minh (vector search)**, `dev` quay về đúng nội dung mốc #74 | Kết quả vector chưa đạt (tìm "pomade" chỉ ra 2/4, câu vô nghĩa vẫn ra sản phẩm). Code cũ còn ở nhánh `feature/vector-embbed-db`, `feature/fe-vector-search` để tham khảo |
+| #79 | Kết nối DB dùng `utf8mb4` (`BaseModel.php`) | Trước đó gõ emoji vào ô tìm kiếm làm API sập |
+| #80 | Thuộc tính biến thể dạng **mảng** `{key, label, value}` + bảng thông số ở trang chi tiết | Migration `20261119_01`, seed `products_variant_attributes.sql` |
+| #81 | `api-products` trả 400 khi `search` là mảng (`?search[]=x`) | |
+| #82 | Nút "+" ở giỏ hàng / checkout AI không khóa theo tồn kho cũ; giỏ hàng hiện "Còn N sản phẩm"; checkout AI tự tra lại kho | Admin Long yêu cầu trực tiếp sửa `AiCheckout.vue` |
+| #83 | `api-products-top` nhận thêm `category_id`, `exclude_id` (tùy chọn) + task tuần 3 cho Dũng, Vinh | |
+| #84 | Khung khu quản trị `/admin` + `api-admin-me` | Hướng dẫn: [admin/huong-dan-trang-admin.md](admin/huong-dan-trang-admin.md) |
+| #85 | **Quản trị sản phẩm đầy đủ** (danh sách, tạo/sửa/xóa, biến thể, ảnh slide) + **khóa nghiệp vụ** | Xem mục "Thay đổi contract" bên dưới |
+
+`dev` sau #85 (`7dd5946`) **chưa được admin xác nhận là mốc ổn định** (2 trang đặt hàng mới được kiểm bằng script, chưa thử tay trọn luồng). Thử tay xong thì thêm vào bảng "Mốc `dev` ổn định".
+
+### Quyết định đã chốt
+
+- **Không dùng vector search** nữa. Muốn làm lại thì phải đổi model mạnh hơn và thêm điểm tối thiểu; không làm tìm kiếm kết hợp.
+- `product_variants.attributes` là **mảng** `[{key, label, value}]`, luôn đủ 5 khóa mặc định đứng đầu (`dung_tich`, `do_giu_nep`, `do_bong`, `phu_hop`, `kieu_toc`). Mọi bảng chỉ lưu **tên file** ảnh, FE ghép URL bằng `resolveImageUrl`.
+- **Khóa nghiệp vụ sản phẩm** (lịch sử đơn là bất biến vì `order_details` lưu ảnh chụp tên/SKU/giá):
+  - Không xóa sản phẩm / biến thể **đã có đơn hàng** (kể cả đơn đã hủy) → dùng "Tắt bán".
+  - Tồn kho không được ghi đè khi kho vừa đổi (khóa theo phiên bản bằng `expected_stock`).
+  - SKU không đổi sau khi tạo.
+- Với giỏ hàng / checkout: **số tồn kho trên màn hình chỉ là gợi ý**, không khóa thao tác của khách bằng số cũ; hỏi lại server lúc khách quyết định; server giữ kho trong transaction khi ghi đơn.
+- **Không làm:** ảnh sản phẩm ở trang chi tiết đơn hàng (admin quyết định 20/11/2026); kiểm tra file ảnh dùng chung ở `BannerController` (ảnh tải lên luôn có tên ngẫu nhiên).
+
+### Thay đổi contract cần biết
+
+| API | Thay đổi |
+| --- | --- |
+| `api-product-detail`, `api-cart` | `attributes` của biến thể là **mảng** `[{key, label, value}]` (trước là object) |
+| `api-products` | `search` / `q` dạng mảng → 400 |
+| `api-products-top` | Thêm tùy chọn `category_id`, `exclude_id` (không truyền thì như cũ) |
+| `api-admin-me` (mới) | Kiểm tra quyền vào `/admin`: 200 admin, 401, 403 |
+| `api-admin-product-detail`, `api-admin-variant-create/update/delete`, `api-admin-product-image-update` (mới) | Xem `BE/test-api.md` |
+| `api-admin-product-update`, `api-admin-variant-update` | **Có gửi `stock` thì bắt buộc gửi `expected_stock`** (số kho lúc mở form): thiếu → 422; kho đã đổi → 409 kèm `current_stock` |
+| `api-admin-variant-update` | Đổi `sku` → 422 |
+| `api-admin-product-delete`, `api-admin-variant-delete` | Đã có đơn hàng → 409 kèm `order_count` |
+
+Đổi role của tài khoản trong DB thì token cũ bị 401 (role trong token lệch DB) → phải đăng nhập lại.
+
+## Việc còn treo (chưa làm)
+
+- [ ] **Ẩn cả sản phẩm**: cần cột `products.status` (migration); trang khách, catalog, chatbot phải lọc theo. Hiện sản phẩm đã có đơn không xóa được, mà biến thể mặc định bắt buộc đang bán, nên admin chưa có cách gỡ hẳn sản phẩm khỏi trang khách.
+- [ ] Hộp xác nhận khi "Đặt mặc định" cho biến thể **đang ngừng bán** (sẽ tự bật bán lại) hoặc **hết kho**.
+- [ ] Lọc sản phẩm theo thuộc tính (admin Long tự xử lý). Cần chuẩn hóa bộ giá trị trước: `phu_hop`, `kieu_toc` đang là chuỗi nhiều giá trị; `dung_tich` lẫn g/ml/lít.
+- [ ] Router: khi trang tải riêng (lazy) không tải được thì trang trống, chưa báo lỗi / thử lại.
+- [ ] Đổi thứ tự ảnh slide chưa nguyên tử (lỗi giữa chừng có thể trùng `sort_order`); trang sửa sản phẩm gọi `api-admin-product-detail` 3 lần.
+
+## Lưu ý môi trường
+
+Máy dev (Windows) thỉnh thoảng **chặn kết nối tới server local theo từng đợt**: trình duyệt báo `ERR_NETWORK_ACCESS_DENIED`, Node báo `EACCES`, curl không kết nối được, trong khi Apache vẫn chạy. Nghi do phần mềm bảo mật / tường lửa. Gặp lỗi kiểu trang trống hoặc request hỏng ngẫu nhiên thì thử lại trước khi kết luận là lỗi code. Script test có dọn dữ liệu thì nên dọn qua API (xóa bằng SQL sẽ để lại file ảnh rác trong `BE/assets/uploads`).
 
 ## Mốc `dev` ổn định (dùng khi cần roll back)
 
@@ -41,6 +94,11 @@ Tag git chỉ có trên GitHub khi đã được push. Nếu chưa thấy tag, d
 4. Build và kiểm thử lại trên trình duyệt (nhất là 2 trang đặt hàng), rồi `git push -u origin <nhánh>` và tạo PR vào `dev`.
 
 ## Việc cần kiểm thử
+
+### [ ] Thử tay 2 trang đặt hàng trên `dev` sau #85
+
+- **Vì sao:** #80 (thuộc tính dạng mảng) và #82 (tra lại kho ở checkout AI) đụng tới luồng đặt hàng. Đã kiểm bằng script trên Chrome (đặt COD, 409 khi kho tụt), **chưa thử tay**: SePay lỗi, món ngừng bán, trang đặt hàng tay (`/checkout`).
+- **Làm:** theo danh sách ca trong `FE/CLAUDE.md` mục 2 (đặt thành công, COD, SePay lỗi, 409 giá đổi, thiếu kho, ngừng bán, đơn nháp AI tra lại kho). Đạt hết thì ghi mốc ổn định mới.
 
 ### [ ] Đơn SePay quá hạn được trả hàng về kho trước khi đọc tồn kho
 
