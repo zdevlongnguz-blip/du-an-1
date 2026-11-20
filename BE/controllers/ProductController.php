@@ -8,6 +8,14 @@ class ProductController{
 
     public function index(){
         $search = $_GET['search'] ?? $_GET['q'] ?? '';
+        // URL kiểu ?search[]=x làm PHP đọc ra MẢNG thay vì chuỗi. Không chặn ở đây thì model ép mảng
+        // thành chuỗi, PHP báo lỗi "Array to string conversion" và API trả trang lỗi thay vì JSON.
+        if (!is_string($search)) {
+            response_json([
+                'status' => 'error',
+                'message' => 'Từ khóa tìm kiếm không hợp lệ',
+            ], 400);
+        }
         $category = $_GET['category'] ?? '';
         if (!is_string($category) || strlen(trim($category)) > 255) {
             response_json([
