@@ -72,6 +72,8 @@ const checkoutError = ref('')
 const createdOrder = ref(null)
 // Các thay đổi vừa áp theo kho/giá mới nhất (kẹp số lượng, đổi giá, món hết hàng), mỗi phần tử là một câu để hiện cho khách.
 const draftChanges = ref([])
+// true trong lúc đang tra lại kho vì khách bấm "+" khi số lượng đã chạm tồn kho; khóa các nút +/− trong lúc chờ.
+const checkingStock = ref(false)
 
 // computed: chỉ cho sửa khi hiệu ứng đã xong, không đang gửi và chưa tạo đơn.
 const editable = computed(() => phase.value === 'ready' && !submitting.value && !createdOrder.value)
@@ -303,15 +305,82 @@ async function play(nextDraft, refreshStock = true) {
   }
 }
 
-// Tăng/giảm số lượng một món. Giữ trong khoảng 1 đến tồn kho lúc lên đơn, giống quy tắc của trang Giỏ hàng.
+// Tăng/giảm số lượng một món. Giữ trong khoảng 1 đến tồn kho, giống quy tắc của trang Giỏ hàng.
+// Bấm "+" khi số lượng đã chạm tồn kho thì không chặn luôn mà tra lại kho (xem increaseAfterStockCheck),
+// vì số tồn kho trên trang là số lúc mở trang, có thể đã tăng (khách khác hủy đơn, hàng được hoàn kho).
 function changeQuantity(index, delta) {
-  if (!editable.value) return
+  if (!editable.value || checkingStock.value) return
   const item = items.value[index]
   // Món đã hết hàng thì không cho đổi số lượng, khách chỉ có thể bỏ món.
   if (item.available === false) return
+  if (delta > 0 && quantities.value[index] >= item.stock) {
+    increaseAfterStockCheck(item.sku)
+    return
+  }
   quantities.value[index] = Math.min(Math.max(1, quantities.value[index] + delta), Math.max(1, item.stock))
   checkoutError.value = ''
   draftChanges.value = []
+  scheduleStockRefresh()
+}
+
+// Hẹn giờ tra kho ngầm sau mỗi lần bấm +/−. Số lượng đổi ngay trên màn hình (khách không phải chờ),
+// còn số "còn N" được cập nhật theo kho thật sau khi khách ngừng bấm STOCK_REFRESH_DELAY_MS.
+// Bấm liên tục nhiều lần chỉ gửi 1 request: mỗi lần bấm hủy hẹn giờ cũ rồi hẹn lại (kỹ thuật "debounce").
+const STOCK_REFRESH_DELAY_MS = 400
+let stockRefreshTimer = null
+function scheduleStockRefresh() {
+  clearTimeout(stockRefreshTimer)
+  stockRefreshTimer = setTimeout(refreshStockSilently, STOCK_REFRESH_DELAY_MS)
+}
+
+// Tra kho ngầm (không khóa nút): cập nhật số "còn N"; nếu kho đã tụt dưới số khách chọn thì
+// syncDraftWithStock tự giảm số lượng và ghi lý do vào draftChanges, trang báo thêm bằng toast.
+// Bỏ qua khi trang không còn cho sửa, đang tra kho vì nút "+", hoặc đang hiển thị đơn khác đơn nháp hiện tại.
+async function refreshStockSilently() {
+  if (!editable.value || checkingStock.value || draft.value !== checkoutDraft.value) return
+  try {
+    const changes = await syncDraftWithStock()
+    if (changes.length > 0) {
+      showToast('Kho hoặc giá vừa thay đổi, Louis đã cập nhật đơn. Quý ông xem lại giúp Louis nhé.', 'warning')
+    }
+  } catch (error) {
+    // Lỗi mạng/server: giữ nguyên số đang hiển thị; BE vẫn kiểm tra lại khi khách xác nhận đặt hàng.
+    console.error('Không tra lại được tồn kho sau khi đổi số lượng:', error)
+  }
+}
+
+// Tra lại kho mới nhất (api-order-draft-items, qua syncDraftWithStock) rồi tăng thêm 1 nếu kho đã có thêm hàng.
+// Tìm lại món theo SKU sau khi tra, vì kết quả tra có thể đổi thông tin của món (giá, tồn kho, hết hàng).
+// Chỉ tra khi trang đang hiển thị đúng đơn nháp đang dùng (giống cách xử lý 409 khi đặt hàng),
+// để không sửa nhầm sang đơn khác nếu Louis vừa gửi đơn mới.
+async function increaseAfterStockCheck(sku) {
+  if (draft.value !== checkoutDraft.value) return
+  checkingStock.value = true
+  try {
+    const changes = await syncDraftWithStock()
+    const index = items.value.findIndex((item) => item.sku === sku)
+    const item = items.value[index]
+    if (!item || item.available === false) {
+      // Món vừa hết hàng/ngừng bán: syncDraftWithStock đã đánh dấu và ghi lý do vào draftChanges để khách thấy.
+      showToast('Món này vừa hết hàng hoặc ngừng bán, quý ông xem lại đơn giúp Louis.', 'warning')
+      return
+    }
+    if (quantities.value[index] < item.stock) {
+      // Kho đã có thêm hàng: tăng như bình thường. Không xóa draftChanges nếu có thay đổi khác (ví dụ giá đổi).
+      quantities.value[index] += 1
+      checkoutError.value = ''
+      if (changes.length === 0) draftChanges.value = []
+    } else {
+      showToast(`Louis đã kiểm tra lại: món này hiện chỉ đặt được tối đa ${item.stock}.`, 'info')
+    }
+  } catch (error) {
+    // Tra kho lỗi (mạng, server): giữ nguyên số lượng; BE vẫn kiểm tra lại khi khách xác nhận đặt hàng.
+    console.error('Không tra lại được tồn kho khi tăng số lượng:', error)
+    showToast('Chưa kiểm tra được kho mới nhất, quý ông thử lại sau giây lát.', 'warning')
+  } finally {
+    // finally luôn chạy dù thành công hay lỗi, nên mở khóa nút ở đây.
+    checkingStock.value = false
+  }
 }
 
 // Bấm nút xóa của một món: bỏ hẳn món đó khỏi đơn nháp.
@@ -366,7 +435,11 @@ async function handleConfirm() {
     await payCreatedOrder()
     return
   }
-  if (!editable.value) return
+  // Đang tra lại kho (khách vừa bấm "+") thì chờ xong mới cho gửi, tránh gửi số lượng sắp bị cập nhật.
+  if (!editable.value || checkingStock.value) return
+  // Hủy lượt tra kho ngầm còn đang hẹn (khách vừa bấm +/− rồi bấm đặt ngay): BE sẽ kiểm tra kho khi tạo đơn,
+  // không để lượt tra đó chạy chồng lên lúc gửi đơn.
+  clearTimeout(stockRefreshTimer)
   if (hasUnavailableItem.value) {
     showToast('Có món đã hết hàng hoặc ngừng bán, quý ông bỏ món đó trước khi đặt.', 'warning')
     return
@@ -488,8 +561,11 @@ watch(discardCount, () => {
 onMounted(() => {
   if (checkoutDraft.value) play(checkoutDraft.value)
 })
-// Rời trang giữa chừng: tăng runId để các vòng lặp hiệu ứng đang chạy tự dừng.
-onBeforeUnmount(() => { runId++ })
+// Rời trang giữa chừng: tăng runId để các vòng lặp hiệu ứng đang chạy tự dừng, hủy lượt tra kho ngầm đang hẹn.
+onBeforeUnmount(() => {
+  runId++
+  clearTimeout(stockRefreshTimer)
+})
 </script>
 
 <template>
@@ -624,18 +700,20 @@ onBeforeUnmount(() => { runId++ })
                   </div>
 
                   <div class="qo-item-side">
-                    <!-- Bộ tăng/giảm số lượng, giới hạn 1 đến tồn kho -->
+                    <!-- Bộ tăng/giảm số lượng, giới hạn 1 đến tồn kho. Nút "+" không khóa khi chạm tồn kho:
+                         bấm thì Louis tra lại kho, hàng vừa được hoàn kho vẫn tăng được mà không cần tải lại trang.
+                         Cả hai nút khóa trong lúc đang tra kho (checkingStock). -->
                     <div class="qo-stepper" role="group" :aria-label="`Số lượng ${item.name}`">
                       <button
                         type="button"
-                        :disabled="!editable || item.available === false || quantities[index] <= 1"
+                        :disabled="!editable || checkingStock || item.available === false || quantities[index] <= 1"
                         aria-label="Giảm số lượng"
                         @click="changeQuantity(index, -1)"
                       >−</button>
                       <span class="qo-qty" aria-live="polite">{{ quantities[index] }}</span>
                       <button
                         type="button"
-                        :disabled="!editable || item.available === false || quantities[index] >= item.stock"
+                        :disabled="!editable || checkingStock || item.available === false"
                         aria-label="Tăng số lượng"
                         @click="changeQuantity(index, 1)"
                       >+</button>
