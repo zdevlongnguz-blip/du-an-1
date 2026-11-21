@@ -367,7 +367,8 @@ class Product extends BaseModel
             return null;
         }
 
-        $variantsSql = "SELECT `id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `final_price`, `stock`, `is_default`
+        // image: ảnh riêng của biến thể (NULL = chưa có, FE dùng ảnh sản phẩm thay thế).
+        $variantsSql = "SELECT `id`, `sku`, `variant_name`, `attributes`, `image`, `price`, `sale_price`, `final_price`, `stock`, `is_default`
                         FROM `product_variants`
                         WHERE `product_id` = :product_id AND `is_active` = 1
                         ORDER BY `is_default` DESC, `id` ASC";
@@ -406,7 +407,7 @@ class Product extends BaseModel
      *
      * Vì sao cần: nhiều bản ghi có thể dùng CHUNG một file (ví dụ dữ liệu mẫu: default.jpg dùng cho 4 sản phẩm
      * và cả album). Xóa file khi bản ghi khác vẫn trỏ tới thì các sản phẩm đó mất ảnh.
-     * Kiểm tra cả 3 nơi lưu tên file ảnh: products.image, product_images.image_path, banners.image.
+     * Kiểm tra cả 4 nơi lưu tên file ảnh: products.image, product_images.image_path, product_variants.image, banners.image.
      * Gọi SAU khi đã xóa/sửa bản ghi hiện tại, để chỉ còn đếm các bản ghi khác.
      *
      * @param string $imagePath Tên file ảnh (như lưu trong DB)
@@ -418,16 +419,18 @@ class Product extends BaseModel
             return false;
         }
 
-        // UNION ALL: gộp kết quả 3 câu SELECT; chỉ cần biết có ít nhất 1 dòng hay không (LIMIT 1).
+        // UNION ALL: gộp kết quả 4 câu SELECT; chỉ cần biết có ít nhất 1 dòng hay không (LIMIT 1).
         $statement = $this->pdo->prepare(
             'SELECT 1 FROM `products` WHERE `image` = :p1 '
             . 'UNION ALL SELECT 1 FROM `product_images` WHERE `image_path` = :p2 '
+            . 'UNION ALL SELECT 1 FROM `product_variants` WHERE `image` = :p4 '
             . 'UNION ALL SELECT 1 FROM `banners` WHERE `image` = :p3 '
             . 'LIMIT 1'
         );
         $statement->bindValue(':p1', $imagePath, PDO::PARAM_STR);
         $statement->bindValue(':p2', $imagePath, PDO::PARAM_STR);
         $statement->bindValue(':p3', $imagePath, PDO::PARAM_STR);
+        $statement->bindValue(':p4', $imagePath, PDO::PARAM_STR);
         $statement->execute();
 
         return $statement->fetchColumn() !== false;
@@ -467,7 +470,7 @@ class Product extends BaseModel
         // Biến thể mặc định đứng đầu, sau đó theo thứ tự tạo.
         // order_count: số đơn hàng có chứa biến thể (truy vấn con), để FE khóa nút Xóa trước khi admin bấm.
         $variantStatement = $this->pdo->prepare(
-            'SELECT `v`.`id`, `v`.`sku`, `v`.`variant_name`, `v`.`attributes`, `v`.`price`, `v`.`sale_price`, `v`.`final_price`, '
+            'SELECT `v`.`id`, `v`.`sku`, `v`.`variant_name`, `v`.`attributes`, `v`.`image`, `v`.`price`, `v`.`sale_price`, `v`.`final_price`, '
             . '`v`.`stock`, `v`.`is_default`, `v`.`is_active`, '
             . '(SELECT COUNT(DISTINCT `od`.`order_id`) FROM `order_details` AS `od` WHERE `od`.`variant_id` = `v`.`id`) AS `order_count` '
             . 'FROM `product_variants` AS `v` WHERE `v`.`product_id` = :product_id '
@@ -739,6 +742,14 @@ class Product extends BaseModel
             if (!empty($product['image'])) {
                 $images[] = $product['image'];
             }
+            // Ảnh riêng của các biến thể: biến thể bị xóa theo sản phẩm (ON DELETE CASCADE), nên gom tên file
+            // trước khi xóa để controller dọn file trong uploads.
+            $variantImageStatement = $this->pdo->prepare(
+                'SELECT `image` FROM `product_variants` WHERE `product_id` = :product_id AND `image` IS NOT NULL AND `image` <> \'\''
+            );
+            $variantImageStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $variantImageStatement->execute();
+            $images = array_merge($images, $variantImageStatement->fetchAll(PDO::FETCH_COLUMN));
 
             $deleteStatement = $this->pdo->prepare('DELETE FROM `products` WHERE `id` = :id');
             $deleteStatement->bindValue(':id', $productId, PDO::PARAM_INT);
@@ -907,7 +918,7 @@ class Product extends BaseModel
     public function getVariantById(int $variantId = 0): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT `id`, `product_id`, `sku`, `variant_name`, `price`, `sale_price`, `stock`, `is_default`, `is_active` '
+            'SELECT `id`, `product_id`, `sku`, `variant_name`, `image`, `price`, `sale_price`, `stock`, `is_default`, `is_active` '
             . 'FROM `product_variants` WHERE `id` = :id LIMIT 1'
         );
         $statement->bindValue(':id', $variantId, PDO::PARAM_INT);
@@ -915,6 +926,51 @@ class Product extends BaseModel
         $row = $statement->fetch(PDO::FETCH_ASSOC);
 
         return $row === false ? null : $row;
+    }
+
+    /**
+     * Lấy tồn kho THẬT (không kẹp) của mọi biến thể thuộc một sản phẩm, để trang chi tiết tra lại kho.
+     * Chỉ đọc, không khóa dòng và không tăng lượt xem (khác getBySlug).
+     *
+     * @param int $productId ID sản phẩm
+     * @return array|null Mảng [{id, sku, stock, is_active}] (có thể rỗng); null nếu sản phẩm không tồn tại
+     */
+    public function getVariantStocks(int $productId = 0): ?array
+    {
+        if ($productId < 1 || $this->find($productId) === false) {
+            return null;
+        }
+
+        $statement = $this->pdo->prepare(
+            'SELECT `id`, `sku`, `stock`, `is_active` FROM `product_variants` '
+            . 'WHERE `product_id` = :product_id ORDER BY `is_default` DESC, `id` ASC'
+        );
+        $statement->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $statement->execute();
+
+        return $statement->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Ghi ảnh riêng cho một biến thể (thay ảnh cũ nếu có).
+     *
+     * @param int         $variantId ID biến thể
+     * @param string|null $imagePath Tên file ảnh đã lưu trong uploads; null = bỏ ảnh riêng (dùng lại ảnh sản phẩm)
+     * @return bool true nếu biến thể tồn tại và đã ghi, false nếu không tìm thấy biến thể
+     */
+    public function updateVariantImage(int $variantId = 0, ?string $imagePath = null): bool
+    {
+        if ($variantId < 1) {
+            return false;
+        }
+
+        $statement = $this->pdo->prepare('UPDATE `product_variants` SET `image` = :image WHERE `id` = :id');
+        $statement->bindValue(':image', $imagePath, $imagePath === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $statement->bindValue(':id', $variantId, PDO::PARAM_INT);
+        $statement->execute();
+
+        // rowCount() = 0 cũng xảy ra khi ghi lại đúng giá trị cũ, nên kiểm tra lại biến thể có tồn tại không.
+        return $statement->rowCount() > 0 || $this->getVariantById($variantId) !== null;
     }
 
     /**

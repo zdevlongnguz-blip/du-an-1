@@ -23,6 +23,7 @@ import {
   useCheckoutDraft,
 } from '@/helpers/ai/checkoutDraft'
 import { showToast } from '@/helpers/ui/toast'
+import { useTabVisible } from '@/helpers/ui/tabVisible'
 
 const router = useRouter()
 // Đơn nháp dùng chung với khung chat. null = chưa có (khách gõ thẳng URL hoặc vừa tải lại trang).
@@ -383,6 +384,54 @@ async function increaseAfterStockCheck(sku) {
   }
 }
 
+// Khách gõ số lượng tay vào ô rồi rời ô / bấm Enter (sự kiện change, không chạy lúc đang gõ để không ngắt khách).
+// Giống nút "+": KHÔNG kẹp theo số kho cũ trên trang mà tra lại kho mới nhất trước (api-order-draft-items,
+// qua syncDraftWithStock), rồi kẹp số khách gõ trong khoảng 1 đến số đặt được. Khóa bộ tăng giảm trong lúc tra.
+// Số gõ không hợp lệ (trống, chữ, nhỏ hơn 1) thì trả ô về số đang có, không gọi server.
+async function onQuantityInput(index, event) {
+  const input = event.target
+  const item = items.value[index]
+  const typed = Math.floor(Number(input.value))
+  // Trang không cho sửa, món đã hết hàng, hoặc số gõ không hợp lệ: trả ô về số đang có.
+  if (!editable.value || checkingStock.value || !item || item.available === false
+    || !Number.isFinite(typed) || typed < 1 || draft.value !== checkoutDraft.value) {
+    input.value = quantities.value[index]
+    return
+  }
+  if (typed === quantities.value[index]) return
+
+  // Ghi nhớ SKU để tìm lại món sau khi tra kho (kết quả tra có thể đổi thông tin của món).
+  const sku = item.sku
+  checkingStock.value = true
+  try {
+    const changes = await syncDraftWithStock()
+    const freshIndex = items.value.findIndex((freshItem) => freshItem.sku === sku)
+    const fresh = items.value[freshIndex]
+    if (!fresh || fresh.available === false) {
+      // Món vừa hết hàng/ngừng bán: syncDraftWithStock đã đánh dấu và ghi lý do vào draftChanges để khách thấy.
+      showToast('Món này vừa hết hàng hoặc ngừng bán, quý ông xem lại đơn giúp Louis.', 'warning')
+      return
+    }
+    // fresh.stock là số đặt được tối đa cho món này (đã gồm giới hạn mỗi món của cửa hàng).
+    const next = Math.min(typed, Math.max(1, fresh.stock))
+    quantities.value[freshIndex] = next
+    checkoutError.value = ''
+    if (changes.length === 0) draftChanges.value = []
+    if (next < typed) {
+      showToast(`Louis đã kiểm tra lại: món này hiện chỉ đặt được tối đa ${fresh.stock}.`, 'info')
+    }
+  } catch (error) {
+    // Tra kho lỗi (mạng, server): giữ nguyên số cũ; BE vẫn kiểm tra lại khi khách xác nhận đặt hàng.
+    console.error('Không tra lại được tồn kho khi gõ số lượng:', error)
+    showToast('Chưa kiểm tra được kho mới nhất, quý ông thử lại sau giây lát.', 'warning')
+  } finally {
+    checkingStock.value = false
+    // Ô nhập có thể vẫn hiện số khách gõ (khi số lượng không đổi Vue không vẽ lại), nên ghi lại số thật vào ô.
+    const currentIndex = items.value.findIndex((freshItem) => freshItem.sku === sku)
+    if (currentIndex >= 0) input.value = quantities.value[currentIndex]
+  }
+}
+
 // Bấm nút xóa của một món: bỏ hẳn món đó khỏi đơn nháp.
 // Bỏ trong đơn nháp dùng chung trước, rồi bỏ số lượng cùng vị trí, để hai mảng vẫn khớp thứ tự với nhau.
 // Lần chat sau, Louis nhận đơn không còn món này. Còn 1 món thì nút bị khóa (dùng "Bỏ đơn nháp").
@@ -557,6 +606,18 @@ watch(discardCount, () => {
   checkoutError.value = ''
 })
 
+// Khách quay lại tab trang đặt hàng (sau khi xem tab khác): tra lại kho/giá của đơn nháp trong im lặng,
+// để số "còn N" và số lượng không bị cũ. Cùng cách với trang Giỏ hàng và trang chi tiết sản phẩm.
+// Dùng lại refreshStockSilently: hàm này tự bỏ qua khi trang không cho sửa (đang chạy hiệu ứng, đang đặt hàng,
+// đã tạo đơn), khi đang tra kho vì nút "+", hoặc khi đang hiển thị đơn khác đơn nháp hiện tại.
+// Hủy hẹn giờ tra kho ngầm còn chờ (nếu có) để không gửi 2 request trùng nhau.
+// Không hẹn giờ gọi liên tục: chỉ gọi đúng lúc khách quay lại xem, tránh tốn request khi tab đang ẩn.
+// useTabVisible (helper dùng chung) tự gắn / gỡ bộ lắng nghe đổi tab theo vòng đời của trang.
+useTabVisible(() => {
+  clearTimeout(stockRefreshTimer)
+  refreshStockSilently()
+})
+
 // onMounted: chạy 1 lần khi trang vừa hiện ra. Có đơn nháp thì bắt đầu hiệu ứng, không thì hiện màn "chưa có đơn".
 onMounted(() => {
   if (checkoutDraft.value) play(checkoutDraft.value)
@@ -710,7 +771,18 @@ onBeforeUnmount(() => {
                         aria-label="Giảm số lượng"
                         @click="changeQuantity(index, -1)"
                       >−</button>
-                      <span class="qo-qty" aria-live="polite">{{ quantities[index] }}</span>
+                      <!-- Ô gõ số lượng tay. Không đặt max theo tồn kho (số đó có thể đã cũ):
+                           rời ô / bấm Enter thì Louis tra lại kho rồi mới nhận số (xem onQuantityInput). -->
+                      <input
+                        type="number"
+                        class="qo-qty"
+                        min="1"
+                        :value="quantities[index]"
+                        :disabled="!editable || checkingStock || item.available === false"
+                        :aria-label="`Nhập số lượng ${item.name}`"
+                        @change="onQuantityInput(index, $event)"
+                      />
+
                       <button
                         type="button"
                         :disabled="!editable || checkingStock || item.available === false"
@@ -1147,11 +1219,33 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+/* Ô gõ số lượng: trông như con số cũ (không viền, nền trong suốt), ẩn mũi tên tăng giảm mặc định của trình duyệt. */
 .qo-qty {
+  width: 2.6rem;
   min-width: 1.7rem;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid #e6e0d4;
+  border-left: 1px solid #e6e0d4;
+  background: transparent;
+  color: #131e2a;
+  font: inherit;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   text-align: center;
+  -moz-appearance: textfield;
+}
+.qo-qty::-webkit-outer-spin-button,
+.qo-qty::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.qo-qty:focus {
+  outline: 2px solid #b8893e;
+  outline-offset: -2px;
+}
+.qo-qty:disabled {
+  color: #6b6560;
 }
 
 /* tabular-nums: các chữ số rộng bằng nhau, nên lúc số đổi giá không bị rung trái phải. */

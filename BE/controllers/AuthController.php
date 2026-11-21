@@ -167,7 +167,10 @@ class AuthController
         ], 202);
     }
 
-    /** GET chỉ kiểm tra token cho link email; POST mới dùng token để đổi mật khẩu. */
+    /**
+     * GET chỉ kiểm tra token cho link email; POST mới dùng token để đổi mật khẩu.
+     * Đặt lại thành công thì mọi JWT đang dùng của tài khoản bị thu hồi (xem User::resetPasswordWithToken).
+     */
     public function resetPassword(): void
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? '';
@@ -229,7 +232,11 @@ class AuthController
             require PATH_VIEW . 'auth/password_reset_bridge.php';
         }
 
-        /** Đổi mật khẩu cho người dùng đã đăng nhập sau khi xác minh mật khẩu hiện tại. */
+        /**
+         * Đổi mật khẩu cho người dùng đã đăng nhập sau khi xác minh mật khẩu hiện tại.
+         * Thành công thì mọi JWT của tài khoản bị thu hồi (tăng token_version, xem User::changePassword),
+         * kể cả token vừa gửi request này: FE phải xóa phiên và cho người dùng đăng nhập lại.
+         */
     public function changePassword(array $authPayload): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {

@@ -327,6 +327,11 @@ onMounted(() => {
   text-decoration: none;
 }
 
+/* Rê chuột vào link quay lại thì gạch chân, giống nút thao tác ở trang danh sách sản phẩm. */
+.admin-back:hover {
+  text-decoration: underline;
+}
+
 .admin-page-head h1 {
   margin: 6px 0 20px;
   color: #131e2a;

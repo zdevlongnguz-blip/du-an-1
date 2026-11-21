@@ -151,11 +151,16 @@ class User extends BaseModel
         return $stmt->fetchColumn() !== false;
     }
 
-    /** Đổi mật khẩu theo reset token hợp lệ rồi xóa token ngay trong cùng câu lệnh. */
+    /**
+     * Đổi mật khẩu theo reset token hợp lệ rồi xóa token ngay trong cùng câu lệnh.
+     * Đồng thời tăng token_version để THU HỒI mọi JWT đang dùng của tài khoản này (mọi máy bị đăng xuất):
+     * người quên mật khẩu có thể đang bị kẻ khác giữ phiên, đặt lại mật khẩu phải cắt được phiên đó ngay.
+     */
     public function resetPasswordWithToken(string $tokenHash, string $newPassword): bool
     {
         $sql = 'UPDATE `users` SET `password` = :password, `password_reset_token` = NULL, '
-            . '`password_reset_expires_at` = NULL WHERE `password_reset_token` = :token '
+            . '`password_reset_expires_at` = NULL, `token_version` = `token_version` + 1 '
+            . 'WHERE `password_reset_token` = :token '
             . 'AND `password_reset_expires_at` > UTC_TIMESTAMP() AND `is_active` = 1';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
@@ -166,7 +171,13 @@ class User extends BaseModel
         return $stmt->rowCount() === 1;
     }
 
-    /** Xác minh mật khẩu hiện tại trước khi đổi và vô hiệu hóa reset token cũ. */
+    /**
+     * Xác minh mật khẩu hiện tại trước khi đổi và vô hiệu hóa reset token cũ.
+     * Đồng thời tăng token_version để THU HỒI mọi JWT đang dùng của tài khoản này, KỂ CẢ token của chính
+     * request đang đổi mật khẩu: mọi máy bị đăng xuất, người dùng đăng nhập lại bằng mật khẩu mới.
+     * Lý do: nếu kẻ khác đang giữ phiên (ví dụ quên đăng xuất ở máy lạ), đổi mật khẩu phải cắt được phiên đó ngay,
+     * không để token cũ còn dùng được tới khi hết hạn (JWT_TTL).
+     */
     public function changePassword(int $userId, string $currentPassword, string $newPassword): bool
     {
         $user = $this->find($userId);
@@ -175,7 +186,8 @@ class User extends BaseModel
         }
 
         $sql = 'UPDATE `users` SET `password` = :new_password, `password_reset_token` = NULL, '
-            . '`password_reset_expires_at` = NULL WHERE `id` = :id AND `password` = :current_hash';
+            . '`password_reset_expires_at` = NULL, `token_version` = `token_version` + 1 '
+            . 'WHERE `id` = :id AND `password` = :current_hash';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             'new_password' => password_hash($newPassword, PASSWORD_DEFAULT),

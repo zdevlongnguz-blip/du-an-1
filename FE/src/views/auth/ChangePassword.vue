@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/helpers/api/client'
+import { clearAuthSession } from '@/helpers/auth/session'
 import { useToast } from '@/helpers/ui/toast'
 import AuthPage from '@/components/AuthPage.vue'
 import {
@@ -55,8 +56,13 @@ const changePassword = async () => {
       current_password: form.value.currentPassword,
       new_password: form.value.newPassword
     })
-    showToast(response.data?.message || 'Đổi mật khẩu thành công.', 'success')
-    router.push('/profile')
+    // Đổi mật khẩu thành công thì BE thu hồi MỌI phiên đăng nhập của tài khoản (tăng token_version),
+    // kể cả token đang dùng ở máy này. Vì vậy xóa phiên cục bộ rồi đưa về trang đăng nhập, thay vì để
+    // request kế tiếp bị 401 và bị đá ra mà người dùng không hiểu vì sao.
+    // Sau khi đổi trang, App.vue thấy đã đăng xuất nên khung chat tự xóa hội thoại và đơn nháp trên màn hình.
+    clearAuthSession()
+    showToast('Đổi mật khẩu thành công. Vui lòng đăng nhập lại bằng mật khẩu mới.', 'success')
+    router.push('/login')
   } catch (error) {
     showToast(error.response?.data?.message || 'Không thể đổi mật khẩu.', 'danger')
     console.error('Change password failed:', error)

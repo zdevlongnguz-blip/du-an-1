@@ -27,11 +27,13 @@ class Cart extends BaseModel
             return ['items' => [], 'total_amount' => '0.00'];
         }
 
-        // Ảnh lấy từ sản phẩm; giá và tồn kho lấy từ đúng biến thể trong giỏ.
+        // image: ảnh sản phẩm (giữ nguyên như cũ). variant_image: ảnh riêng của biến thể trong giỏ (NULL = chưa có,
+        // FE dùng image thay thế). Giá và tồn kho lấy từ đúng biến thể trong giỏ.
         $itemsStatement = $this->pdo->prepare(
             'SELECT `cart_items`.`id`, `cart_items`.`variant_id`, `cart_items`.`quantity`, '
             . '`products`.`id` AS `product_id`, `products`.`name` AS `product_name`, '
             . '`products`.`slug` AS `product_slug`, `products`.`image`, '
+            . '`product_variants`.`image` AS `variant_image`, '
             . '`product_variants`.`variant_name`, `product_variants`.`attributes`, '
             . '`product_variants`.`final_price` AS `unit_price`, `product_variants`.`stock`, '
             . '`product_variants`.`is_active` '

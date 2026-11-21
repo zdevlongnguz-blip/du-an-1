@@ -425,9 +425,14 @@ class Order extends BaseModel
         $detailsStatement = $this->pdo->prepare(
             // variant_id/variant_sku/variant_label là snapshot lúc mua, vẫn đọc được dù biến thể bị xóa sau này
             // (variant_id khi đó là NULL). Đơn cũ chưa có biến thể thì variant_label là NULL.
-            'SELECT `id`, `product_id`, `variant_id`, `product_name`, `variant_sku`, `variant_label`, '
-            . '`quantity`, `unit_price` '
-            . 'FROM `order_details` WHERE `order_id` = :order_id ORDER BY `id` ASC'
+            // Ảnh KHÔNG lưu snapshot: lấy ảnh hiện tại qua LEFT JOIN (vẫn trả dòng đơn dù sản phẩm/biến thể đã bị xóa,
+            // khi đó ảnh là NULL). image = ảnh sản phẩm, variant_image = ảnh riêng biến thể (NULL = FE dùng image).
+            'SELECT `od`.`id`, `od`.`product_id`, `od`.`variant_id`, `od`.`product_name`, `od`.`variant_sku`, `od`.`variant_label`, '
+            . '`od`.`quantity`, `od`.`unit_price`, `p`.`image`, `v`.`image` AS `variant_image` '
+            . 'FROM `order_details` AS `od` '
+            . 'LEFT JOIN `products` AS `p` ON `p`.`id` = `od`.`product_id` '
+            . 'LEFT JOIN `product_variants` AS `v` ON `v`.`id` = `od`.`variant_id` '
+            . 'WHERE `od`.`order_id` = :order_id ORDER BY `od`.`id` ASC'
         );
         $detailsStatement->bindValue(':order_id', $orderId, PDO::PARAM_INT);
         $detailsStatement->execute();
