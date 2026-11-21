@@ -157,5 +157,7 @@ onMounted(loadImages)
 .images-bar button { min-width: 30px; min-height: 30px; padding: 2px 6px; border: 1px solid #d9d4ca; border-radius: 6px; background: #ffffff; color: #1c2a3a; font-size: 13px; cursor: pointer; }
 .images-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
 .images-bar .images-delete { border-color: #f1c7c7; color: #ba1a1a; }
+/* Nút Xóa ảnh: rê chuột thì gạch chân chữ, giống nút thao tác ở trang danh sách sản phẩm; đang khóa thì không. */
+.images-bar .images-delete:hover:not(:disabled) { text-decoration: underline; }
 .images-bar button:focus-visible { outline: 3px solid #b8893e; outline-offset: 1px; }
 </style>

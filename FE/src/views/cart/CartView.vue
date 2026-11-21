@@ -1,10 +1,11 @@
 <script setup>
 // Trang giỏ hàng của user đã đăng nhập: xem, đổi số lượng và xóa từng phiên bản sản phẩm.
 // Giá, tồn kho và tổng tiền do BE tính; FE chỉ hiển thị và gửi yêu cầu.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/helpers/api/client'
 import { useToast } from '@/helpers/ui/toast'
+import { useTabVisible } from '@/helpers/ui/tabVisible'
 import { formatPrice } from '@/helpers/format/price'
 import { setCartCountFromItems } from '@/helpers/cart/cartCount'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
@@ -26,10 +27,11 @@ const failedImageIds = ref([])
 const hasItems = computed(() => items.value.length > 0)
 const availableCount = computed(() => items.value.filter((item) => item.is_available).length)
 
-// Ảnh sản phẩm của dòng; null hoặc file lỗi thì trả về chuỗi rỗng để hiện ô "SB".
+// Ảnh của dòng: ưu tiên ảnh riêng của biến thể khách đang mua (variant_image), chưa có thì dùng ảnh sản phẩm (image).
+// Không có ảnh nào hoặc file lỗi thì trả về chuỗi rỗng để hiện ô "SB".
 function itemImageSrc(item) {
   if (failedImageIds.value.includes(item.id)) return ''
-  return resolveImageUrl(item.image)
+  return resolveImageUrl(item.variant_image || item.image)
 }
 
 function markImageFailed(item) {
@@ -138,19 +140,15 @@ function variantAttributesLine(item) {
 
 // Khách quay lại tab giỏ hàng (sau khi xem tab khác): tải lại giỏ trong im lặng để số tồn kho và giá không bị cũ.
 // Bỏ qua khi đang tải lần đầu hoặc đang gửi cập nhật, tránh ghi đè kết quả của yêu cầu đó.
-function onVisibilityChange() {
-  if (document.visibilityState !== 'visible' || loading.value || busyItemId.value !== null) return
+// useTabVisible (helper dùng chung) tự gắn / gỡ bộ lắng nghe đổi tab theo vòng đời của trang.
+useTabVisible(() => {
+  if (loading.value || busyItemId.value !== null) return
   fetchCart({ silent: true })
-}
+})
 
-// onMounted: tải giỏ khi trang vừa hiện ra, đồng thời lắng nghe sự kiện đổi tab của trình duyệt.
+// onMounted: tải giỏ khi trang vừa hiện ra.
 onMounted(() => {
   fetchCart()
-  document.addEventListener('visibilitychange', onVisibilityChange)
-})
-// Rời trang thì gỡ bộ lắng nghe, tránh gọi API khi trang giỏ hàng không còn hiển thị.
-onBeforeUnmount(() => {
-  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 

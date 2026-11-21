@@ -5,6 +5,7 @@
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import api from '@/helpers/api/client'
+import { useTabVisible } from '@/helpers/ui/tabVisible'
 import { getUser, isAuthenticated } from '@/helpers/auth/session'
 import { refreshCartCount } from '@/helpers/cart/cartCount'
 import { useToast } from '@/helpers/ui/toast'
@@ -68,6 +69,7 @@ const currentUserId = currentUser?.id ?? currentUser?.user_id ?? null
 
 // computed: giá trị tự tính lại mỗi khi dữ liệu nó dùng thay đổi.
 // Album ảnh: BE đã đưa ảnh đại diện (product.image) lên đầu product.images; nếu rỗng thì dùng product.image.
+// Sau ảnh slide là ảnh riêng của từng biến thể (variant.image), bỏ ảnh trùng để không hiện 2 lần.
 const galleryImages = computed(() => {
   if (!product.value) return []
 
@@ -79,8 +81,33 @@ const galleryImages = computed(() => {
     images.push(product.value.image)
   }
 
+  const variants = Array.isArray(product.value.variants) ? product.value.variants : []
+  for (const variant of variants) {
+    if (variant.image && !images.includes(variant.image)) {
+      images.push(variant.image)
+    }
+  }
+
   return images
 })
+
+// Ảnh hiện ở cột trái thẻ biến thể: ảnh riêng của biến thể, chưa có thì dùng ảnh sản phẩm ('' nếu không có ảnh nào).
+function variantPhoto(variant) {
+  return variant.image || product.value?.image || ''
+}
+
+// Vị trí ảnh của biến thể trong album (-1 nếu không có trong album). Dùng chung chỉ số với album
+// để đánh dấu ảnh đang xem và để ghi nhớ ảnh tải lỗi (failedImages).
+function variantImageIndex(variant) {
+  const photo = variantPhoto(variant)
+  return photo ? galleryImages.value.indexOf(photo) : -1
+}
+
+// Bấm ảnh trên thẻ biến thể: chuyển ảnh lớn của album sang ảnh của biến thể đó.
+function showVariantImage(variant) {
+  const index = variantImageIndex(variant)
+  if (index >= 0) activeImageIndex.value = index
+}
 
 const activeImage = computed(() => galleryImages.value[activeImageIndex.value] ?? '')
 
@@ -100,7 +127,8 @@ function variantInCart(variant) {
   return Math.max(0, Math.floor(Number(cartQuantities.value[variant.id]) || 0))
 }
 
-// Số còn có thể thêm = tồn kho trừ số đã có trong giỏ. Giỏ không giữ kho nên BE vẫn kiểm tra lại khi thêm.
+// Số còn có thể thêm = tồn kho trừ số đã có trong giỏ. Tồn kho là số của lần tải/tra gần nhất, có thể đã cũ,
+// nên mỗi lần bấm "+"/"−" đều tra lại kho thật trước (stepVariantQuantity), và BE vẫn kiểm tra lại khi thêm.
 function variantMaxQuantity(variant) {
   const stock = Math.max(0, Math.floor(Number(variant.stock) || 0))
   return Math.max(0, stock - variantInCart(variant))
@@ -119,6 +147,7 @@ function getVariantQuantity(variant) {
   return Math.min(variantQuantities.value[variant.id] ?? 1, max)
 }
 
+// Ghi số lượng đang chọn của một biến thể, kẹp trong khoảng 1 đến số còn có thể thêm.
 function setVariantQuantity(variant, value) {
   variantQuantities.value = {
     ...variantQuantities.value,
@@ -126,11 +155,115 @@ function setVariantQuantity(variant, value) {
   }
 }
 
-// Người dùng gõ số tay: khi rời ô (change) mới kẹp về khoảng hợp lệ, để không ngắt lúc đang gõ.
-function onVariantQuantityChange(variant, event) {
-  const parsed = Math.floor(Number(event.target.value))
-  setVariantQuantity(variant, Number.isFinite(parsed) ? parsed : 1)
-  event.target.value = getVariantQuantity(variant)
+// ID biến thể đang gửi tra kho vì bấm "+"/"−" (null = rảnh). Trong lúc chờ server, mọi bộ tăng giảm trên trang
+// đều bị khóa (giống trang Giỏ hàng khóa nút khi đang cập nhật), vì một lần tra cập nhật kho của mọi biến thể.
+const checkingStockVariantId = ref(null)
+
+// Tra tồn kho THẬT của mọi biến thể trong sản phẩm đang xem (MỘT request), rồi ghi đè variant.stock trên trang.
+// API api-product-stock (GET, công khai). Không dùng api-product-detail vì API đó tăng lượt xem; không dùng
+// api-order-draft-items vì API đó kẹp kho tối đa 99 (dành cho đơn nháp AI), làm trang báo sai số còn lại.
+// Thành công: { status, variants: [{ id, sku, stock, is_active }] }. Biến thể đã tắt bán coi như kho 0.
+// Lỗi mạng/server thì ném lỗi cho nơi gọi xử lý.
+async function refreshProductStock() {
+  const productId = product.value?.id
+  if (!productId) return
+  const response = await api.get('/?action=api-product-stock', { params: { id: productId } })
+  if (response.data?.status !== 'success' || !Array.isArray(response.data?.variants)) {
+    throw new Error('Dữ liệu tồn kho trả về không hợp lệ.')
+  }
+  // Chống "race": trong lúc chờ, khách có thể đã chuyển sang sản phẩm khác; khi đó bỏ kết quả cũ.
+  if (product.value?.id !== productId) return
+
+  const freshById = new Map(response.data.variants.map((item) => [Number(item.id), item]))
+  const variants = Array.isArray(product.value.variants) ? product.value.variants : []
+  for (const variant of variants) {
+    const fresh = freshById.get(Number(variant.id))
+    // Không còn trong kết quả = biến thể vừa bị xóa: coi như hết hàng (BE vẫn chặn nếu khách cố thêm).
+    // variant là object nằm trong product.value (ref), sửa trực tiếp thì Vue vẫn nhận ra và vẽ lại số "Còn N".
+    variant.stock = fresh && fresh.is_active === true ? Math.max(0, Math.floor(Number(fresh.stock) || 0)) : 0
+  }
+  // Cập nhật luôn tổng tồn kho của sản phẩm (dòng "Còn N sản phẩm" / "Hết hàng" phía trên) theo số mới.
+  product.value.stock = variants.reduce((sum, variant) => sum + (Number(variant.stock) || 0), 0)
+}
+
+// Khách quay lại tab trang sản phẩm (sau khi xem tab khác): tra lại kho mọi biến thể và số đã có trong giỏ
+// trong im lặng (không hiện "đang tải"), để số "Còn N" và giới hạn nút "+" không bị cũ. Cùng cách với trang Giỏ hàng.
+// Chỉ chạy khi đã tải xong sản phẩm và không có thao tác nào đang chạy (đang tra kho vì nút "+", đang thêm giỏ)
+// để không ghi đè kết quả của thao tác đó. Khách chưa đăng nhập vẫn được cập nhật kho (API kho công khai);
+// fetchCartQuantities tự bỏ qua khi chưa đăng nhập.
+// Không hẹn giờ gọi liên tục: chỉ gọi đúng lúc khách quay lại xem, tránh tốn request khi tab đang ẩn.
+// useTabVisible (helper dùng chung) tự gắn / gỡ bộ lắng nghe đổi tab theo vòng đời của trang.
+useTabVisible(() => {
+  if (!product.value) return
+  if (checkingStockVariantId.value !== null || cartAddingVariantIds.value.size > 0) return
+  // Lỗi khi tra ngầm thì bỏ qua: giữ số đang hiện, BE vẫn kiểm tra lại khi khách bấm "Thêm vào giỏ".
+  Promise.all([refreshProductStock(), fetchCartQuantities()]).catch((error) => {
+    console.error('Không tra lại được tồn kho khi quay lại trang:', error)
+  })
+})
+
+// Bấm "+" (delta = 1) hoặc "−" (delta = -1): giống trang Giỏ hàng, MỖI lần bấm đều hỏi server trước rồi mới đổi số.
+// Tra kho thật (api-product-stock) và số đã có trong giỏ cùng lúc (Promise.all), khóa nút tới khi server trả lời,
+// nên khoảng cách giữa các lần bấm chính là thời gian chờ server (không bấm dồn được nhiều lần).
+// Không chặn khách bằng số kho cũ lúc mở trang: kho có thể đã tăng (admin nhập thêm, khách khác hủy đơn) hoặc đã giảm.
+async function stepVariantQuantity(variant, delta) {
+  if (checkingStockVariantId.value !== null) return
+  checkingStockVariantId.value = variant.id
+  try {
+    await Promise.all([refreshProductStock(), fetchCartQuantities()])
+    // Tính lại theo kho mới: getVariantQuantity đã tự kẹp số đang chọn về số còn thêm được.
+    const current = getVariantQuantity(variant)
+    const max = variantMaxQuantity(variant)
+    if (max <= 0) {
+      showToast('Phiên bản này hiện đã hết hàng hoặc bạn đã thêm đủ số còn lại vào giỏ.', 'info')
+    } else if (delta > 0 && current >= max) {
+      showToast(`Đã kiểm tra lại: phiên bản này hiện chỉ thêm được tối đa ${max}.`, 'info')
+    } else {
+      // Còn thêm được (hoặc đang giảm): đổi số; setVariantQuantity kẹp trong khoảng 1 đến max.
+      setVariantQuantity(variant, current + delta)
+    }
+  } catch (error) {
+    // Tra kho lỗi: giữ nguyên số đang chọn; BE vẫn kiểm tra lại khi khách bấm "Thêm vào giỏ".
+    console.error('Không tra lại được tồn kho khi đổi số lượng:', error)
+    showToast('Chưa kiểm tra được kho mới nhất, bạn thử lại sau giây lát.', 'warning')
+  } finally {
+    // finally luôn chạy dù thành công hay lỗi, nên mở khóa bộ tăng giảm ở đây.
+    checkingStockVariantId.value = null
+  }
+}
+
+// Người dùng gõ số tay: chỉ xử lý khi rời ô / bấm Enter (sự kiện change), để không ngắt lúc đang gõ.
+// Giống nút "+"/"−" và trang Giỏ hàng: KHÔNG kẹp theo số kho cũ trên trang mà hỏi server trước
+// (api-product-stock + api-cart), khóa bộ tăng giảm trong lúc chờ, rồi kẹp số khách gõ về 1..số còn thêm được.
+// Số gõ không hợp lệ (trống, chữ, nhỏ hơn 1) thì trả ô về số đang chọn, không gọi server.
+async function onVariantQuantityChange(variant, event) {
+  const input = event.target
+  const typed = Math.floor(Number(input.value))
+  if (checkingStockVariantId.value !== null || !Number.isFinite(typed) || typed < 1) {
+    input.value = getVariantQuantity(variant)
+    return
+  }
+
+  checkingStockVariantId.value = variant.id
+  try {
+    await Promise.all([refreshProductStock(), fetchCartQuantities()])
+    const max = variantMaxQuantity(variant)
+    if (max <= 0) {
+      showToast('Phiên bản này hiện đã hết hàng hoặc bạn đã thêm đủ số còn lại vào giỏ.', 'info')
+    } else {
+      setVariantQuantity(variant, typed)
+      if (typed > max) showToast(`Đã kiểm tra lại: phiên bản này hiện chỉ thêm được tối đa ${max}.`, 'info')
+    }
+  } catch (error) {
+    // Tra kho lỗi: vẫn nhận số khách gõ nhưng kẹp theo số trên trang; BE kiểm tra lại khi bấm "Thêm vào giỏ".
+    console.error('Không tra lại được tồn kho khi gõ số lượng:', error)
+    setVariantQuantity(variant, typed)
+    showToast('Chưa kiểm tra được kho mới nhất, bạn thử lại sau giây lát.', 'warning')
+  } finally {
+    checkingStockVariantId.value = null
+    // Ô nhập có thể vẫn hiện số khách gõ (khi số lượng không đổi Vue không vẽ lại), nên ghi lại số thật vào ô.
+    input.value = getVariantQuantity(variant)
+  }
 }
 
 // Thông số của biến thể để hiện trong phần thả xuống: có nhãn, đã bỏ giá trị null/rỗng (helper dùng chung).
@@ -140,19 +273,23 @@ function variantDetails(variant) {
   return listVariantAttributes(variant.attributes).filter((attribute) => !name.includes(attribute.value.toLowerCase()))
 }
 
-// Biến thể nào đang mở phần chi tiết: object { [variant.id]: true }. Mặc định tất cả đều thu gọn.
-// Gán object mới (không sửa trực tiếp) để Vue nhận ra thay đổi và vẽ lại giao diện.
-const expandedVariants = ref({})
+// Số biến thể hiện sẵn; sản phẩm có nhiều hơn số này thì hiện nút "Xem thêm" để xổ xuống phần còn lại.
+const VARIANTS_PREVIEW_COUNT = 3
+// true khi khách đã bấm "Xem thêm" (đang hiện đủ mọi biến thể).
+const showAllVariants = ref(false)
 
-// true nếu biến thể đang mở phần chi tiết.
-function isVariantExpanded(variant) {
-  return expandedVariants.value[variant.id] === true
-}
+// computed: danh sách biến thể đang hiện. Mặc định chỉ VARIANTS_PREVIEW_COUNT biến thể đầu
+// (BE đã xếp biến thể mặc định lên đầu), bấm "Xem thêm" thì hiện hết.
+const visibleVariants = computed(() => {
+  const variants = Array.isArray(product.value?.variants) ? product.value.variants : []
+  return showAllVariants.value ? variants : variants.slice(0, VARIANTS_PREVIEW_COUNT)
+})
 
-// Bấm "Chi tiết"/"Thu gọn": đảo trạng thái mở của đúng biến thể đó, các biến thể khác giữ nguyên.
-function toggleVariant(variant) {
-  expandedVariants.value = { ...expandedVariants.value, [variant.id]: !isVariantExpanded(variant) }
-}
+// Số biến thể đang bị ẩn, dùng cho chữ trên nút "Xem thêm N phiên bản" (0 = không cần nút).
+const hiddenVariantCount = computed(() => {
+  const total = Array.isArray(product.value?.variants) ? product.value.variants.length : 0
+  return Math.max(0, total - VARIANTS_PREVIEW_COUNT)
+})
 
 const canManageComment = (comment) => currentUserId != null && String(comment.user_id) === String(currentUserId)
 
@@ -372,6 +509,11 @@ async function addVariantToCart(variant) {
     fetchCartQuantities()
   } catch (error) {
     showToast(error.response?.data?.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'danger')
+    // 409: vượt tồn kho hoặc vừa ngừng bán. Tra lại kho và giỏ để số "Còn N" trên trang không còn cũ.
+    // Lỗi khi tra thì bỏ qua: khách đã thấy thông báo lỗi ở trên rồi.
+    if (error.response?.status === 409) {
+      Promise.all([refreshProductStock(), fetchCartQuantities()]).catch(() => {})
+    }
   } finally {
     setVariantAdding(variant, false)
   }
@@ -397,8 +539,8 @@ watch(
     newCommentError.value = ''
     cancelEditComment()
     variantQuantities.value = {}
-    // Sang sản phẩm khác thì mọi biến thể quay về trạng thái thu gọn.
-    expandedVariants.value = {}
+    // Sang sản phẩm khác thì danh sách biến thể quay về chỉ hiện vài biến thể đầu.
+    showAllVariants.value = false
     activeImageIndex.value = 0
     failedImages.value = new Set()
 
@@ -490,27 +632,71 @@ watch(
             <p v-if="!product.variants || product.variants.length === 0" class="pd-description">Sản phẩm chưa có phiên bản để bán.</p>
             <ul v-else class="pd-variant-list">
               <li
-                v-for="variant in product.variants"
+                v-for="variant in visibleVariants"
                 :key="variant.id"
                 class="pd-variant"
                 :class="{ 'is-out': variantMaxQuantity(variant) <= 0 }"
               >
+                <!-- Cột trái: ảnh biến thể (chưa có ảnh riêng thì ảnh sản phẩm) và cụm thêm giỏ thu gọn ngay bên dưới.
+                     Bấm ảnh thì album lớn phía trên chuyển sang đúng ảnh đó. -->
+                <div class="pd-variant-side">
+                  <button
+                    type="button"
+                    class="pd-variant-photo"
+                    :class="{ 'is-active': variantImageIndex(variant) >= 0 && variantImageIndex(variant) === activeImageIndex }"
+                    :disabled="variantImageIndex(variant) < 0"
+                    :aria-label="`Xem ảnh ${variant.variant_name}`"
+                    @click="showVariantImage(variant)"
+                  >
+                    <img
+                      v-if="variantPhoto(variant) && !failedImages.has(variantImageIndex(variant))"
+                      :src="resolveImageUrl(variantPhoto(variant))"
+                      alt=""
+                      loading="lazy"
+                      @error="markImageFailed(variantImageIndex(variant))"
+                    >
+                    <span v-else class="pd-image-fallback pd-image-fallback--small" aria-hidden="true">SB</span>
+                  </button>
+                  <div v-if="loggedIn" class="pd-variant-actions">
+                    <div class="pd-stepper" role="group" :aria-label="`Số lượng ${variant.variant_name}`">
+                      <button
+                        type="button"
+                        :disabled="checkingStockVariantId !== null || variantMaxQuantity(variant) <= 0 || getVariantQuantity(variant) <= 1"
+                        aria-label="Giảm số lượng"
+                        @click="stepVariantQuantity(variant, -1)"
+                      >−</button>
+                      <input
+                        type="number"
+                        class="pd-stepper-input"
+                        min="1"
+                        :max="variantMaxQuantity(variant)"
+                        :value="getVariantQuantity(variant)"
+                        :disabled="checkingStockVariantId !== null || variantMaxQuantity(variant) <= 0"
+                        :aria-label="`Số lượng ${variant.variant_name}`"
+                        @change="onVariantQuantityChange(variant, $event)"
+                      />
+                      <button
+                        type="button"
+                        :disabled="checkingStockVariantId !== null"
+                        aria-label="Tăng số lượng"
+                        @click="stepVariantQuantity(variant, 1)"
+                      >+</button>
+                    </div>
+                    <button
+                      type="button"
+                      class="pd-btn pd-btn--primary pd-btn--inline"
+                      :disabled="variantMaxQuantity(variant) <= 0 || isVariantAdding(variant) || checkingStockVariantId !== null"
+                      @click="addVariantToCart(variant)"
+                    >
+                      {{ isVariantAdding(variant) ? 'Đang thêm...' : 'Thêm vào giỏ' }}
+                    </button>
+                  </div>
+                </div>
+
                 <div class="pd-variant-info">
-                  <!-- Dòng đầu: tên biến thể + nút "Chi tiết" (chỉ có khi biến thể có thông số để xem).
-                       Thông số mặc định ẩn để thẻ gọn; bấm nút thì thả xuống bảng thông số bên dưới. -->
+                  <!-- Dòng đầu: tên biến thể -->
                   <div class="pd-variant-head">
                     <strong class="pd-variant-name">{{ variant.variant_name }}</strong>
-                    <button
-                      v-if="variantDetails(variant).length > 0"
-                      type="button"
-                      class="pd-variant-toggle"
-                      :aria-expanded="isVariantExpanded(variant)"
-                      :aria-controls="`pd-variant-details-${variant.id}`"
-                      @click="toggleVariant(variant)"
-                    >
-                      {{ isVariantExpanded(variant) ? 'Thu gọn' : 'Chi tiết' }}
-                      <span class="pd-variant-chevron" :class="{ 'is-open': isVariantExpanded(variant) }" aria-hidden="true">▾</span>
-                    </button>
                   </div>
                   <div class="pd-variant-price">
                     <strong :class="{ 'is-sale': variantIsOnSale(variant) }">{{ formatPrice(variant.final_price) }}</strong>
@@ -521,55 +707,27 @@ watch(
                     <template v-if="variantInCart(variant) > 0"> · Trong giỏ: {{ variantInCart(variant) }}</template>
                   </span>
 
-                  <!-- Bảng thông số của biến thể (thả xuống khi bấm "Chi tiết"): nhãn tiếng Việt, đã bỏ giá trị trống. -->
-                  <dl
-                    v-if="isVariantExpanded(variant)"
-                    :id="`pd-variant-details-${variant.id}`"
-                    class="pd-variant-details"
-                  >
+                  <!-- Bảng thông số của biến thể (luôn hiện): nhãn tiếng Việt, đã bỏ giá trị trống. -->
+                  <dl v-if="variantDetails(variant).length > 0" class="pd-variant-details">
                     <div v-for="attribute in variantDetails(variant)" :key="attribute.key" class="pd-variant-detail">
                       <dt>{{ attribute.label }}</dt>
                       <dd>{{ attribute.value }}</dd>
                     </div>
                   </dl>
                 </div>
-
-                <div v-if="loggedIn" class="pd-variant-actions">
-                  <div class="pd-stepper" role="group" :aria-label="`Số lượng ${variant.variant_name}`">
-                    <button
-                      type="button"
-                      :disabled="variantMaxQuantity(variant) <= 0 || getVariantQuantity(variant) <= 1"
-                      aria-label="Giảm số lượng"
-                      @click="setVariantQuantity(variant, getVariantQuantity(variant) - 1)"
-                    >−</button>
-                    <input
-                      type="number"
-                      class="pd-stepper-input"
-                      min="1"
-                      :max="variantMaxQuantity(variant)"
-                      :value="getVariantQuantity(variant)"
-                      :disabled="variantMaxQuantity(variant) <= 0"
-                      :aria-label="`Số lượng ${variant.variant_name}`"
-                      @change="onVariantQuantityChange(variant, $event)"
-                    />
-                    <button
-                      type="button"
-                      :disabled="getVariantQuantity(variant) >= variantMaxQuantity(variant)"
-                      aria-label="Tăng số lượng"
-                      @click="setVariantQuantity(variant, getVariantQuantity(variant) + 1)"
-                    >+</button>
-                  </div>
-                  <button
-                    type="button"
-                    class="pd-btn pd-btn--primary pd-btn--inline"
-                    :disabled="variantMaxQuantity(variant) <= 0 || isVariantAdding(variant)"
-                    @click="addVariantToCart(variant)"
-                  >
-                    {{ isVariantAdding(variant) ? 'Đang thêm...' : 'Thêm vào giỏ' }}
-                  </button>
-                </div>
               </li>
             </ul>
+            <!-- Nút xổ xuống / thu gọn: chỉ có khi sản phẩm có nhiều hơn VARIANTS_PREVIEW_COUNT biến thể -->
+            <button
+              v-if="hiddenVariantCount > 0"
+              type="button"
+              class="pd-variants-more"
+              :aria-expanded="showAllVariants"
+              @click="showAllVariants = !showAllVariants"
+            >
+              {{ showAllVariants ? 'Thu gọn' : `Xem thêm ${hiddenVariantCount} phiên bản` }}
+              <span class="pd-variants-more-chevron" :class="{ 'is-open': showAllVariants }" aria-hidden="true">▾</span>
+            </button>
           </section>
 
           <!-- Khách chưa đăng nhập: không có nút mua hàng, chỉ có gợi ý đăng nhập. -->
@@ -985,6 +1143,87 @@ watch(
   border-radius: 6px;
 }
 
+/* Thẻ biến thể chia 2 cột: trái = ảnh + cụm thêm giỏ, phải = tên, giá, kho, thông số.
+   minmax(0, 1fr): cột phải được co lại khi chữ dài, không đẩy thẻ tràn ngang. */
+.pd-variant {
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.pd-variant-side {
+  display: grid;
+  gap: 8px;
+}
+
+/* Ảnh vuông của biến thể; bấm để album lớn chuyển sang ảnh này. */
+.pd-variant-photo {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #e6e0d4;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.pd-variant-photo:disabled {
+  cursor: default;
+}
+
+.pd-variant-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pd-variant-photo.is-active,
+.pd-variant-photo:hover:not(:disabled) {
+  border-color: #b8893e;
+}
+
+.pd-variant-photo:focus-visible {
+  outline: 3px solid #b8893e;
+  outline-offset: 2px;
+}
+
+/* Cụm thêm giỏ thu gọn trong cột trái: bộ tăng giảm ở trên, nút "Thêm vào giỏ" ở dưới, cùng rộng bằng ảnh. */
+.pd-variant-side .pd-variant-actions {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.pd-variant-side .pd-stepper button {
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+}
+
+.pd-variant-side .pd-stepper-input {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 14px;
+}
+
+.pd-variant-side .pd-btn {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+/* Điện thoại: cột trái hẹp lại để cột thông số còn đủ chỗ. */
+@media (max-width: 575.98px) {
+  .pd-variant {
+    grid-template-columns: 108px minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+
 .pd-variant.is-out {
   opacity: 0.6;
 }
@@ -1008,40 +1247,43 @@ watch(
 }
 
 /* Nút thả xuống: chữ nhỏ màu đồng, mũi tên xoay 180 độ khi mở. */
-.pd-variant-toggle {
-  display: inline-flex;
-  flex: 0 0 auto;
+/* Nút "Xem thêm N phiên bản" / "Thu gọn" dưới danh sách biến thể. */
+.pd-variants-more {
+  display: flex;
+  width: 100%;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 12px;
   border: 1px solid #d9d4ca;
   border-radius: 6px;
   background: #ffffff;
   color: #9e7432;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 
-.pd-variant-toggle:hover {
+.pd-variants-more:hover {
   border-color: #b8893e;
 }
 
-.pd-variant-toggle:focus-visible {
+.pd-variants-more:focus-visible {
   outline: 3px solid #b8893e;
   outline-offset: 2px;
 }
 
-.pd-variant-chevron {
+.pd-variants-more-chevron {
   display: inline-block;
   transition: transform 160ms ease;
 }
 
-.pd-variant-chevron.is-open {
+.pd-variants-more-chevron.is-open {
   transform: rotate(180deg);
 }
 
-/* Bảng thông số thả xuống: nền kem, mỗi dòng "nhãn | giá trị". */
+/* Bảng thông số của biến thể: nền kem, mỗi dòng "nhãn | giá trị". */
 .pd-variant-details {
   display: grid;
   gap: 6px;
@@ -1069,7 +1311,7 @@ watch(
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pd-variant-chevron {
+  .pd-variants-more-chevron {
     transition: none;
   }
 }

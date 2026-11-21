@@ -6,6 +6,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import api from '@/helpers/api/client'
 import { formatPrice } from '@/helpers/format/price'
+import { resolveImageUrl } from '@/helpers/media/imageUrl'
 import { showToast } from '@/helpers/ui/toast'
 import OrderPanel from '@/components/orders/OrderPanel.vue'
 import StateBlock from '@/components/StateBlock.vue'
@@ -38,6 +39,20 @@ const acting = ref(false)
 // Rút order ra computed để template không phải kiểm tra null nhiều lần.
 const order = computed(() => invoice.value?.order || null)
 const items = computed(() => invoice.value?.items || [])
+// ID các dòng hàng có ảnh tải lỗi (file không còn); những dòng này chuyển sang ô "SB".
+const failedImageIds = ref([])
+
+// Ảnh của dòng hàng: ưu tiên ảnh riêng của biến thể đã mua (variant_image), chưa có thì dùng ảnh sản phẩm (image).
+// BE lấy ảnh hiện tại (không lưu lúc mua); sản phẩm đã bị xóa thì cả hai là null -> trả chuỗi rỗng để hiện "SB".
+function itemImageSrc(item) {
+  if (failedImageIds.value.includes(item.id)) return ''
+  return resolveImageUrl(item.variant_image || item.image)
+}
+
+// Gọi khi thẻ <img> báo lỗi tải ảnh, để dòng đó chuyển sang ô thay thế.
+function markImageFailed(item) {
+  if (!failedImageIds.value.includes(item.id)) failedImageIds.value = [...failedImageIds.value, item.id]
+}
 
 // Mô tả ngắn cho từng bước tiến trình (thứ tự khớp ORDER_PROGRESS_STEPS).
 const STEP_NOTES = [
@@ -215,6 +230,11 @@ watch(() => route.params.id, loadInvoice)
               <h2 class="detail-heading">Sản phẩm trong đơn ({{ items.length }})</h2>
               <ul class="list-unstyled mb-0">
                 <li v-for="item in items" :key="item.id" class="detail-item">
+                  <!-- Ảnh nhỏ của biến thể đã mua (không có thì ảnh sản phẩm, không có nữa thì ô "SB") -->
+                  <div class="detail-item__thumb">
+                    <img v-if="itemImageSrc(item)" :src="itemImageSrc(item)" :alt="item.product_name" loading="lazy" @error="markImageFailed(item)" />
+                    <span v-else class="detail-item__thumb-empty" aria-hidden="true">SB</span>
+                  </div>
                   <div class="detail-item__main">
                     <p class="detail-item__name">{{ item.product_name }}</p>
                     <p v-if="item.variant_label" class="detail-item__variant">{{ item.variant_label }}</p>
@@ -475,7 +495,37 @@ watch(() => route.params.id, loadInvoice)
 }
 
 .detail-item__main {
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+/* Ảnh nhỏ của dòng hàng, cùng kiểu với ảnh trong giỏ hàng nhưng nhỏ hơn. */
+.detail-item__thumb {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 64px;
+  overflow: hidden;
+  padding: 3px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #f7f4ee;
+}
+
+.detail-item__thumb img {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.detail-item__thumb-empty {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #b8893e;
+  font-family: var(--font-display);
+  font-size: 16px;
 }
 
 .detail-item__name {

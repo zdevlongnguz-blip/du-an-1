@@ -123,6 +123,46 @@ class ProductController{
     }
 
     /**
+     * Tra tồn kho hiện tại của mọi biến thể trong một sản phẩm: GET ?action=api-product-stock&id=<product_id>.
+     * Công khai (không cần đăng nhập): số kho vốn đã hiện ở trang chi tiết. Trang chi tiết gọi mỗi lần khách bấm
+     * "+"/"−", khi thêm giỏ bị từ chối, và khi khách quay lại tab, để số "Còn N" không bị cũ.
+     * Khác api-product-detail: không tăng lượt xem. Khác api-order-draft-items: trả số kho THẬT, không kẹp tối đa 99.
+     *
+     * Thành công 200: { status, variants: [{ id, sku, stock, is_active }] } (cả biến thể đã tắt bán, kèm is_active).
+     * Lỗi: 405 sai method, 400 id không hợp lệ, 404 không có sản phẩm.
+     *
+     * @return void
+     */
+    public function stock(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $productId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+        if ($productId === false || $productId < 1) {
+            response_json(['status' => 'error', 'message' => 'ID sản phẩm không hợp lệ'], 400);
+        }
+
+        $variants = $this->product->getVariantStocks($productId);
+        if ($variants === null) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
+        }
+
+        // Ép kiểu để FE nhận đúng number/boolean thay vì chuỗi từ MySQL.
+        $variants = array_map(static function (array $variant): array {
+            return [
+                'id' => (int) $variant['id'],
+                'sku' => $variant['sku'],
+                'stock' => (int) $variant['stock'],
+                'is_active' => (int) $variant['is_active'] === 1,
+            ];
+        }, $variants);
+
+        response_json(['status' => 'success', 'variants' => $variants]);
+    }
+
+    /**
     * Trả về chi tiết sản phẩm theo slug, gồm ảnh và tăng view_count khi tìm thấy.
      * Thiếu slug trả HTTP 400; không có sản phẩm trả HTTP 404.
      */
@@ -169,6 +209,8 @@ class ProductController{
                 'variant_name' => $variant['variant_name'],
                 // Mảng chuẩn [{key, label, value}], luôn đủ 5 khóa mặc định (xem extensions/VariantAttributes.php).
                 'attributes' => VariantAttributes::decode($variant['attributes']),
+                // Ảnh riêng của biến thể (tên file), null = chưa có, FE dùng product.image thay thế.
+                'image' => $variant['image'] === null || $variant['image'] === '' ? null : $variant['image'],
                 'price' => (float)$variant['price'],
                 'sale_price' => $variant['sale_price'] === null ? null : (float)$variant['sale_price'],
                 'final_price' => (float)$variant['final_price'],
@@ -248,6 +290,8 @@ class ProductController{
                 'variant_name' => $variant['variant_name'],
                 // Mảng chuẩn [{key, label, value}], luôn đủ 5 khóa mặc định (xem extensions/VariantAttributes.php).
                 'attributes' => VariantAttributes::decode($variant['attributes']),
+                // Ảnh riêng của biến thể (tên file), null = chưa có ảnh riêng.
+                'image' => $variant['image'] === null || $variant['image'] === '' ? null : $variant['image'],
                 'price' => (float) $variant['price'],
                 'sale_price' => $variant['sale_price'] === null ? null : (float) $variant['sale_price'],
                 'final_price' => (float) $variant['final_price'],
@@ -774,8 +818,65 @@ class ProductController{
         if (!$deleted) {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy biến thể'], 404);
         }
+        // Dọn file ảnh riêng của biến thể vừa xóa, chỉ khi không còn bản ghi nào khác dùng file đó.
+        $this->deleteImageIfUnused((string) ($variant['image'] ?? ''));
 
         response_json(['status' => 'success', 'message' => 'Đã xóa biến thể']);
+    }
+
+    /**
+     * Đổi hoặc bỏ ảnh riêng của biến thể: POST ?action=api-admin-variant-image&id=<id biến thể>.
+     * - Gửi multipart/form-data có file `image`: lưu ảnh mới, thay ảnh cũ.
+     * - Gửi `remove=1` (không kèm file): bỏ ảnh riêng, biến thể dùng lại ảnh sản phẩm.
+     * Phải dùng POST vì PHP chỉ đọc file upload ($_FILES) với POST, không đọc với PUT.
+     * Thành công 200 { variant: { id, image } }. Sai method 405; id sai 400; thiếu/sai file 422; không có biến thể 404.
+     * Quyền admin kiểm tra ở router.
+     *
+     * @return void
+     */
+    public function adminVariantImage(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $variantId = $this->getAdminId();
+        $variant = $this->product->getVariantById($variantId);
+        if ($variant === null) {
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy biến thể'], 404);
+        }
+        $oldImage = (string) ($variant['image'] ?? '');
+
+        $remove = $this->readBool($_POST['remove'] ?? false);
+        // Bỏ ảnh thì không nhận file; đổi ảnh thì bắt buộc có file (receiveAdminImage trả 422 nếu thiếu/sai).
+        $newImage = $remove ? null : $this->receiveAdminImage(true);
+
+        try {
+            $updated = $this->product->updateVariantImage($variantId, $newImage);
+        } catch (Throwable $exception) {
+            // Ghi DB lỗi: xóa file vừa lưu để không đọng file rác.
+            if ($newImage !== null) {
+                delete_uploaded_file($newImage);
+            }
+            throw $exception;
+        }
+        if (!$updated) {
+            if ($newImage !== null) {
+                delete_uploaded_file($newImage);
+            }
+            response_json(['status' => 'error', 'message' => 'Không tìm thấy biến thể'], 404);
+        }
+
+        // Thứ tự quan trọng: ghi DB trỏ sang ảnh mới TRƯỚC, rồi mới dọn file cũ (nếu không còn ai dùng).
+        if ($oldImage !== '' && $oldImage !== $newImage) {
+            $this->deleteImageIfUnused($oldImage);
+        }
+
+        response_json([
+            'status' => 'success',
+            'message' => $remove ? 'Đã bỏ ảnh riêng của biến thể' : 'Đã cập nhật ảnh biến thể',
+            'variant' => ['id' => $variantId, 'image' => $newImage],
+        ]);
     }
 
     /**

@@ -77,6 +77,11 @@ switch ($action) {
         (new ProductController)->detail();
         break;
 
+    // API tra tồn kho hiện tại của mọi biến thể trong một sản phẩm (không tăng lượt xem), không yêu cầu đăng nhập.
+    case 'api-product-stock':
+        (new ProductController)->stock();
+        break;
+
     // API lấy top 5 sản phẩm theo lượt xem hoặc lượt bán, không yêu cầu đăng nhập.
     case 'api-products-top':
         (new ProductController)->top();
@@ -253,6 +258,12 @@ switch ($action) {
     case 'api-admin-variant-update':
         (new AdminMiddleware())->requireAdmin();
         (new ProductController)->adminVariantUpdate();
+        break;
+
+    // API admin đổi / bỏ ảnh riêng của biến thể (POST multipart/form-data); yêu cầu role admin.
+    case 'api-admin-variant-image':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminVariantImage();
         break;
 
     // API admin xóa biến thể (không xóa được biến thể mặc định); yêu cầu role admin.

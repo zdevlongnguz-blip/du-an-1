@@ -1,12 +1,15 @@
 <script setup>
 // Quản lý biến thể của một sản phẩm trong form sửa (trang quản trị). Tự tải danh sách biến thể.
-// API: api-admin-product-detail (đọc), api-admin-variant-create / -update / -delete (ghi).
+// API: api-admin-product-detail (đọc), api-admin-variant-create / -update / -delete (ghi),
+//      api-admin-variant-image (đổi / bỏ ảnh riêng của biến thể, multipart).
 // Quy tắc (BE kiểm tra lại): mỗi sản phẩm đúng 1 biến thể mặc định; không tắt bán / không xóa biến thể mặc định
 // (đặt biến thể khác làm mặc định trước). Thuộc tính nhập tự do: 5 khóa mặc định + khóa tự do.
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '@/helpers/api/client'
 import { showToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
+import { resolveImageUrl } from '@/helpers/media/imageUrl'
+import { IMAGE_ACCEPT, validateImageFile } from '@/helpers/media/imageUpload'
 import AdminTable from '@/components/admin/AdminTable.vue'
 
 const props = defineProps({
@@ -18,6 +21,7 @@ const props = defineProps({
 const KEY_PATTERN = /^[a-z0-9_]{1,50}$/
 
 const columns = [
+  { key: 'image', label: 'Ảnh', align: 'center' },
   { key: 'variant_name', label: 'Biến thể' },
   { key: 'sku', label: 'SKU' },
   { key: 'price', label: 'Giá', align: 'right' },
@@ -27,6 +31,8 @@ const columns = [
 ]
 
 const variants = ref([])
+// Ảnh đại diện của sản phẩm: hiện mờ ở dòng biến thể chưa có ảnh riêng (khách cũng thấy ảnh này thay thế).
+const productImage = ref('')
 const loading = ref(false)
 const loadError = ref('')
 // ID biến thể đang xử lý (đặt mặc định / bật tắt / xóa) để khóa nút; null = rảnh.
@@ -60,6 +66,7 @@ async function loadVariants() {
   try {
     const response = await api.get('/?action=api-admin-product-detail', { params: { id: props.productId } })
     variants.value = response.data?.product?.variants ?? []
+    productImage.value = response.data?.product?.image ?? ''
   } catch (error) {
     loadError.value = error.response?.data?.message || 'Không tải được danh sách biến thể.'
   } finally {
@@ -200,7 +207,20 @@ async function runRowAction(variant, request) {
 }
 
 // Đặt làm mặc định: BE tự bỏ mặc định của biến thể cũ và bật bán biến thể này.
+// Hỏi xác nhận trước vì thao tác đổi ngay biến thể hiện đầu tiên cho khách và biến thể trợ lý AI chọn sẵn.
+// (Giá "Từ" là giá thấp nhất của các biến thể đang bán, không phụ thuộc biến thể mặc định.)
 function makeDefault(variant) {
+  if (rowActionsLocked.value) return
+  // Tìm biến thể đang là mặc định để nêu tên trong câu hỏi, giúp admin biết sẽ thay biến thể nào.
+  const current = variants.value.find((v) => v.is_default)
+  const ok = window.confirm(
+    `Đặt "${variant.variant_name}" làm biến thể mặc định?\n`
+    + (current ? `Biến thể "${current.variant_name}" sẽ không còn là mặc định.\n` : '')
+    + 'Biến thể mới sẽ hiện đầu tiên trên trang sản phẩm và được trợ lý AI chọn khi khách không nói rõ phiên bản.'
+    // Lưu ý riêng cho biến thể đang tắt bán: BE bắt buộc biến thể mặc định phải đang bán, nên sẽ tự mở bán lại.
+    + (variant.is_active ? '' : '\n\nLưu ý: biến thể này đang tắt bán, nếu đặt làm mặc định sẽ được mở bán trở lại.')
+  )
+  if (!ok) return
   runRowAction(variant, () => api.put(`/?action=api-admin-variant-update&id=${variant.id}`, { is_default: true }))
 }
 
@@ -218,6 +238,66 @@ function removeVariant(variant) {
   )
   if (!ok) return
   runRowAction(variant, () => api.delete('/?action=api-admin-variant-delete', { params: { id: variant.id } }))
+}
+
+// Ô chọn file ảnh dùng chung cho mọi dòng (ẩn), và biến thể đang được đổi ảnh.
+const imageInput = ref(null)
+const imageTarget = ref(null)
+
+// Bấm "Đổi ảnh" trên một dòng: ghi nhớ biến thể rồi mở hộp chọn file của trình duyệt.
+function pickVariantImage(variant) {
+  if (busyId.value !== null) return
+  imageTarget.value = variant
+  imageInput.value?.click()
+}
+
+// Gửi ảnh riêng của biến thể lên BE (api-admin-variant-image, POST multipart/form-data).
+// body: FormData có file `image` (đổi ảnh) hoặc `remove=1` (bỏ ảnh riêng). Thành công thì tải lại bảng.
+// Không khóa theo form sửa đang mở: form sửa không gửi ảnh, nên không bị lần lưu form đè ngược.
+async function sendVariantImage(variant, body, fallbackMessage) {
+  busyId.value = variant.id
+  try {
+    // Ghi đè Content-Type: client.js mặc định gửi JSON, axios sẽ làm mất file nếu không đổi header.
+    const response = await api.post('/?action=api-admin-variant-image', body, {
+      params: { id: variant.id },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    showToast(response.data?.message || fallbackMessage, 'success')
+  } catch (error) {
+    showToast(error.response?.data?.message || 'Không cập nhật được ảnh biến thể.', 'danger')
+  } finally {
+    busyId.value = null
+    await loadVariants()
+  }
+}
+
+// Admin đã chọn file: kiểm tra loại + dung lượng (helper dùng chung, khớp giới hạn BE) rồi tải lên ngay.
+async function onVariantImageChange(event) {
+  const file = event.target.files?.[0]
+  const variant = imageTarget.value
+  // Xóa lựa chọn để lần sau chọn lại đúng file đó vẫn kích hoạt sự kiện change.
+  event.target.value = ''
+  imageTarget.value = null
+  if (!file || !variant) return
+
+  const error = validateImageFile(file)
+  if (error) {
+    showToast(error, 'danger')
+    return
+  }
+  const body = new FormData()
+  body.append('image', file)
+  await sendVariantImage(variant, body, 'Đã cập nhật ảnh biến thể.')
+}
+
+// Bỏ ảnh riêng: biến thể dùng lại ảnh sản phẩm. Hỏi xác nhận vì file ảnh cũ bị xóa khỏi máy chủ.
+function removeVariantImage(variant) {
+  if (busyId.value !== null) return
+  if (!window.confirm(`Bỏ ảnh riêng của biến thể "${variant.variant_name}"?
+Biến thể sẽ dùng ảnh đại diện của sản phẩm.`)) return
+  const body = new FormData()
+  body.append('remove', '1')
+  sendVariantImage(variant, body, 'Đã bỏ ảnh riêng của biến thể.')
 }
 
 // Lý do không xóa được biến thể (hiện khi rê chuột lên nút Xóa đang bị khóa). Chuỗi rỗng = xóa được.
@@ -246,7 +326,7 @@ onMounted(loadVariants)
       <button type="button" class="admin-btn admin-btn--primary" :disabled="editorOpen && editingId === null" @click="openCreate">+ Thêm biến thể</button>
     </div>
     <p class="admin-hint">
-      Biến thể mặc định là phiên bản hiện đầu tiên và quyết định giá "Từ" trên trang sản phẩm. Không tắt bán hoặc xóa được biến thể mặc định.
+      Biến thể mặc định là phiên bản hiện đầu tiên trên trang sản phẩm và được trợ lý AI chọn khi khách không nói rõ phiên bản. Không tắt bán hoặc xóa được biến thể mặc định.
       Biến thể đã có trong đơn hàng thì không xóa được (giữ lịch sử đơn), hãy dùng "Tắt bán".
     </p>
 
@@ -262,6 +342,24 @@ onMounted(loadVariants)
       loading-text="Đang tải biến thể..."
       empty-text="Sản phẩm chưa có biến thể."
     >
+      <!-- Ảnh: ảnh riêng của biến thể; chưa có thì hiện mờ ảnh sản phẩm (khách thấy ảnh đó thay thế) -->
+      <template #cell-image="{ row }">
+        <div class="variant-image">
+          <img
+            v-if="row.image || productImage"
+            :src="resolveImageUrl(row.image || productImage)"
+            :alt="`Ảnh ${row.variant_name}`"
+            :class="{ 'variant-image--fallback': !row.image }"
+            :title="row.image ? '' : 'Chưa có ảnh riêng, đang dùng ảnh sản phẩm'"
+            loading="lazy"
+          />
+          <span v-else class="variant-image-empty" aria-hidden="true">—</span>
+          <button type="button" class="admin-link" :disabled="busyId !== null" @click="pickVariantImage(row)">
+            {{ busyId === row.id ? 'Đang lưu...' : (row.image ? 'Đổi ảnh' : 'Thêm ảnh') }}
+          </button>
+          <button v-if="row.image" type="button" class="admin-link admin-link--danger" :disabled="busyId !== null" @click="removeVariantImage(row)">Bỏ ảnh</button>
+        </div>
+      </template>
       <template #cell-variant_name="{ row }">
         <strong>{{ row.variant_name }}</strong>
         <span v-if="row.is_default" class="variant-tag variant-tag--default">Mặc định</span>
@@ -303,6 +401,8 @@ onMounted(loadVariants)
         </div>
       </template>
     </AdminTable>
+    <!-- Ô chọn file ẩn, dùng chung cho nút "Đổi ảnh" / "Thêm ảnh" của mọi dòng -->
+    <input ref="imageInput" type="file" class="d-none" :accept="IMAGE_ACCEPT" @change="onVariantImageChange" />
 
     <!-- Form thêm / sửa biến thể (hiện dưới bảng khi bấm "Thêm biến thể" hoặc "Sửa") -->
     <form v-if="editorOpen" class="variant-editor" novalidate @submit.prevent="saveEditor">
@@ -383,8 +483,15 @@ onMounted(loadVariants)
 .admin-field input[readonly] { background: #efeae0; color: #6b6560; cursor: not-allowed; }
 .variant-actions { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .admin-link { padding: 0; border: 0; background: none; color: #9e7432; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+/* Rê chuột vào nút thao tác thì gạch chân, giống trang danh sách sản phẩm; nút đang khóa thì không. */
+.admin-link:hover:not(:disabled) { text-decoration: underline; }
 .admin-link:disabled { opacity: 0.45; cursor: not-allowed; }
 .admin-link--danger { color: #ba1a1a; }
+.variant-image { display: grid; justify-items: center; gap: 4px; }
+.variant-image img { width: 48px; height: 48px; object-fit: cover; border: 1px solid #e6e0d4; border-radius: 6px; background: #f7f4ee; }
+/* Ảnh sản phẩm dùng thay thế: làm mờ để admin nhận ra biến thể này chưa có ảnh riêng. */
+.variant-image img.variant-image--fallback { opacity: 0.45; border-style: dashed; }
+.variant-image-empty { display: grid; place-items: center; width: 48px; height: 48px; border: 1px dashed #d9d4ca; border-radius: 6px; color: #6b6560; }
 .variant-editor { display: grid; gap: 12px; padding: 16px; border-radius: 8px; background: #f7f4ee; }
 .variant-editor h3 { margin: 0; color: #1c2a3a; font-size: 15px; }
 .variant-editor h4 { margin: 4px 0 0; color: #1c2a3a; font-size: 14px; }

@@ -429,7 +429,8 @@ onMounted(() => {
   text-decoration: none;
 }
 
-.admin-link:hover {
+/* :not(:disabled): nút Xóa đang khóa (đang xóa dòng khác) thì không gạch chân, tránh trông như bấm được. */
+.admin-link:hover:not(:disabled) {
   text-decoration: underline;
 }
 
