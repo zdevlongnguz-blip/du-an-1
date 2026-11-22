@@ -12,6 +12,7 @@ import {
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from '@/helpers/ui/toast'
+import { pushToReturnUrl } from '@/helpers/auth/returnUrl'
 import api from '@/helpers/api/client'
 import AuthPage from '@/components/AuthPage.vue'
 
@@ -124,7 +125,10 @@ const handleLogout = async () => {
     }finally{
         loading.value = false
         clearAuthSession()
-        router.push('/')
+        // Quay về trang khách đang xem trước khi vào Hồ sơ (navbar đã lưu bằng saveReturnUrl).
+        // Phải gọi SAU clearAuthSession: helper kiểm tra "đã đăng xuất chưa" để không quay lại trang cần đăng nhập
+        // (giỏ hàng, đơn hàng...); khi đó về trang chủ.
+        pushToReturnUrl(router, '/')
     }
 }
 

@@ -5,6 +5,7 @@ import { getUser, isAuthenticated } from '@/helpers/auth/session'
 import { fetchProfile } from '@/helpers/auth/profile'
 import { cartCount, refreshCartCount } from '@/helpers/cart/cartCount'
 import { useToast } from '@/helpers/ui/toast'
+import { saveReturnUrl } from '@/helpers/auth/returnUrl'
 import ChatAssistant from '@/components/chat/ChatAssistant.vue'
 
 const checkAuth = ref(isAuthenticated())
@@ -83,8 +84,11 @@ onMounted(() => {
           <div class="site-nav-account">
             <!-- Link vào khu quản trị, chỉ hiện với tài khoản admin. -->
             <router-link v-if="isAdmin" class="site-nav-link" to="/admin">Quản trị</router-link>
+            <!-- Return URL: bấm "Đăng nhập" / nút tài khoản / "Hồ sơ" thì lưu trang đang xem (saveReturnUrl),
+                 để đăng nhập xong (Login.vue) hoặc đăng xuất xong (Profile.vue) quay lại đúng trang này.
+                 @click.capture: chạy TRƯỚC khi router-link chuyển trang, lúc route vẫn là trang hiện tại. -->
             <template v-if="!checkAuth">
-              <router-link class="site-nav-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined">Đăng nhập</router-link>
+              <router-link class="site-nav-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined" @click.capture="saveReturnUrl(route.fullPath)">Đăng nhập</router-link>
               <span class="site-nav-divider" aria-hidden="true"></span>
               <router-link class="site-nav-link" to="/register" :aria-current="route.path === '/register' ? 'page' : undefined">Đăng ký</router-link>
             </template>
@@ -127,6 +131,7 @@ onMounted(() => {
               :class="{ 'is-active': checkAuth && ['/profile', '/change-password'].includes(route.path) }"
               :aria-label="checkAuth ? 'Hồ sơ tài khoản' : 'Đăng nhập tài khoản'"
               :title="checkAuth ? 'Hồ sơ tài khoản' : 'Đăng nhập tài khoản'"
+              @click.capture="saveReturnUrl(route.fullPath)"
             >
               <span class="site-account-icon" aria-hidden="true"></span>
             </router-link>
@@ -169,7 +174,7 @@ onMounted(() => {
             </div>
             <div class="site-mobile-account">
               <template v-if="!checkAuth">
-                <router-link class="site-mobile-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined">Đăng nhập</router-link>
+                <router-link class="site-mobile-link" to="/login" :aria-current="route.path === '/login' ? 'page' : undefined" @click.capture="saveReturnUrl(route.fullPath)">Đăng nhập</router-link>
                 <router-link class="site-mobile-link" to="/register" :aria-current="route.path === '/register' ? 'page' : undefined">Đăng ký</router-link>
               </template>
               <router-link
@@ -192,6 +197,7 @@ onMounted(() => {
                 class="site-mobile-link"
                 to="/profile"
                 :aria-current="['/profile', '/change-password'].includes(route.path) ? 'page' : undefined"
+                @click.capture="saveReturnUrl(route.fullPath)"
               >Hồ sơ</router-link>
               <!-- Link khu quản trị trên menu điện thoại, chỉ hiện với tài khoản admin. -->
               <router-link v-if="isAdmin" class="site-mobile-link" to="/admin">Quản trị</router-link>
