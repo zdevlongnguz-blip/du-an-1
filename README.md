@@ -21,6 +21,7 @@ Dự án web salon tóc nam theo mô hình monorepo. Backend PHP MVC và fronten
 - **Trang chủ:** banner trình chiếu, Top 5 sản phẩm theo lượt xem hoặc lượt bán.
 - **Danh mục sản phẩm:** tìm kiếm, lọc theo danh mục, phân trang (thanh phân trang dùng lại được ở `FE/src/components/PaginationBar.vue`).
 - **Chi tiết sản phẩm:** ảnh slide, chọn biến thể (dung tích/giá/tồn kho), bình luận có kiểm duyệt.
+- **Kiểm duyệt bình luận bằng AI:** 2 model chạy trên Google Colab, phát hiện lời thô tục/thù ghét rồi gắn nhãn cảm xúc. Khi tạo/sửa bình luận: câu sạch hiện ngay, câu độc hại bị từ chối (không lưu, khách sửa lại), câu AI không chắc hoặc lúc Colab lỗi thì lưu và chờ admin duyệt. Chi tiết ở [docs/binh-luan/README.md](docs/binh-luan/README.md).
 - **Tài khoản:** đăng ký, xác thực email, đăng nhập (JWT), quên/đặt lại/đổi mật khẩu, hồ sơ cá nhân.
 - **Giỏ hàng và đặt hàng:** thêm/sửa/xóa giỏ hàng, thanh toán qua SePay, xem đơn, hóa đơn, hủy đơn.
 - **Quản trị (API):** quản lý đơn hàng, sản phẩm, ảnh sản phẩm, danh mục, banner và duyệt bình luận.
@@ -302,12 +303,14 @@ Các endpoint đánh dấu "đăng nhập" cần header `Authorization: Bearer <
 | Lỗi thiếu class PHPMailer hoặc SePay | Chưa chạy `composer install` ở thư mục gốc |
 | Trợ lý AI báo "đang gặp sự cố" (502) | Thường do mọi key Gemini đã hết hạn mức miễn phí. Xem log PHP (Laragon: `C:\laragon\tmp\php_errors.log`) dòng `[Gemini]`/`[ChatController]`; đợi khoảng 1 phút hoặc thêm key thuộc project khác vào `GEMINI_API_KEY` (cách nhau bằng dấu phẩy) |
 | Kiểm duyệt bình luận báo "không khả dụng" (502) | Colab đã tắt hoặc URL tunnel đổi. Chạy lại Colab, cập nhật `COMMENT_GUARD_URL` trong `BE/.env`; xem log PHP dòng `[CommentGuard]` |
+| Gửi bình luận chờ lâu, bình luận nào cũng "chờ duyệt" | Colab tắt nên mỗi lần gửi phải chờ hết thời gian kết nối. Đặt `COMMENT_GUARD_ENABLED=0` trong `BE/.env` để tạm tắt AI kiểm duyệt, bật lại `1` khi Colab chạy |
 | Ảnh sản phẩm báo 404 | Tên ảnh trong database không có file tương ứng trong `BE/assets/uploads` |
 | Qua ngrok, link trong email trỏ về `du-an-1.test` hoặc `localhost:5173` | Chưa đặt `APP_URL` (và các `SEPAY_*_URL`) theo URL ngrok trong `BE/.env`; xem [Chia sẻ qua ngrok](#chia-sẻ-qua-ngrok) |
 
 ## Tài liệu liên quan
 
 - [AUTH_README.md](AUTH_README.md): hướng dẫn chi tiết về JWT, Bearer token và middleware auth
+- [docs/binh-luan/README.md](docs/binh-luan/README.md): bộ tài liệu chức năng bình luận sau khi tích hợp AI (kiến trúc, luồng, DB, contract 7 API, bảng quyết định, kiểm thử, vận hành, FE, vấn đáp)
 - [docs/comment-guard/README.md](docs/comment-guard/README.md): kiểm duyệt bình luận bằng AI (2 model trên Google Colab, cấu hình, API test `api-comment-guard`, kết quả thử model)
 
 ## Ghi chú

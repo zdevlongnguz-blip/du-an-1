@@ -123,6 +123,18 @@ define('GEMINI_API_KEYS', array_values(array_unique(array_filter(
 // Tên model Gemini dùng mặc định, đổi được qua GEMINI_MODEL trong BE/.env mà không phải sửa code.
 define('GEMINI_MODEL', getenv('GEMINI_MODEL') ?: 'gemini-2.5-flash');
 
+// Bật/tắt AI kiểm duyệt bình luận mà không phải sửa code (ví dụ khi Colab bị tắt hoặc chạy quá chậm).
+// Nhận 1/0, true/false, on/off, yes/no. Để trống hoặc ghi sai thì mặc định BẬT.
+// Khi tắt: bình luận được lưu ngay với status 0 (chờ admin duyệt), không gọi Colab.
+// Phải xử lý chuỗi rỗng riêng: getenv() trả false khi chưa khai báo biến, và filter_var coi cả false lẫn ''
+// là "tắt", nên nếu không kiểm tra trước thì quên khai báo biến sẽ vô tình tắt kiểm duyệt.
+// FILTER_NULL_ON_FAILURE: giá trị không nhận ra được (ví dụ "abc") trả về null thay vì false, để còn dùng mặc định.
+$_commentGuardEnabledRaw = trim((string) getenv('COMMENT_GUARD_ENABLED'));
+$_commentGuardEnabled = $_commentGuardEnabledRaw === ''
+    ? null
+    : filter_var($_commentGuardEnabledRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+define('COMMENT_GUARD_ENABLED', $_commentGuardEnabled === null ? true : $_commentGuardEnabled);
+
 // Comment Guard: dịch vụ AI bên ngoài (chạy trên Google Colab) chấm bình luận có độc hại hay không.
 // URL và key đọc từ BE/.env vì URL Colab đổi mỗi lần chạy lại và key là bí mật.
 // URL để trống thì service CommentGuard báo lỗi khi được gọi.

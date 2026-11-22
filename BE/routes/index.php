@@ -4,46 +4,88 @@
  *
  * Mỗi action tương ứng với một endpoint API hoặc page.
  * Những route cần bảo vệ auth thì gọi middleware trước khi vào controller.
+ *
+ * Thứ tự nhóm trong file (chỉ để dễ tìm, không ảnh hưởng cách chạy):
+ *  1. Hệ thống
+ *  2. Tài khoản và xác thực
+ *  3. Hồ sơ cá nhân
+ *  4. Sản phẩm, danh mục, banner (công khai)
+ *  5. Bài viết
+ *  6. Bình luận (công khai và user)
+ *  7. Giỏ hàng
+ *  8. Đơn hàng và thanh toán
+ *  9. Trợ lý AI
+ * 10. Quản trị (admin): chung, đơn hàng, sản phẩm, biến thể, ảnh, danh mục, banner, bình luận
+ * 11. Route test / demo (không dùng làm mẫu)
  */
 
 $action = $_GET['action'] ?? '/';
 
 switch ($action) {
+    // ======================================================================
+    // 1. HỆ THỐNG
+    // ======================================================================
+
+    // Trang gốc của BE.
     case '/':
         (new HomeController)->index();
         break;
 
+    // API kiểm tra BE còn chạy, không yêu cầu đăng nhập.
     case 'api-check':
         (new HomeController)->check();
         break;
 
-    // Bộ api auth ==========================
+    // ======================================================================
+    // 2. TÀI KHOẢN VÀ XÁC THỰC
+    // ======================================================================
+
+    // API đăng ký tài khoản, không yêu cầu đăng nhập.
     case 'api-register':
         (new AuthController)->register();
         break;
 
+    // API xác thực email qua link trong thư, không yêu cầu đăng nhập.
     case 'api-verify-email':
         (new AuthController)->verifyEmail();
         break;
 
+    // API đăng nhập, trả JWT; không yêu cầu đăng nhập.
+    case 'api-login':
+        (new AuthController)->login();
+        break;
+
+    // API đăng xuất.
+    case 'api-logout':
+        (new AuthController)->logout();
+        break;
+
+    // API gửi email quên mật khẩu, không yêu cầu đăng nhập.
     case 'api-forgot-password':
         (new AuthController)->forgotPassword();
         break;
 
+    // API đặt lại mật khẩu bằng token trong email, không yêu cầu đăng nhập.
     case 'api-reset-password':
         (new AuthController)->resetPassword();
         break;
 
+    // Trang trung gian mở từ link đặt lại mật khẩu trong email, chuyển sang FE.
     case 'reset-password-bridge':
         (new AuthController)->showPasswordResetBridge();
         break;
 
+    // API đổi mật khẩu của user đang đăng nhập.
     case 'api-change-password':
         // Middleware kiểm tra Bearer JWT và trả payload đã xác minh; claim `sub` là ID user.
         $authPayload = (new AuthMiddleware())->requireAuth();
         // Truyền danh tính từ token xuống controller, không nhận user ID do client tự gửi.
         (new AuthController)->changePassword($authPayload);
         break;
+
+    // ======================================================================
+    // 3. HỒ SƠ CÁ NHÂN
+    // ======================================================================
 
     // API lấy hồ sơ cá nhân (họ tên, SĐT, địa chỉ) của user đang đăng nhập. Yêu cầu Bearer token.
     case 'api-profile':
@@ -57,19 +99,19 @@ switch ($action) {
         (new ProfileController)->update($authPayload);
         break;
 
-    case 'api-login':
-        (new AuthController)->login();
+    // ======================================================================
+    // 4. SẢN PHẨM, DANH MỤC, BANNER (CÔNG KHAI)
+    // ======================================================================
+
+    // API danh sách sản phẩm (tìm kiếm, lọc, phân trang), không yêu cầu đăng nhập.
+    case 'api-products':
+        // (new AuthMiddleware())->requireAuth();
+        (new ProductController)->index();
         break;
 
-    case 'api-logout':
-        (new AuthController)->logout();
-        break;
-
-
-    // API cần xác thực người dùng
-    case 'api-posts':
-        (new AuthMiddleware())->requireAuth();
-        (new PostController)->index();
+    // API lấy top 5 sản phẩm theo lượt xem hoặc lượt bán, không yêu cầu đăng nhập.
+    case 'api-products-top':
+        (new ProductController)->top();
         break;
 
     // API lấy chi tiết sản phẩm theo slug, không yêu cầu đăng nhập.
@@ -82,10 +124,29 @@ switch ($action) {
         (new ProductController)->stock();
         break;
 
-    // API lấy top 5 sản phẩm theo lượt xem hoặc lượt bán, không yêu cầu đăng nhập.
-    case 'api-products-top':
-        (new ProductController)->top();
+    // API lấy danh sách danh mục sản phẩm
+    case 'api-categories':
+        (new CategoryController)->index();
         break;
+
+    // API lấy danh sách banner
+    case 'api-banners':
+        (new BannerController)->index();
+        break;
+
+    // ======================================================================
+    // 5. BÀI VIẾT
+    // ======================================================================
+
+    // API cần xác thực người dùng
+    case 'api-posts':
+        (new AuthMiddleware())->requireAuth();
+        (new PostController)->index();
+        break;
+
+    // ======================================================================
+    // 6. BÌNH LUẬN (CÔNG KHAI VÀ USER)
+    // ======================================================================
 
     // API lấy danh sách bình luận theo slug sản phẩm, không yêu cầu đăng nhập.
     case 'api-product-comments':
@@ -109,6 +170,10 @@ switch ($action) {
         $authPayload = (new AuthMiddleware())->requireAuth();
         (new CommentController)->delete($authPayload);
         break;
+
+    // ======================================================================
+    // 7. GIỎ HÀNG
+    // ======================================================================
 
     // API lấy giỏ hàng riêng của user đang đăng nhập.
     case 'api-cart':
@@ -134,6 +199,10 @@ switch ($action) {
         (new CartController)->delete($authPayload);
         break;
 
+    // ======================================================================
+    // 8. ĐƠN HÀNG VÀ THANH TOÁN
+    // ======================================================================
+
     // API checkout giỏ hàng thành đơn hàng; yêu cầu user đăng nhập.
     case 'api-order-checkout':
         $authPayload = (new AuthMiddleware())->requireAuth();
@@ -150,23 +219,6 @@ switch ($action) {
     case 'api-order-draft-items':
         (new AuthMiddleware())->requireAuth();
         (new OrderController)->draftItems();
-        break;
-
-    // API tạo form thanh toán SePay cho đơn online của user đang đăng nhập.
-    case 'api-order-payment':
-        $authPayload = (new AuthMiddleware())->requireAuth();
-        (new OrderController)->createPayment($authPayload);
-        break;
-
-    // API hỏi lại SePay xem đơn đã thanh toán chưa (dùng khi quay về từ SePay); yêu cầu đăng nhập.
-    case 'api-order-payment-verify':
-        $authPayload = (new AuthMiddleware())->requireAuth();
-        (new OrderController)->verifyPayment($authPayload);
-        break;
-
-    // API nhận IPN từ SePay; KHÔNG dùng JWT (do SePay gọi), xác thực bằng header X-Secret-Key.
-    case 'api-sepay-ipn':
-        (new OrderController)->sepayIpn();
         break;
 
     // API lấy danh sách đơn của user đang đăng nhập.
@@ -187,12 +239,61 @@ switch ($action) {
         (new OrderController)->cancel($authPayload);
         break;
 
+    // API tạo form thanh toán SePay cho đơn online của user đang đăng nhập.
+    case 'api-order-payment':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new OrderController)->createPayment($authPayload);
+        break;
+
+    // API hỏi lại SePay xem đơn đã thanh toán chưa (dùng khi quay về từ SePay); yêu cầu đăng nhập.
+    case 'api-order-payment-verify':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new OrderController)->verifyPayment($authPayload);
+        break;
+
+    // API nhận IPN từ SePay; KHÔNG dùng JWT (do SePay gọi), xác thực bằng header X-Secret-Key.
+    case 'api-sepay-ipn':
+        (new OrderController)->sepayIpn();
+        break;
+
+    // ======================================================================
+    // 9. TRỢ LÝ AI
+    // ======================================================================
+
+    // API chat với trợ lý AI Gemini (POST, body JSON message + conversation_id). Yêu cầu đăng nhập.
+    case 'api-ai-chat':
+        // Middleware kiểm tra Bearer JWT; payload có sub = ID user, dùng để kiểm tra quyền sở hữu hội thoại.
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ChatController)->chat($authPayload);
+        break;
+
+    // API lấy lại cuộc chat gần nhất của user để hiện lại trong khung chat (GET). Yêu cầu đăng nhập.
+    case 'api-ai-history':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ChatController)->history($authPayload);
+        break;
+
+    // API xóa toàn bộ lịch sử trò chuyện với trợ lý AI của user đang đăng nhập (DELETE). Yêu cầu đăng nhập.
+    case 'api-ai-history-clear':
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new ChatController)->clearHistory($authPayload);
+        break;
+
+    // ======================================================================
+    // 10. QUẢN TRỊ (ADMIN)
+    // Mọi route nhóm này gọi AdminMiddleware: kiểm tra JWT và role=admin trước khi vào controller.
+    // ======================================================================
+
+    // --- Chung ---
+
     // API kiểm tra quyền vào khu quản trị (FE gọi khi mở /admin). Cần Bearer token VÀ role admin:
     // dùng chung AdminMiddleware với mọi API admin, nên điều kiện "là admin" chỉ định nghĩa ở một nơi.
     case 'api-admin-me':
         $authPayload = (new AdminMiddleware())->requireAdmin();
         (new AuthController)->adminMe($authPayload);
         break;
+
+    // --- Đơn hàng ---
 
     // API admin lấy danh sách tất cả đơn hàng.
     case 'api-admin-orders':
@@ -205,6 +306,8 @@ switch ($action) {
         $authPayload = (new AdminMiddleware())->requireAdmin();
         (new OrderController)->adminUpdate($authPayload);
         break;
+
+    // --- Sản phẩm ---
 
     // API admin lấy chi tiết sản phẩm theo id cho form sửa (mọi biến thể, album; không tăng lượt xem); yêu cầu role admin.
     case 'api-admin-product-detail':
@@ -230,23 +333,7 @@ switch ($action) {
         (new ProductController)->adminDelete();
         break;
 
-    // API admin thêm ảnh vào album sản phẩm; yêu cầu multipart/form-data.
-    case 'api-admin-product-image-create':
-        (new AdminMiddleware())->requireAdmin();
-        (new ProductController)->adminImageCreate();
-        break;
-
-    // API admin xóa một ảnh khỏi album sản phẩm.
-    case 'api-admin-product-image-delete':
-        (new AdminMiddleware())->requireAdmin();
-        (new ProductController)->adminImageDelete();
-        break;
-
-    // API admin đổi thứ tự ảnh slide (sort_order); yêu cầu role admin.
-    case 'api-admin-product-image-update':
-        (new AdminMiddleware())->requireAdmin();
-        (new ProductController)->adminImageUpdate();
-        break;
+    // --- Biến thể sản phẩm ---
 
     // API admin thêm biến thể cho sản phẩm; yêu cầu role admin.
     case 'api-admin-variant-create':
@@ -272,6 +359,28 @@ switch ($action) {
         (new ProductController)->adminVariantDelete();
         break;
 
+    // --- Ảnh album (slide) sản phẩm ---
+
+    // API admin thêm ảnh vào album sản phẩm; yêu cầu multipart/form-data.
+    case 'api-admin-product-image-create':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminImageCreate();
+        break;
+
+    // API admin đổi thứ tự ảnh slide (sort_order); yêu cầu role admin.
+    case 'api-admin-product-image-update':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminImageUpdate();
+        break;
+
+    // API admin xóa một ảnh khỏi album sản phẩm.
+    case 'api-admin-product-image-delete':
+        (new AdminMiddleware())->requireAdmin();
+        (new ProductController)->adminImageDelete();
+        break;
+
+    // --- Danh mục ---
+
     // API admin tạo danh mục.
     case 'api-admin-category-create':
         (new AdminMiddleware())->requireAdmin();
@@ -289,6 +398,8 @@ switch ($action) {
         (new AdminMiddleware())->requireAdmin();
         (new CategoryController)->adminDelete();
         break;
+
+    // --- Banner ---
 
     // API admin tạo banner và tải ảnh tùy chọn.
     case 'api-admin-banner-create':
@@ -308,6 +419,8 @@ switch ($action) {
         (new BannerController)->adminDelete();
         break;
 
+    // --- Bình luận ---
+
     // API admin xem bình luận, lọc status=0/1 và phân trang.
     case 'api-admin-comments':
         (new AdminMiddleware())->requireAdmin();
@@ -326,36 +439,16 @@ switch ($action) {
         (new CommentController)->adminDelete();
         break;
 
+    // ======================================================================
+    // 11. ROUTE TEST / DEMO (không dùng làm mẫu, FE không dùng)
+    // ======================================================================
+
     // API kiểm duyệt nội dung bình luận bằng AI Comment Guard mỗi lần user bình luận (POST, body text). Yêu cầu đăng nhập.
-    // API test để thử 2 model trên Google Colab (trả nguyên nhãn và điểm AI). FE không dùng API này.
+    // API test để thử 2 model trên Google Colab (trả nguyên nhãn và điểm AI). FE không dùng; kiểm duyệt thật nằm trong api-comment-create/update.
     case 'api-comment-guard':
         // Middleware kiểm tra Bearer JWT; chỉ user đã đăng nhập mới được gọi để tránh người lạ spam dịch vụ AI.
         $authPayload = (new AuthMiddleware())->requireAuth();
         (new CommentGuardController)->analyze($authPayload);
-        break;
-
-    case 'api-products':
-        // (new AuthMiddleware())->requireAuth();
-        (new ProductController)->index();
-        break;
-
-    // API lấy danh sách danh mục sản phẩm
-    case 'api-categories':
-    (new CategoryController)->index();
-    break;
-
-    // API lấy danh sách banner
-    case 'api-banners':
-        (new BannerController)->index();
-        break;
-
-    // API test cho thằng mặt cặc Hoàng Vinh
-    case 'api-guns':
-        (new GunController)->index();
-        break;
-
-    case 'api-camchim':
-        (new ProductController)->camChim();
         break;
 
     // API test cho Gemini service
@@ -363,23 +456,14 @@ switch ($action) {
         (new Test)->sayHello();
         break;
 
-    // API chat với trợ lý AI Gemini (POST, body JSON message + conversation_id). Yêu cầu đăng nhập.
-    case 'api-ai-chat':
-        // Middleware kiểm tra Bearer JWT; payload có sub = ID user, dùng để kiểm tra quyền sở hữu hội thoại.
-        $authPayload = (new AuthMiddleware())->requireAuth();
-        (new ChatController)->chat($authPayload);
+    // API demo (route thử nghiệm cũ).
+    case 'api-guns':
+        (new GunController)->index();
         break;
 
-    // API lấy lại cuộc chat gần nhất của user để hiện lại trong khung chat (GET). Yêu cầu đăng nhập.
-    case 'api-ai-history':
-        $authPayload = (new AuthMiddleware())->requireAuth();
-        (new ChatController)->history($authPayload);
-        break;
-
-    // API xóa toàn bộ lịch sử trò chuyện với trợ lý AI của user đang đăng nhập (DELETE). Yêu cầu đăng nhập.
-    case 'api-ai-history-clear':
-        $authPayload = (new AuthMiddleware())->requireAuth();
-        (new ChatController)->clearHistory($authPayload);
+    // API demo (route thử nghiệm cũ).
+    case 'api-camchim':
+        (new ProductController)->camChim();
         break;
 
     default:
