@@ -22,6 +22,17 @@ class CommentGuard
     // Số bình luận tối đa gửi trong một lần chấm chùm, tránh request quá lớn làm Colab chạy lâu.
     const MAX_BATCH = 50;
 
+    // Số giây tối đa chờ KẾT NỐI tới Colab (khác với COMMENT_GUARD_TIMEOUT là thời gian chờ cả request).
+    // Để ngắn vì kết nối bình thường chỉ mất dưới 1 giây; tunnel chết thì nên báo lỗi nhanh
+    // để bình luận chuyển sang chờ duyệt, thay vì bắt khách chờ lâu.
+    const CONNECT_TIMEOUT_SECONDS = 3;
+
+    // Độ dài tối đa của nhãn, phải KHỚP độ dài cột trong bảng comments
+    // (moderation_label VARCHAR(20), sentiment VARCHAR(10)). Nhãn dài hơn thì coi là dữ liệu sai,
+    // vì lưu vào DB sẽ lỗi "Data too long" và làm mất bình luận. Đổi độ dài cột thì sửa cả ở đây.
+    const MAX_REASON_LENGTH = 20;
+    const MAX_SENTIMENT_LENGTH = 10;
+
     /** @var string Địa chỉ gốc của dịch vụ, không có dấu / ở cuối */
     private $baseUrl;
 
@@ -129,7 +140,7 @@ class CommentGuard
             // RETURNTRANSFER: lấy response thành chuỗi thay vì in thẳng ra màn hình.
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $this->timeout,
-            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT_SECONDS,
             CURLOPT_HTTPHEADER => $headers,
         ]);
 
@@ -160,7 +171,7 @@ class CommentGuard
      *
      * @param mixed $item Một kết quả dịch vụ trả về
      * @return array { text, status, reason, toxic_prob, needs_review, sentiment, sentiment_score }
-     * @throws RuntimeException Khi thiếu status/toxic_prob hoặc sai kiểu
+     * @throws RuntimeException Khi thiếu status/toxic_prob, sai kiểu, hoặc nhãn dài hơn cột trong DB
      */
     private function normalizeResult($item = null)
     {
@@ -169,13 +180,24 @@ class CommentGuard
             throw new RuntimeException('Dịch vụ kiểm duyệt trả về kết quả sai định dạng.');
         }
 
+        $reason = isset($item['reason']) && is_string($item['reason']) ? $item['reason'] : null;
+        $sentiment = isset($item['sentiment']) && is_string($item['sentiment']) ? $item['sentiment'] : null;
+        // Ném lỗi thay vì cắt bớt: cắt nhãn sẽ lưu sai nghĩa (ví dụ "NEGATIVE_STRONG" thành "NEGATIVE_S").
+        // Controller bắt lỗi này và lưu bình luận ở trạng thái chờ duyệt, nên bình luận không bị mất.
+        if ($reason !== null && strlen($reason) > self::MAX_REASON_LENGTH) {
+            throw new RuntimeException('Dịch vụ kiểm duyệt trả về nhãn reason dài hơn ' . self::MAX_REASON_LENGTH . ' ký tự.');
+        }
+        if ($sentiment !== null && strlen($sentiment) > self::MAX_SENTIMENT_LENGTH) {
+            throw new RuntimeException('Dịch vụ kiểm duyệt trả về nhãn sentiment dài hơn ' . self::MAX_SENTIMENT_LENGTH . ' ký tự.');
+        }
+
         return [
             'text' => isset($item['text']) && is_string($item['text']) ? $item['text'] : '',
             'status' => $item['status'],
-            'reason' => isset($item['reason']) && is_string($item['reason']) ? $item['reason'] : null,
+            'reason' => $reason,
             'toxic_prob' => (float) $item['toxic_prob'],
             'needs_review' => !empty($item['needs_review']),
-            'sentiment' => isset($item['sentiment']) && is_string($item['sentiment']) ? $item['sentiment'] : null,
+            'sentiment' => $sentiment,
             'sentiment_score' => isset($item['sentiment_score']) && is_numeric($item['sentiment_score'])
                 ? (float) $item['sentiment_score']
                 : null,

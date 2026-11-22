@@ -2,7 +2,7 @@
 // Trang chi tiết sản phẩm: khi mở trang gọi api-product-detail và api-product-comments theo slug.
 // Nút bình luận chỉ ẩn hoặc hiện khu vực, không quyết định thời điểm tải dữ liệu.
 // Khu vực mua hàng và bình luận được xử lý trực tiếp tại trang này.
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import api from '@/helpers/api/client'
 import { useTabVisible } from '@/helpers/ui/tabVisible'
@@ -57,10 +57,35 @@ const commentDeletingId = ref(null)
 
 // Số lượng nhập riêng cho từng biến thể, key là id biến thể.
 const variantQuantities = ref({})
-// Các biến thể đang gửi thêm giỏ; mỗi nút chỉ khóa theo đúng biến thể của nó.
-const cartAddingVariantIds = ref(new Set())
+// ID các biến thể khách đã tích checkbox để thêm vào giỏ bằng nút chung. Dùng Set để thêm/bỏ/kiểm tra nhanh.
+// Gán Set MỚI mỗi lần đổi (không sửa Set cũ) để Vue nhận ra thay đổi và vẽ lại checkbox.
+const selectedVariantIds = ref(new Set())
+// true khi đang gửi các biến thể đã tích lên giỏ; khóa nút chung, checkbox và bộ tăng giảm để tránh gửi lặp.
+const addingSelected = ref(false)
 // Số lượng mỗi biến thể đang nằm trong giỏ của người dùng, key là id biến thể (chỉ có khi đã đăng nhập).
 const cartQuantities = ref({})
+
+// Thẻ <p> chứa mô tả, gắn bằng ref="descriptionEl" trong template để đo chiều cao thật của chữ.
+const descriptionEl = ref(null)
+// true khi khách bấm "Xem thêm" (đang hiện đủ mô tả). Mặc định thu gọn.
+const descriptionExpanded = ref(false)
+// true khi mô tả dài hơn khung thu gọn, chỉ lúc đó mới hiện nút "Xem thêm" / "Ẩn bớt".
+const descriptionOverflows = ref(false)
+
+// Đo xem mô tả có bị khung thu gọn cắt bớt không: scrollHeight (chiều cao đủ nội dung) lớn hơn
+// clientHeight (chiều cao khung đang hiện) nghĩa là còn chữ bị ẩn. Đo bằng chiều cao thật thay vì đếm ký tự,
+// vì cùng số ký tự nhưng màn hình rộng/hẹp sẽ ra số dòng khác nhau.
+// nextTick: chờ Vue vẽ xong mô tả mới lên trang rồi mới đo, đo sớm hơn sẽ ra số của nội dung cũ.
+async function measureDescription() {
+  descriptionExpanded.value = false
+  descriptionOverflows.value = false
+  await nextTick()
+  const el = descriptionEl.value
+  if (el) descriptionOverflows.value = el.scrollHeight > el.clientHeight + 1
+}
+
+// watch: đo lại mỗi khi mô tả đổi (mở trang, hoặc chuyển sang sản phẩm khác).
+watch(() => product.value?.description, measureDescription)
 
 // Chỉ dùng để chọn giao diện; BE vẫn xác minh JWT và quyền sở hữu.
 const loggedIn = isAuthenticated()
@@ -195,7 +220,7 @@ async function refreshProductStock() {
 // useTabVisible (helper dùng chung) tự gắn / gỡ bộ lắng nghe đổi tab theo vòng đời của trang.
 useTabVisible(() => {
   if (!product.value) return
-  if (checkingStockVariantId.value !== null || cartAddingVariantIds.value.size > 0) return
+  if (checkingStockVariantId.value !== null || addingSelected.value) return
   // Lỗi khi tra ngầm thì bỏ qua: giữ số đang hiện, BE vẫn kiểm tra lại khi khách bấm "Thêm vào giỏ".
   Promise.all([refreshProductStock(), fetchCartQuantities()]).catch((error) => {
     console.error('Không tra lại được tồn kho khi quay lại trang:', error)
@@ -274,7 +299,7 @@ function variantDetails(variant) {
 }
 
 // Số biến thể hiện sẵn; sản phẩm có nhiều hơn số này thì hiện nút "Xem thêm" để xổ xuống phần còn lại.
-const VARIANTS_PREVIEW_COUNT = 3
+const VARIANTS_PREVIEW_COUNT = 2
 // true khi khách đã bấm "Xem thêm" (đang hiện đủ mọi biến thể).
 const showAllVariants = ref(false)
 
@@ -387,6 +412,18 @@ function validateComment(content, errorRef) {
   return true
 }
 
+// Kiểm tra lỗi có phải do AI kiểm duyệt chặn nội dung không.
+// BE trả 422 kèm moderation = 'blocked' khi bình luận có ngôn từ độc hại (bình luận KHÔNG được lưu),
+// để phân biệt với lỗi 422 khác như nội dung rỗng hoặc quá dài.
+function isBlockedByModeration(error) {
+  return error.response?.status === 422 && error.response?.data?.moderation === 'blocked'
+}
+
+// Gửi bình luận mới. Được gọi khi bấm "Gửi bình luận".
+// api-comment-create: BE cho AI kiểm duyệt rồi trả 201 với comment.moderation:
+// - 'approved': đã hiện công khai, tải lại trang 1 để khách thấy ngay bình luận của mình.
+// - 'pending': đã lưu nhưng chờ admin duyệt (AI không chắc, hoặc AI đang lỗi/tắt), chưa hiện.
+// Bị AI chặn thì BE trả 422 và không lưu: giữ nguyên nội dung trong ô để khách sửa lại.
 async function submitComment() {
   if (!loggedIn || commentSubmitting.value) return
   if (!validateComment(newCommentContent.value, newCommentError)) return
@@ -397,12 +434,26 @@ async function submitComment() {
       product_id: product.value.id,
       content: newCommentContent.value,
     })
+    // Không có moderation (BE cũ) thì coi như chờ duyệt, an toàn hơn là báo đã hiện.
+    const moderation = response.data?.comment?.moderation || 'pending'
     newCommentContent.value = ''
     newCommentError.value = ''
-    showToast(response.data?.message || 'Bình luận đã được gửi và đang chờ duyệt.', 'success')
-    // Không thêm comment pending vào danh sách public hoặc tăng count.
+    if (moderation === 'approved') {
+      showToast(response.data?.message || 'Thêm bình luận thành công!', 'success')
+      // Bình luận mới nhất nằm đầu trang 1 (BE sắp xếp mới nhất trước).
+      await fetchComments(1)
+    } else {
+      // Bình luận chờ duyệt chưa có trong danh sách công khai, nên không tải lại.
+      showToast(response.data?.message || 'Bình luận đã được gửi và đang chờ duyệt.', 'info')
+    }
   } catch (error) {
-    showToast(error.response?.data?.message || 'Không thể gửi bình luận.', 'danger')
+    if (isBlockedByModeration(error)) {
+      // Không xóa ô nhập: khách sửa lại câu chữ rồi gửi tiếp. Lỗi tự mất khi khách sửa nội dung (xem @input).
+      newCommentError.value = error.response.data.message
+      showToast(error.response.data.message, 'warning')
+    } else {
+      showToast(error.response?.data?.message || 'Không thể gửi bình luận.', 'danger')
+    }
   } finally {
     commentSubmitting.value = false
   }
@@ -420,6 +471,11 @@ function cancelEditComment() {
   editingCommentError.value = ''
 }
 
+// Lưu nội dung sửa của một bình luận. Được gọi khi bấm "Lưu" trong chế độ sửa.
+// api-comment-update: BE chấm lại nội dung mới bằng AI.
+// - 'approved': vẫn hiện. 'pending': đã lưu nhưng tạm ẩn chờ duyệt, nên sau khi tải lại bình luận
+//   biến khỏi danh sách; toast nói rõ để khách không tưởng bị xóa.
+// Bị AI chặn thì BE trả 422, KHÔNG ghi đè bình luận cũ: giữ chế độ sửa để khách sửa tiếp.
 async function updateComment(comment) {
   if (commentUpdatingId.value !== null) return
   if (!validateComment(editingCommentContent.value, editingCommentError)) return
@@ -429,11 +485,20 @@ async function updateComment(comment) {
     const response = await api.put(`/?action=api-comment-update&id=${encodeURIComponent(comment.id)}`, {
       content: editingCommentContent.value,
     })
-    showToast(response.data?.message || 'Cập nhật bình luận thành công.', 'success')
+    const moderation = response.data?.comment?.moderation || 'pending'
+    showToast(
+      response.data?.message || 'Cập nhật bình luận thành công.',
+      moderation === 'approved' ? 'success' : 'info',
+    )
     cancelEditComment()
     await fetchComments(commentsPagination.value?.current_page || 1)
   } catch (error) {
-    showToast(error.response?.data?.message || 'Không thể cập nhật bình luận.', 'danger')
+    if (isBlockedByModeration(error)) {
+      editingCommentError.value = error.response.data.message
+      showToast(error.response.data.message, 'warning')
+    } else {
+      showToast(error.response?.data?.message || 'Không thể cập nhật bình luận.', 'danger')
+    }
   } finally {
     commentUpdatingId.value = null
   }
@@ -460,16 +525,48 @@ async function deleteComment(comment) {
   }
 }
 
-function isVariantAdding(variant) {
-  return cartAddingVariantIds.value.has(variant.id)
+// ID các biến thể đang mở bảng thông số. Mặc định rỗng = mọi thẻ đều đóng.
+// Gán Set MỚI mỗi lần đổi để Vue nhận ra thay đổi và vẽ lại.
+const openDetailVariantIds = ref(new Set())
+
+// Bảng thông số của biến thể này đang mở hay đóng.
+function isVariantDetailOpen(variant) {
+  return openDetailVariantIds.value.has(variant.id)
 }
 
-function setVariantAdding(variant, adding) {
-  const next = new Set(cartAddingVariantIds.value)
-  if (adding) next.add(variant.id)
-  else next.delete(variant.id)
-  cartAddingVariantIds.value = next
+// Mở / đóng bảng thông số của một biến thể. Được gọi khi bấm nút "Chi tiết" trong thẻ biến thể.
+function toggleVariantDetail(variant) {
+  const next = new Set(openDetailVariantIds.value)
+  if (next.has(variant.id)) next.delete(variant.id)
+  else next.add(variant.id)
+  openDetailVariantIds.value = next
 }
+
+// Biến thể này đang được tích chọn hay không (dùng cho checkbox).
+function isVariantSelected(variant) {
+  return selectedVariantIds.value.has(variant.id)
+}
+
+// Tích / bỏ tích một biến thể. Được gọi khi khách bấm checkbox cạnh bộ tăng giảm.
+function toggleVariantSelected(variant, checked) {
+  const next = new Set(selectedVariantIds.value)
+  if (checked) next.add(variant.id)
+  else next.delete(variant.id)
+  selectedVariantIds.value = next
+}
+
+// computed: các biến thể đã tích VÀ còn thêm được (hết hàng hoặc đã đủ trong giỏ thì tự không tính),
+// theo thứ tự hiển thị. Nút chung dùng danh sách này để biết gửi những món nào.
+const selectedVariants = computed(() => {
+  const variants = Array.isArray(product.value?.variants) ? product.value.variants : []
+  return variants.filter((variant) => isVariantSelected(variant) && variantMaxQuantity(variant) > 0)
+})
+
+// computed: tổng số sản phẩm sẽ thêm vào giỏ = cộng số lượng đang chọn của mọi biến thể đã tích.
+// Tự tính lại khi khách tích/bỏ tích hoặc bấm "+"/"−", nên dòng "Đã chọn ..." luôn khớp với số sẽ gửi đi.
+const selectedTotalQuantity = computed(() =>
+  selectedVariants.value.reduce((sum, variant) => sum + getVariantQuantity(variant), 0),
+)
 
 // Đọc giỏ hiện tại để biết mỗi biến thể đã có bao nhiêu trong giỏ. Lỗi thì coi như chưa có gì; BE vẫn chặn khi thêm.
 async function fetchCartQuantities() {
@@ -487,35 +584,67 @@ async function fetchCartQuantities() {
   }
 }
 
-// Thêm đúng biến thể và số lượng đã chọn của biến thể đó vào giỏ.
-async function addVariantToCart(variant) {
-  if (!loggedIn || isVariantAdding(variant)) return
-  const quantityToAdd = getVariantQuantity(variant)
-  if (quantityToAdd < 1 || quantityToAdd > variantMaxQuantity(variant)) {
-    showToast('Phiên bản này đã hết hàng hoặc số lượng không hợp lệ.', 'warning')
+// Thêm mọi biến thể đã tích vào giỏ, mỗi biến thể với số lượng đang chọn ở bộ tăng giảm của nó.
+// Được gọi khi bấm nút "Thêm vào giỏ" chung dưới danh sách biến thể.
+// api-cart-add chỉ nhận 1 biến thể mỗi lần, nên gọi LẦN LƯỢT (await trong vòng for, không gửi song song)
+// để BE xử lý tồn kho từng món theo thứ tự và thông báo lỗi khớp đúng món.
+// Món nào lỗi (ví dụ 409 hết hàng) thì bỏ qua và thêm tiếp các món sau; món đã thêm được thì bỏ tích,
+// món lỗi giữ nguyên dấu tích để khách chỉnh số lượng rồi bấm lại.
+async function addSelectedToCart() {
+  if (!loggedIn || addingSelected.value) return
+  const variants = selectedVariants.value
+  if (variants.length === 0) {
+    showToast('Hãy tích chọn ít nhất một phiên bản còn hàng.', 'warning')
     return
   }
 
-  setVariantAdding(variant, true)
+  addingSelected.value = true
+  const added = []
+  const failed = []
+  let needRefreshStock = false
   try {
-    const response = await api.post('/?action=api-cart-add', {
-      product_id: product.value.id,
-      variant_id: variant.id,
-      quantity: quantityToAdd,
-    })
-    showToast(response.data?.message || 'Đã thêm sản phẩm vào giỏ hàng.', 'success')
-    refreshCartCount()
-    // Cập nhật số đã có trong giỏ để nút và số còn lại đổi ngay, không cần tải lại trang.
-    fetchCartQuantities()
-  } catch (error) {
-    showToast(error.response?.data?.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'danger')
-    // 409: vượt tồn kho hoặc vừa ngừng bán. Tra lại kho và giỏ để số "Còn N" trên trang không còn cũ.
-    // Lỗi khi tra thì bỏ qua: khách đã thấy thông báo lỗi ở trên rồi.
-    if (error.response?.status === 409) {
-      Promise.all([refreshProductStock(), fetchCartQuantities()]).catch(() => {})
+    for (const variant of variants) {
+      const quantityToAdd = getVariantQuantity(variant)
+      if (quantityToAdd < 1) {
+        failed.push(`${variant.variant_name} (hết hàng)`)
+        continue
+      }
+      try {
+        await api.post('/?action=api-cart-add', {
+          product_id: product.value.id,
+          variant_id: variant.id,
+          quantity: quantityToAdd,
+        })
+        added.push(variant)
+      } catch (error) {
+        failed.push(`${variant.variant_name} (${error.response?.data?.message || 'không thêm được'})`)
+        // 409: vượt tồn kho hoặc vừa ngừng bán, cần tra lại kho để số "Còn N" trên trang không còn cũ.
+        if (error.response?.status === 409) needRefreshStock = true
+      }
     }
+
+    // Bỏ tích các món đã thêm được; món lỗi giữ tích.
+    const next = new Set(selectedVariantIds.value)
+    added.forEach((variant) => next.delete(variant.id))
+    selectedVariantIds.value = next
+
+    // Báo kết quả gộp trong một toast: thành công hết / một phần / không món nào.
+    if (failed.length === 0) {
+      showToast('Đã thêm vào giỏ hàng.', 'success')
+    } else if (added.length > 0) {
+      showToast(`Đã thêm vào giỏ hàng. Chưa thêm được: ${failed.join('; ')}`, 'warning')
+    } else {
+      showToast(`Chưa thêm được: ${failed.join('; ')}`, 'danger')
+    }
+
+    if (added.length > 0) refreshCartCount()
+    // Cập nhật số trong giỏ (và kho nếu có lỗi 409) để số "Còn N" và giới hạn nút "+" đổi ngay.
+    // Lỗi khi tra lại thì bỏ qua: khách đã thấy thông báo ở trên, BE vẫn kiểm tra khi thêm lần sau.
+    const refreshes = [fetchCartQuantities()]
+    if (needRefreshStock) refreshes.push(refreshProductStock())
+    await Promise.all(refreshes).catch(() => {})
   } finally {
-    setVariantAdding(variant, false)
+    addingSelected.value = false
   }
 }
 
@@ -539,6 +668,9 @@ watch(
     newCommentError.value = ''
     cancelEditComment()
     variantQuantities.value = {}
+    // Sang sản phẩm khác thì bỏ hết dấu tích và đóng hết bảng thông số của sản phẩm cũ.
+    selectedVariantIds.value = new Set()
+    openDetailVariantIds.value = new Set()
     // Sang sản phẩm khác thì danh sách biến thể quay về chỉ hiện vài biến thể đầu.
     showAllVariants.value = false
     activeImageIndex.value = 0
@@ -626,7 +758,8 @@ watch(
           <p v-if="isOutOfStock" class="pd-stock pd-stock--out">Hết hàng</p>
           <p v-else class="pd-stock">Còn {{ product.stock }} sản phẩm</p>
 
-          <!-- Danh sách đầy đủ biến thể; thành viên đăng nhập mới có số lượng và nút thêm giỏ theo từng biến thể. -->
+          <!-- Danh sách đầy đủ biến thể; thành viên đăng nhập mới có số lượng + checkbox ở từng biến thể
+               và một nút thêm giỏ chung dưới danh sách. -->
           <section class="pd-variants" aria-labelledby="pd-variants-title">
             <h2 id="pd-variants-title" class="pd-subheading">Chọn phiên bản</h2>
             <p v-if="!product.variants || product.variants.length === 0" class="pd-description">Sản phẩm chưa có phiên bản để bán.</p>
@@ -637,67 +770,29 @@ watch(
                 class="pd-variant"
                 :class="{ 'is-out': variantMaxQuantity(variant) <= 0 }"
               >
-                <!-- Cột trái: ảnh biến thể (chưa có ảnh riêng thì ảnh sản phẩm) và cụm thêm giỏ thu gọn ngay bên dưới.
+                <!-- Ô trái: ảnh vuông của biến thể (chưa có ảnh riêng thì ảnh sản phẩm).
                      Bấm ảnh thì album lớn phía trên chuyển sang đúng ảnh đó. -->
-                <div class="pd-variant-side">
-                  <button
-                    type="button"
-                    class="pd-variant-photo"
-                    :class="{ 'is-active': variantImageIndex(variant) >= 0 && variantImageIndex(variant) === activeImageIndex }"
-                    :disabled="variantImageIndex(variant) < 0"
-                    :aria-label="`Xem ảnh ${variant.variant_name}`"
-                    @click="showVariantImage(variant)"
+                <button
+                  type="button"
+                  class="pd-variant-photo"
+                  :class="{ 'is-active': variantImageIndex(variant) >= 0 && variantImageIndex(variant) === activeImageIndex }"
+                  :disabled="variantImageIndex(variant) < 0"
+                  :aria-label="`Xem ảnh ${variant.variant_name}`"
+                  @click="showVariantImage(variant)"
+                >
+                  <img
+                    v-if="variantPhoto(variant) && !failedImages.has(variantImageIndex(variant))"
+                    :src="resolveImageUrl(variantPhoto(variant))"
+                    alt=""
+                    loading="lazy"
+                    @error="markImageFailed(variantImageIndex(variant))"
                   >
-                    <img
-                      v-if="variantPhoto(variant) && !failedImages.has(variantImageIndex(variant))"
-                      :src="resolveImageUrl(variantPhoto(variant))"
-                      alt=""
-                      loading="lazy"
-                      @error="markImageFailed(variantImageIndex(variant))"
-                    >
-                    <span v-else class="pd-image-fallback pd-image-fallback--small" aria-hidden="true">SB</span>
-                  </button>
-                  <div v-if="loggedIn" class="pd-variant-actions">
-                    <div class="pd-stepper" role="group" :aria-label="`Số lượng ${variant.variant_name}`">
-                      <button
-                        type="button"
-                        :disabled="checkingStockVariantId !== null || variantMaxQuantity(variant) <= 0 || getVariantQuantity(variant) <= 1"
-                        aria-label="Giảm số lượng"
-                        @click="stepVariantQuantity(variant, -1)"
-                      >−</button>
-                      <input
-                        type="number"
-                        class="pd-stepper-input"
-                        min="1"
-                        :max="variantMaxQuantity(variant)"
-                        :value="getVariantQuantity(variant)"
-                        :disabled="checkingStockVariantId !== null || variantMaxQuantity(variant) <= 0"
-                        :aria-label="`Số lượng ${variant.variant_name}`"
-                        @change="onVariantQuantityChange(variant, $event)"
-                      />
-                      <button
-                        type="button"
-                        :disabled="checkingStockVariantId !== null"
-                        aria-label="Tăng số lượng"
-                        @click="stepVariantQuantity(variant, 1)"
-                      >+</button>
-                    </div>
-                    <button
-                      type="button"
-                      class="pd-btn pd-btn--primary pd-btn--inline"
-                      :disabled="variantMaxQuantity(variant) <= 0 || isVariantAdding(variant) || checkingStockVariantId !== null"
-                      @click="addVariantToCart(variant)"
-                    >
-                      {{ isVariantAdding(variant) ? 'Đang thêm...' : 'Thêm vào giỏ' }}
-                    </button>
-                  </div>
-                </div>
+                  <span v-else class="pd-image-fallback pd-image-fallback--small" aria-hidden="true">SB</span>
+                </button>
 
+                <!-- Ô phải: tên, giá, số còn lại; ngay dưới là cụm chọn số lượng + checkbox tích chọn. -->
                 <div class="pd-variant-info">
-                  <!-- Dòng đầu: tên biến thể -->
-                  <div class="pd-variant-head">
-                    <strong class="pd-variant-name">{{ variant.variant_name }}</strong>
-                  </div>
+                  <strong class="pd-variant-name">{{ variant.variant_name }}</strong>
                   <div class="pd-variant-price">
                     <strong :class="{ 'is-sale': variantIsOnSale(variant) }">{{ formatPrice(variant.final_price) }}</strong>
                     <del v-if="variantIsOnSale(variant)">{{ formatPrice(variant.price) }}</del>
@@ -707,14 +802,74 @@ watch(
                     <template v-if="variantInCart(variant) > 0"> · Trong giỏ: {{ variantInCart(variant) }}</template>
                   </span>
 
-                  <!-- Bảng thông số của biến thể (luôn hiện): nhãn tiếng Việt, đã bỏ giá trị trống. -->
-                  <dl v-if="variantDetails(variant).length > 0" class="pd-variant-details">
-                    <div v-for="attribute in variantDetails(variant)" :key="attribute.key" class="pd-variant-detail">
-                      <dt>{{ attribute.label }}</dt>
-                      <dd>{{ attribute.value }}</dd>
+                  <!-- Hàng điều khiển: cụm chọn mua (chỉ khi đã đăng nhập) bên trái, nút "Chi tiết" dạt sang phải. -->
+                  <div class="pd-variant-controls">
+                  <!-- Cụm chọn mua (chỉ khi đã đăng nhập): bộ tăng giảm số lượng và checkbox để đưa biến thể này
+                       vào nút "Thêm vào giỏ" chung bên dưới danh sách. Hết hàng thì khóa cả cụm. -->
+                  <div v-if="loggedIn" class="pd-variant-buy">
+                    <div class="pd-stepper" role="group" :aria-label="`Số lượng ${variant.variant_name}`">
+                      <button
+                        type="button"
+                        :disabled="addingSelected || checkingStockVariantId !== null || variantMaxQuantity(variant) <= 0 || getVariantQuantity(variant) <= 1"
+                        aria-label="Giảm số lượng"
+                        @click="stepVariantQuantity(variant, -1)"
+                      >−</button>
+                      <input
+                        type="number"
+                        class="pd-stepper-input"
+                        min="1"
+                        :max="variantMaxQuantity(variant)"
+                        :value="getVariantQuantity(variant)"
+                        :disabled="addingSelected || checkingStockVariantId !== null || variantMaxQuantity(variant) <= 0"
+                        :aria-label="`Số lượng ${variant.variant_name}`"
+                        @change="onVariantQuantityChange(variant, $event)"
+                      />
+                      <button
+                        type="button"
+                        :disabled="addingSelected || checkingStockVariantId !== null"
+                        aria-label="Tăng số lượng"
+                        @click="stepVariantQuantity(variant, 1)"
+                      >+</button>
                     </div>
-                  </dl>
+                    <label class="pd-variant-check">
+                      <input
+                        type="checkbox"
+                        :checked="isVariantSelected(variant) && variantMaxQuantity(variant) > 0"
+                        :disabled="addingSelected || variantMaxQuantity(variant) <= 0"
+                        @change="toggleVariantSelected(variant, $event.target.checked)"
+                      />
+                      <span>Chọn</span>
+                    </label>
+                  </div>
+
+                  <!-- Nút đóng/mở bảng thông số (chỉ có khi biến thể có thông số). Mặc định đóng cho thẻ gọn. -->
+                  <button
+                    v-if="variantDetails(variant).length > 0"
+                    type="button"
+                    class="pd-variant-detail-toggle"
+                    :class="{ 'is-open': isVariantDetailOpen(variant) }"
+                    :aria-expanded="isVariantDetailOpen(variant)"
+                    :aria-controls="`pd-variant-details-${variant.id}`"
+                    @click="toggleVariantDetail(variant)"
+                  >
+                    Chi tiết
+                    <span class="pd-variants-more-chevron" :class="{ 'is-open': isVariantDetailOpen(variant) }" aria-hidden="true">▾</span>
+                  </button>
+                  </div>
                 </div>
+
+                <!-- Hàng dưới, trải hết bề ngang thẻ: bảng thông số của biến thể (nhãn tiếng Việt, đã bỏ giá trị trống).
+                     Chỉ hiện khi khách bấm nút "Chi tiết". -->
+                <dl
+                  v-if="variantDetails(variant).length > 0 && isVariantDetailOpen(variant)"
+                  :id="`pd-variant-details-${variant.id}`"
+                  class="pd-variant-details"
+                >
+                  <div v-for="attribute in variantDetails(variant)" :key="attribute.key" class="pd-variant-detail">
+                    <dt>{{ attribute.label }}</dt>
+                    <dd>{{ attribute.value }}</dd>
+                  </div>
+                </dl>
               </li>
             </ul>
             <!-- Nút xổ xuống / thu gọn: chỉ có khi sản phẩm có nhiều hơn VARIANTS_PREVIEW_COUNT biến thể -->
@@ -728,6 +883,22 @@ watch(
               {{ showAllVariants ? 'Thu gọn' : `Xem thêm ${hiddenVariantCount} phiên bản` }}
               <span class="pd-variants-more-chevron" :class="{ 'is-open': showAllVariants }" aria-hidden="true">▾</span>
             </button>
+
+            <!-- Nút thêm giỏ chung (chỉ khi đã đăng nhập): thêm mọi biến thể đã tích với số lượng của từng biến thể.
+                 Chưa tích món nào còn hàng thì khóa nút. -->
+            <div v-if="loggedIn && product.variants && product.variants.length > 0" class="pd-variants-cart">
+              <span class="pd-variants-cart-count">
+                Đã chọn <strong>{{ selectedVariants.length }}</strong> phiên bản<template v-if="selectedVariants.length > 0">, tổng <strong>{{ selectedTotalQuantity }}</strong> sản phẩm</template>
+              </span>
+              <button
+                type="button"
+                class="pd-btn pd-btn--primary"
+                :disabled="selectedVariants.length === 0 || addingSelected || checkingStockVariantId !== null"
+                @click="addSelectedToCart"
+              >
+                {{ addingSelected ? 'Đang thêm...' : 'Thêm vào giỏ' }}
+              </button>
+            </div>
           </section>
 
           <!-- Khách chưa đăng nhập: không có nút mua hàng, chỉ có gợi ý đăng nhập. -->
@@ -737,9 +908,28 @@ watch(
             </RouterLink> để mua hàng và bình luận.
           </p>
 
-          <hr class="pd-divider">
-          <h2 class="pd-subheading">Mô tả sản phẩm</h2>
-          <p class="pd-description">{{ product.description || 'Chưa có mô tả cho sản phẩm này.' }}</p>
+        </section>
+
+        <!-- Mô tả sản phẩm: máy tính nằm ở cột trái ngay dưới album ảnh, điện thoại nằm sau phần mua hàng
+             (vị trí do CSS grid-template-areas của .pd-main quyết định). Mô tả dài quá khung thì thu gọn,
+             có nút "Xem thêm" / "Ẩn bớt". -->
+        <section class="pd-description-box" aria-labelledby="pd-description-title">
+          <h2 id="pd-description-title" class="pd-subheading">Mô tả sản phẩm</h2>
+          <p
+            ref="descriptionEl"
+            class="pd-description"
+            :class="{ 'is-collapsed': !descriptionExpanded, 'has-fade': descriptionOverflows && !descriptionExpanded }"
+          >{{ product.description || 'Chưa có mô tả cho sản phẩm này.' }}</p>
+          <button
+            v-if="descriptionOverflows"
+            type="button"
+            class="pd-description-toggle"
+            :aria-expanded="descriptionExpanded"
+            @click="descriptionExpanded = !descriptionExpanded"
+          >
+            {{ descriptionExpanded ? 'Ẩn bớt' : 'Xem thêm' }}
+            <span class="pd-variants-more-chevron" :class="{ 'is-open': descriptionExpanded }" aria-hidden="true">▾</span>
+          </button>
         </section>
       </div>
 
@@ -781,7 +971,8 @@ watch(
               <div class="pd-comment-form-footer">
                 <span class="pd-demo-note">Tối đa 2.000 ký tự. Bình luận sẽ hiển thị sau khi được duyệt.</span>
                 <button type="submit" class="pd-btn pd-btn--primary pd-btn--inline" :disabled="commentSubmitting">
-                  {{ commentSubmitting ? 'Đang gửi...' : 'Gửi bình luận' }}
+                  <!-- Gửi bình luận phải chờ AI kiểm duyệt (thường dưới 1-2 giây), nên ghi rõ đang kiểm duyệt. -->
+                  {{ commentSubmitting ? 'Đang kiểm duyệt...' : 'Gửi bình luận' }}
                 </button>
               </div>
             </div>
@@ -830,7 +1021,7 @@ watch(
                     <p v-if="editingCommentError" class="pd-field-error" role="alert">{{ editingCommentError }}</p>
                     <div class="pd-comment-actions">
                       <button type="button" class="pd-btn pd-btn--primary pd-btn--inline" :disabled="commentUpdatingId === comment.id" @click="updateComment(comment)">
-                        {{ commentUpdatingId === comment.id ? 'Đang lưu...' : 'Lưu' }}
+                        {{ commentUpdatingId === comment.id ? 'Đang kiểm duyệt...' : 'Lưu' }}
                       </button>
                       <button type="button" class="pd-btn pd-btn--outline pd-btn--inline" :disabled="commentUpdatingId === comment.id" @click="cancelEditComment">Hủy</button>
                     </div>
@@ -940,11 +1131,79 @@ watch(
   font-size: 14px;
 }
 
+/* Bố cục chính đặt tên ô bằng grid-template-areas:
+   - Máy tính: cột trái = album ảnh ("gallery") rồi mô tả ("desc") ngay bên dưới; cột phải = thông tin ("info")
+     kéo dài cả 2 hàng. grid-template-rows "auto 1fr": hàng ảnh chỉ cao đúng bằng ảnh, phần chiều cao dư
+     của cột thông tin dồn vào hàng mô tả, nên mô tả nằm sát ngay dưới ảnh, không bị đẩy xuống.
+   - Điện thoại (xem @media bên dưới): xếp 1 cột ảnh → thông tin → mô tả, để khách thấy giá và nút mua trước. */
 .pd-main {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "gallery info"
+    "desc info";
   gap: 24px;
   padding-bottom: 24px;
+}
+
+.pd-gallery {
+  grid-area: gallery;
+}
+
+.pd-info {
+  grid-area: info;
+}
+
+/* Khối mô tả: thẻ trắng viền kem giống khung ảnh, nằm sát dưới album. */
+.pd-description-box {
+  grid-area: desc;
+  align-self: start;
+  padding: 16px 18px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.pd-description-box .pd-subheading {
+  margin: 0 0 10px;
+}
+
+/* Mô tả thu gọn: chỉ hiện khoảng 6 dòng (1.6em là chiều cao 1 dòng theo line-height). */
+.pd-description.is-collapsed {
+  max-height: calc(1.6em * 6);
+  overflow: hidden;
+}
+
+/* Chỉ khi mô tả thật sự bị cắt mới làm mờ dần dòng cuối, báo cho khách biết còn chữ bên dưới.
+   mask-image: phần trong suốt của dải màu làm chữ mờ dần, không cần thêm lớp phủ. */
+.pd-description.has-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent);
+  mask-image: linear-gradient(to bottom, #000 65%, transparent);
+}
+
+/* Nút "Xem thêm" / "Ẩn bớt": chữ màu đồng, không viền, mũi tên xoay khi mở. */
+.pd-description-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #9e7432;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pd-description-toggle:hover {
+  color: #b8893e;
+}
+
+.pd-description-toggle:focus-visible {
+  outline: 3px solid #b8893e;
+  outline-offset: 2px;
 }
 
 .pd-gallery-main {
@@ -1143,22 +1402,24 @@ watch(
   border-radius: 6px;
 }
 
-/* Thẻ biến thể chia 2 cột: trái = ảnh + cụm thêm giỏ, phải = tên, giá, kho, thông số.
+/* Thẻ biến thể dạng lưới 2 hàng (grid-template-areas đặt tên từng ô cho dễ đọc):
+   - Hàng trên: "photo" = ảnh vuông cố định 112px, "info" = tên, giá, số còn lại, cụm chọn mua.
+   - Hàng dưới: "details" = bảng thông số trải hết bề ngang thẻ (chiếm cả 2 cột).
    minmax(0, 1fr): cột phải được co lại khi chữ dài, không đẩy thẻ tràn ngang. */
 .pd-variant {
-  grid-template-columns: 132px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-areas:
+    "photo info"
+    "details details";
   align-items: start;
-  gap: 14px;
-}
-
-.pd-variant-side {
-  display: grid;
-  gap: 8px;
+  gap: 12px 14px;
+  padding: 14px;
 }
 
 /* Ảnh vuông của biến thể; bấm để album lớn chuyển sang ảnh này. */
 .pd-variant-photo {
   display: grid;
+  grid-area: photo;
   width: 100%;
   aspect-ratio: 1 / 1;
   overflow: hidden;
@@ -1190,37 +1451,12 @@ watch(
   outline-offset: 2px;
 }
 
-/* Cụm thêm giỏ thu gọn trong cột trái: bộ tăng giảm ở trên, nút "Thêm vào giỏ" ở dưới, cùng rộng bằng ảnh. */
-.pd-variant-side .pd-variant-actions {
-  grid-template-columns: 1fr;
-  gap: 6px;
-}
-
-.pd-variant-side .pd-stepper button {
-  width: 34px;
-  height: 34px;
-  font-size: 16px;
-}
-
-.pd-variant-side .pd-stepper-input {
-  width: auto;
-  min-width: 0;
-  flex: 1 1 auto;
-  font-size: 14px;
-}
-
-.pd-variant-side .pd-btn {
-  width: 100%;
-  min-height: 36px;
-  padding: 0 8px;
-  font-size: 13px;
-}
-
-/* Điện thoại: cột trái hẹp lại để cột thông số còn đủ chỗ. */
+/* Điện thoại: ảnh nhỏ lại để cột thông tin còn đủ chỗ cho cụm chọn mua. */
 @media (max-width: 575.98px) {
   .pd-variant {
-    grid-template-columns: 108px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 10px 12px;
+    padding: 12px;
   }
 }
 
@@ -1228,22 +1464,167 @@ watch(
   opacity: 0.6;
 }
 
+/* Cột thông tin: các dòng xếp dọc, sát nhau. */
 .pd-variant-info {
   display: grid;
+  grid-area: info;
+  align-content: start;
   gap: 4px;
+  min-width: 0;
+}
+
+.pd-variant-name {
+  color: #131e2a;
+  font-size: 15px;
+  line-height: 1.3;
 }
 
 .pd-variant-stock {
   color: #4a5565;
+  font-size: 13px;
+}
+
+/* Hàng điều khiển ngay dưới dòng "Còn N sản phẩm": cụm chọn mua bên trái, nút "Chi tiết" bên phải.
+   flex-wrap: màn hình quá hẹp thì phần tử tự xuống dòng thay vì tràn ra ngoài thẻ. */
+.pd-variant-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* Cụm chọn mua: bộ tăng giảm + checkbox cùng một hàng. */
+.pd-variant-buy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Bộ tăng giảm trong thẻ biến thể: các ô vuông 34px cho gọn. */
+.pd-variant-buy .pd-stepper button {
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+}
+
+.pd-variant-buy .pd-stepper-input {
+  width: 44px;
+  height: 34px;
   font-size: 14px;
 }
 
-/* Dòng đầu biến thể: tên bên trái, nút "Chi tiết" bên phải. */
-.pd-variant-head {
+/* Checkbox "Chọn": ô vuông cao bằng bộ tăng giảm, viền đổi màu đồng khi đã tích. */
+.pd-variant-check {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid #d9d4ca;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1c2a3a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.pd-variant-check:has(input:checked) {
+  border-color: #b8893e;
+  background: #f7f0e3;
+}
+
+.pd-variant-check:has(input:disabled) {
+  background: #efeae0;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.pd-variant-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #b8893e;
+  cursor: inherit;
+}
+
+/* Nút "Chi tiết ▾": ô viền nhạt cao 34px, cùng kiểu với bộ tăng giảm và ô "Chọn" để hàng điều khiển đồng bộ.
+   margin-left: auto đẩy nút dạt về mép phải của hàng. Mũi tên xoay ngược khi mở. */
+.pd-variant-detail-toggle {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid #d9d4ca;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #25364a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.pd-variant-detail-toggle:hover {
+  border-color: #b8893e;
+}
+
+/* Đang mở: viền đồng, nền kem, giống ô "Chọn" khi đã tích. */
+.pd-variant-detail-toggle.is-open {
+  border-color: #b8893e;
+  background: #f7f0e3;
+  color: #9e7432;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pd-variant-detail-toggle {
+    transition: none;
+  }
+}
+
+.pd-variant-detail-toggle:focus-visible {
+  outline: 3px solid #b8893e;
+  outline-offset: 2px;
+}
+
+/* Thanh nút "Thêm vào giỏ" chung dưới danh sách: số phiên bản đã chọn bên trái, nút bên phải. */
+.pd-variants-cart {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e6e0d4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.pd-variants-cart-count {
+  color: #4a5565;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Hai con số (số phiên bản, tổng sản phẩm) đậm, to và navy để nổi lên giữa câu chữ xám. */
+.pd-variants-cart-count strong {
+  color: #131e2a;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+/* Điện thoại: nút chung dàn hết bề ngang cho dễ bấm. */
+@media (max-width: 575.98px) {
+  .pd-variants-cart .pd-btn {
+    width: 100%;
+  }
 }
 
 /* Nút thả xuống: chữ nhỏ màu đồng, mũi tên xoay 180 độ khi mở. */
@@ -1283,31 +1664,77 @@ watch(
   transform: rotate(180deg);
 }
 
-/* Bảng thông số của biến thể: nền kem, mỗi dòng "nhãn | giá trị". */
+/* Bảng thông số của biến thể: hàng dưới của thẻ, trải hết bề ngang (ô "details" chiếm cả 2 cột).
+   Kẻ dạng bảng 2 cột "nhãn | giá trị", mỗi thông số một hàng:
+   - Khung ngoài viền nhạt bo góc; overflow: hidden để nền cột nhãn không tràn qua góc bo.
+   - Các hàng ngăn bằng đường kẻ ngang mảnh; cột nhãn nền kem, ngăn với cột giá trị bằng đường kẻ dọc.
+   Màu đồng để dành cho giá và nút chính; bảng chỉ dùng xám/navy để không lóa mắt. */
 .pd-variant-details {
-  display: grid;
-  gap: 6px;
-  margin: 4px 0 0;
-  padding: 10px 12px;
+  grid-area: details;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #e6e0d4;
   border-radius: 6px;
-  background: #f7f4ee;
-  font-size: 13px;
+  background: #ffffff;
 }
 
+/* Một hàng của bảng: cột nhãn rộng cố định 150px, cột giá trị chiếm phần còn lại.
+   minmax(0, 1fr): giá trị dài thì xuống dòng trong ô, không đẩy bảng tràn ngang. */
 .pd-variant-detail {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 150px minmax(0, 1fr);
 }
 
+/* Kẻ đường ngang giữa các hàng (hàng đầu không cần vì đã có viền khung). */
+.pd-variant-detail + .pd-variant-detail {
+  border-top: 1px solid #ece6da;
+}
+
+/* Ô nhãn: nền kem nhạt, chữ xám đậm vừa; đường kẻ dọc bên phải tách với ô giá trị. */
 .pd-variant-detail dt {
-  color: #6b6560;
+  padding: 9px 12px;
+  border-right: 1px solid #ece6da;
+  background: #f7f4ee;
+  color: #4a5565;
+  font-size: 13px;
   font-weight: 600;
 }
 
+/* Ô giá trị: nền trắng, chữ navy, là phần khách cần đọc. */
 .pd-variant-detail dd {
   margin: 0;
+  padding: 9px 12px;
   color: #1c2a3a;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* Điện thoại: cột nhãn hẹp lại để cột giá trị còn đủ chỗ. */
+@media (max-width: 575.98px) {
+  .pd-variant-detail {
+    grid-template-columns: 110px minmax(0, 1fr);
+  }
+
+  .pd-variant-detail dt,
+  .pd-variant-detail dd {
+    padding: 8px 10px;
+  }
+}
+
+/* Màn rất hẹp: nhãn nằm trên, giá trị nằm dưới (bỏ đường kẻ dọc) để chữ không bị ép thành cột quá mảnh. */
+@media (max-width: 359.98px) {
+  .pd-variant-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pd-variant-detail dt {
+    padding-bottom: 4px;
+    border-right: 0;
+  }
+
+  .pd-variant-detail dd {
+    padding-top: 4px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1326,13 +1753,6 @@ watch(
 .pd-variant-price del {
   color: #6b7280;
   font-size: 14px;
-}
-
-.pd-variant-actions {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px;
-  align-items: center;
 }
 
 .pd-price-from {
@@ -1413,13 +1833,6 @@ watch(
   color: #8c6a32;
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-.pd-divider {
-  margin: 24px 0 20px;
-  border: 0;
-  border-top: 1px solid #d9d4ca;
-  opacity: 1;
 }
 
 .pd-subheading {
@@ -1612,6 +2025,11 @@ watch(
 @media (max-width: 767.98px) {
   .pd-main {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-template-areas:
+      "gallery"
+      "info"
+      "desc";
   }
 }
 

@@ -32,6 +32,30 @@ class ApiLogger
     private static $requestBody = '';
     /** @var array Thông tin request: method, route, query, có token hay không, content-type */
     private static $request = [];
+    /** @var array Ghi chú do code nghiệp vụ gắn thêm trong request này: [['level' => 'INFO'|'WARN', 'message' => ...]] */
+    private static $notes = [];
+
+    /**
+     * Gắn thêm một ghi chú vào khối log của request hiện tại.
+     * Dùng cho chuyện xảy ra bên trong mà response không thể hiện, ví dụ dịch vụ AI lỗi
+     * nhưng API vẫn trả 201 vì bình luận đã được lưu ở trạng thái chờ duyệt.
+     * Ghi chú WARN nâng mức của cả khối log từ INFO lên WARN để dễ lọc.
+     * Không đưa mật khẩu, token, key hay URL dịch vụ vào message.
+     *
+     * @param string $message Nội dung ghi chú
+     * @param string $level   'INFO' hoặc 'WARN' (giá trị khác được coi là INFO)
+     * @return void
+     */
+    public static function note(string $message = '', string $level = 'INFO'): void
+    {
+        if (trim($message) === '') {
+            return;
+        }
+        self::$notes[] = [
+            'level' => $level === 'WARN' ? 'WARN' : 'INFO',
+            'message' => self::truncate($message, 500),
+        ];
+    }
 
     /**
      * Bắt đầu ghi log: đo thời gian, lưu body và thông tin request, bật bộ đệm để đọc được response.
@@ -71,6 +95,10 @@ class ApiLogger
         $isError = $status >= 400;
         $outcome = $isError ? 'LỖI' : 'THÀNH CÔNG';
         $level = $status >= 500 ? 'ERROR' : ($isError ? 'WARN' : 'INFO');
+        // Request thành công nhưng có ghi chú cảnh báo (ví dụ dịch vụ AI lỗi) thì nâng lên WARN.
+        if ($level === 'INFO' && in_array('WARN', array_column(self::$notes, 'level'), true)) {
+            $level = 'WARN';
+        }
 
         $lines = [];
         $lines[] = sprintf(
@@ -91,6 +119,9 @@ class ApiLogger
         $lines[] = '  BE trả: ' . self::describeBody($responseBody, 'application/json');
         if ($isError) {
             $lines[] = '  Thông báo: ' . self::errorMessage($responseBody);
+        }
+        foreach (self::$notes as $note) {
+            $lines[] = '  Ghi chú (' . $note['level'] . '): ' . $note['message'];
         }
 
         self::write(implode("\n", $lines) . "\n\n");
