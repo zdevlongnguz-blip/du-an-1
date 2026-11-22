@@ -130,14 +130,20 @@ async function scrollToBottom() {
   }
 }
 
-// Mở trang mà BE yêu cầu (đã được lọc theo danh sách route cho phép trong helper).
-// Trên điện thoại, panel che toàn màn hình nên thu nhỏ panel để khách thấy trang vừa mở.
-async function navigateTo(location) {
-  if (!location) return
-  await router.push(location)
+// Trên điện thoại, panel chat che toàn màn hình: mỗi khi chat đưa khách sang trang khác thì thu nhỏ panel
+// để khách thấy ngay trang vừa mở. Máy tính thì panel chỉ chiếm một góc nên giữ nguyên.
+// Dùng chung cho: trang AI yêu cầu mở (navigateTo) và link Đăng nhập / Đăng ký ở màn hình khách chưa đăng nhập.
+function closeChatOnMobile() {
   if (window.matchMedia('(max-width: 575.98px)').matches) {
     closeChat()
   }
+}
+
+// Mở trang mà BE yêu cầu (đã được lọc theo danh sách route cho phép trong helper).
+async function navigateTo(location) {
+  if (!location) return
+  await router.push(location)
+  closeChatOnMobile()
 }
 
 // Gửi một câu hỏi (từ ô nhập hoặc từ chip gợi ý), báo lỗi bằng toast nếu gửi thất bại.
@@ -307,7 +313,8 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
           <button type="button" class="chat-draft-button" @click="openDraftPage">Xem đơn nháp</button>
         </div>
 
-        <!-- Chưa đăng nhập: thông báo và link tới trang đăng nhập (lưu trang hiện tại để quay lại) -->
+        <!-- Chưa đăng nhập: thông báo và link tới trang đăng nhập (lưu trang hiện tại để quay lại).
+             Bấm link thì thu nhỏ panel trên điện thoại (closeChatOnMobile), để panel không che trang đăng nhập / đăng ký. -->
         <div v-if="!authenticated" class="chat-body chat-guest">
           <span class="chat-guest-avatar"><img v-if="!avatarFailed" :src="avatarUrl" alt="" class="chat-avatar-img" @error="avatarFailed = true" /><span v-else class="chat-avatar-letter">L</span></span>
           <h3 class="chat-guest-title">Đăng nhập để trò chuyện cùng Louis</h3>
@@ -318,10 +325,11 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
             :to="{ name: 'login' }"
             class="chat-button-primary"
             @click.capture="saveReturnUrl(route.fullPath)"
+            @click="closeChatOnMobile"
           >
             Đăng nhập
           </RouterLink>
-          <RouterLink :to="{ name: 'register' }" class="chat-guest-link">Chưa có tài khoản? Đăng ký</RouterLink>
+          <RouterLink :to="{ name: 'register' }" class="chat-guest-link" @click="closeChatOnMobile">Chưa có tài khoản? Đăng ký</RouterLink>
         </div>
 
         <template v-else>
