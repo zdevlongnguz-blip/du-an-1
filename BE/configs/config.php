@@ -67,6 +67,8 @@ define('PATH_CONTROLLER', PATH_ROOT . 'controllers/');
 define('BASE_ASSETS_JS', BASE_URL . 'assets/js/');
 define('PATH_EXTENSION', PATH_ROOT . 'extensions/');
 define('PATH_GEMINI_SERVICE', PATH_ROOT . 'geminiServices/');
+// Thư mục chứa service gọi AI kiểm duyệt bình luận (Comment Guard).
+define('PATH_COMMENT_GUARD_SERVICE', PATH_ROOT . 'commentGuardServices/');
 
 // Các thiết lập không phải bí mật được giữ trực tiếp trong file cấu hình.
 define('APP_ENV', 'development');
@@ -120,3 +122,12 @@ define('GEMINI_API_KEYS', array_values(array_unique(array_filter(
 ))));
 // Tên model Gemini dùng mặc định, đổi được qua GEMINI_MODEL trong BE/.env mà không phải sửa code.
 define('GEMINI_MODEL', getenv('GEMINI_MODEL') ?: 'gemini-2.5-flash');
+
+// Comment Guard: dịch vụ AI bên ngoài (chạy trên Google Colab) chấm bình luận có độc hại hay không.
+// URL và key đọc từ BE/.env vì URL Colab đổi mỗi lần chạy lại và key là bí mật.
+// URL để trống thì service CommentGuard báo lỗi khi được gọi.
+define('COMMENT_GUARD_URL', rtrim(trim((string) getenv('COMMENT_GUARD_URL')), '/'));
+define('COMMENT_GUARD_KEY', trim((string) getenv('COMMENT_GUARD_KEY')));
+// Số giây tối đa chờ dịch vụ trả lời; sai định dạng hoặc ngoài 1-60 thì dùng 15 giây.
+$_commentGuardTimeout = (int) getenv('COMMENT_GUARD_TIMEOUT');
+define('COMMENT_GUARD_TIMEOUT', ($_commentGuardTimeout >= 1 && $_commentGuardTimeout <= 60) ? $_commentGuardTimeout : 15);

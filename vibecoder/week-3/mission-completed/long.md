@@ -172,3 +172,41 @@ Người thực hiện: Long (BE). Làm việc cùng Claude Code. Phần này l�
 - Test đặt đơn thật (COD và SePay) qua API với JWT hợp lệ.
 - Test chat thật với Gemini cho các kịch bản đổi số lượng và thiếu hồ sơ.
 - Test tự động cho BE (hiện chưa có).
+
+## Ghi công bổ sung (ngày 2026-11-22)
+
+Người thực hiện: Long (BE). Làm việc cùng Claude Code, nhánh `chore/dev-sync-20261122`. Chưa commit, chưa tạo PR. Phần tích hợp kiểm duyệt vào chức năng bình luận (BE + FE) và sửa layout trang chi tiết do Vinh, xem `vinh.md`.
+
+### Tìm hiểu 2 model AI kiểm duyệt bình luận và dựng dịch vụ trên Google Colab
+- Tìm hiểu và chọn 2 model tiếng Việt, chạy nối tiếp (model 2 chỉ chạy khi model 1 cho qua):
+
+  | # | Model | Nhiệm vụ | Nhãn |
+  | --- | --- | --- | --- |
+  | 1 | `visolex/visobert-hsd` | Kiểm duyệt: phát hiện ngôn từ xúc phạm hoặc thù ghét (HSD = Hate Speech Detection) | `CLEAN` / `OFFENSIVE` / `HATE` |
+  | 2 | `5CD-AI/Vietnamese-Sentiment-visobert` | Gắn nhãn cảm xúc của bình luận | `POS` / `NEG` / `NEU` |
+
+- Dựng server FastAPI trên Google Colab, mở ra ngoài bằng tunnel `trycloudflare` để lấy endpoint: `GET /` (kiểm tra sống, ngưỡng độc hại 0.7), `POST /analyze` (1 câu), `POST /analyze-batch` (nhiều câu).
+
+### Cấu hình và service gọi Colab
+- `BE/.env.example`: biến `COMMENT_GUARD_URL`, `COMMENT_GUARD_KEY`, `COMMENT_GUARD_TIMEOUT`.
+- `BE/configs/config.php`: đọc 3 biến trên thành hằng; `PATH_COMMENT_GUARD_SERVICE`.
+- `BE/index.php`: thêm thư mục `commentGuardServices/` vào autoload.
+- `BE/commentGuardServices/CommentGuard.php` (mới, thư mục service riêng như `geminiServices/`): `analyze()` chấm 1 câu, `analyzeBatch()` chấm tối đa 50 câu, gọi Colab bằng cURL, kiểm tra và chuẩn hóa kết quả trả về.
+
+### API test `api-comment-guard` (giữ lại, không xóa)
+- `BE/controllers/CommentGuardController.php` (mới) và case `api-comment-guard` trong `BE/routes/index.php`: `POST`, yêu cầu đăng nhập, body `{ "text": "..." }`, trả nguyên kết quả AI (nhãn, `toxic_prob`, `needs_review`, cảm xúc). Dùng để thử model, không phải API cho FE.
+
+### Migration thêm cột nhãn AI vào bảng `comments`
+- `BE/database/migrations/20261122_01_add_comments_ai_labels.sql` (mới): thêm `moderation_label VARCHAR(20)`, `sentiment VARCHAR(10)`, `toxic_prob DECIMAL(5,4)`, đều cho phép NULL (NULL = chưa chấm). Viết để chạy lặp được.
+- Đã chạy trên DB local bằng `php BE/database/run.php`, chạy lại lần 2 không lỗi.
+
+### Đã kiểm tra
+- `php -l` cho các file PHP đã sửa: OK.
+- Thử model qua service: 26 câu (khen, trung tính, chê lịch sự, chê gay gắt, chửi tục, viết tắt, không dấu, chèn ký tự, mỉa mai, tiếng lóng, tiếng Anh, spam, emoji). Model 1 chặn đúng 7/7 câu chửi tục tiếng Việt; có 1 câu chặn nhầm ("Hàng như rác, phí tiền"), chửi tiếng Anh "fuck this shop" chỉ bị gắn cờ chờ duyệt, không lọc spam. Model 2 gắn sai 2/18 câu (câu trung tính ngắn, câu mỉa mai).
+- Gọi API test qua Postman với token user: "Như cặc" ra `HIDDEN` / `OFFENSIVE` / `toxic_prob` 0.9973.
+- API test không token / token sai: 401. Service khi chưa cấu hình URL: báo lỗi đúng.
+- Tài liệu: `docs/comment-guard/README.md` (2 model, endpoint Colab, cấu hình, API test, bảng 26 câu thử nguyên văn, nhận xét chất lượng model).
+
+### Lưu ý
+- URL `trycloudflare` đổi mỗi lần chạy lại Colab, phải sửa `COMMENT_GUARD_URL` trong `BE/.env`.
+- Colab hiện chưa kiểm tra header `x-api-key`. `BE/.env.example` chỉ ghi URL mẫu, URL thật để trong `BE/.env`.

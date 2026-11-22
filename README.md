@@ -32,6 +32,7 @@ Dự án web salon tóc nam theo mô hình monorepo. Backend PHP MVC và fronten
 du-an-1/
 ├── BE/
 │   ├── assets/            # Ảnh upload (assets/uploads) và JS dùng chung
+│   ├── commentGuardServices/ # Service gọi AI kiểm duyệt bình luận trên Google Colab
 │   ├── configs/           # Cấu hình, helper, mail
 │   ├── controllers/
 │   ├── database/          # create_database.sql, migrations/, seed/, run.php
@@ -284,6 +285,7 @@ Các endpoint đánh dấu "đăng nhập" cần header `Authorization: Bearer <
 | Quản trị danh mục | `api-admin-category-create`, `api-admin-category-update`, `api-admin-category-delete` | Admin |
 | Quản trị banner | `api-admin-banner-create`, `api-admin-banner-update`, `api-admin-banner-delete` | Admin |
 | Quản trị bình luận | `api-admin-comments`, `api-admin-comment-approve`, `api-admin-comment-delete` | Admin |
+| Kiểm duyệt AI (API test thử 2 model trên Colab) | `api-comment-guard` | Đăng nhập |
 
 Ảnh sản phẩm được lưu trong `BE/assets/uploads` và truy cập qua `/BE/assets/uploads/<tên-file>`. Nếu trong database có tên ảnh nhưng thiếu file thật, giao diện hiển thị chữ viết tắt thay cho ảnh.
 
@@ -299,12 +301,14 @@ Các endpoint đánh dấu "đăng nhập" cần header `Authorization: Bearer <
 | Lỗi "Thiếu DB_USERNAME, DB_PASSWORD hoặc JWT_SECRET" | Chưa tạo `BE/.env` từ `BE/.env.example` hoặc thiếu biến |
 | Lỗi thiếu class PHPMailer hoặc SePay | Chưa chạy `composer install` ở thư mục gốc |
 | Trợ lý AI báo "đang gặp sự cố" (502) | Thường do mọi key Gemini đã hết hạn mức miễn phí. Xem log PHP (Laragon: `C:\laragon\tmp\php_errors.log`) dòng `[Gemini]`/`[ChatController]`; đợi khoảng 1 phút hoặc thêm key thuộc project khác vào `GEMINI_API_KEY` (cách nhau bằng dấu phẩy) |
+| Kiểm duyệt bình luận báo "không khả dụng" (502) | Colab đã tắt hoặc URL tunnel đổi. Chạy lại Colab, cập nhật `COMMENT_GUARD_URL` trong `BE/.env`; xem log PHP dòng `[CommentGuard]` |
 | Ảnh sản phẩm báo 404 | Tên ảnh trong database không có file tương ứng trong `BE/assets/uploads` |
 | Qua ngrok, link trong email trỏ về `du-an-1.test` hoặc `localhost:5173` | Chưa đặt `APP_URL` (và các `SEPAY_*_URL`) theo URL ngrok trong `BE/.env`; xem [Chia sẻ qua ngrok](#chia-sẻ-qua-ngrok) |
 
 ## Tài liệu liên quan
 
 - [AUTH_README.md](AUTH_README.md): hướng dẫn chi tiết về JWT, Bearer token và middleware auth
+- [docs/comment-guard/README.md](docs/comment-guard/README.md): kiểm duyệt bình luận bằng AI (2 model trên Google Colab, cấu hình, API test `api-comment-guard`, kết quả thử model)
 
 ## Ghi chú
 

@@ -76,6 +76,9 @@ erDiagram
         bigint_unsigned user_id FK
         text content
         tinyint status "0 chờ duyệt, 1 đã duyệt"
+        varchar moderation_label "AI: CLEAN/OFFENSIVE/HATE, NULL chưa chấm"
+        varchar sentiment "AI: POS/NEG/NEU, NULL nếu bị chặn"
+        decimal toxic_prob "AI: 0..1, NULL chưa chấm"
     }
     carts {
         bigint_unsigned id PK
@@ -196,7 +199,7 @@ Cột: id, category_id, code, name, slug, image, description, view_count, sales_
 | `categories` | id INT PK; name; slug UNIQUE; created_at; updated_at |
 | `banners` | id INT UNSIGNED PK; title; image; content TEXT; CTA_link VARCHAR(2048); created_at; updated_at |
 | `product_images` | id INT UNSIGNED PK; product_id FK → products (CASCADE); image_path; sort_order default 0; created_at; updated_at. Index (product_id, sort_order) |
-| `comments` | id BIGINT UNSIGNED PK; product_id FK → products (CASCADE); user_id FK → users (CASCADE); content TEXT; status TINYINT(1) default 0 (0 chờ duyệt, 1 đã duyệt); created_at; updated_at |
+| `comments` | id BIGINT UNSIGNED PK; product_id FK → products (CASCADE); user_id FK → users (CASCADE); content TEXT; status TINYINT(1) default 0 (0 chờ duyệt, 1 đã duyệt); moderation_label VARCHAR(20) NULL; sentiment VARCHAR(10) NULL; toxic_prob DECIMAL(5,4) NULL (3 cột kết quả AI kiểm duyệt, NULL = chưa chấm; migration `20261122_01_add_comments_ai_labels.sql`, chi tiết ở `docs/comment-guard/README.md`); created_at; updated_at |
 | `carts` | id BIGINT UNSIGNED PK; user_id UNIQUE, FK → users (CASCADE); created_at; updated_at |
 | `orders` | id BIGINT UNSIGNED PK; user_id FK → users; recipient_name VARCHAR(100); recipient_phone VARCHAR(20); shipping_address VARCHAR(500); total_amount DECIMAL(12,2); order_status ENUM('pending','confirmed','shipping','delivered','cancelled') default 'pending'; payment_status ENUM('unpaid','paid') default 'unpaid'; payment_method ENUM('cod','sepay') default 'cod' (cod = khi nhận hàng, sepay = online); payment_invoice_number VARCHAR(64) NULL (mã hóa đơn SePay của lần thanh toán online gần nhất); created_at; updated_at. Index `idx_orders_online_pending` cho việc tự hủy đơn online quá hạn |
 | `schema_migrations` | migration VARCHAR(255) PK; applied_at. Do `run.php` quản lý |
