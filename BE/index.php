@@ -33,6 +33,7 @@ spl_autoload_register(function ($class) {
     $fileModel = PATH_MODEL . $fileName;
     $fileController = PATH_CONTROLLER . $fileName;
     $fileGeminiService = PATH_GEMINI_SERVICE . $fileName;
+    $fileCommentGuardService = PATH_COMMENT_GUARD_SERVICE . $fileName;
 
     //Khai bao them phan Extensions mo rong
     $fileExtension = PATH_EXTENSION . $fileName;
@@ -45,6 +46,8 @@ spl_autoload_register(function ($class) {
         require_once $fileExtension;
     } else if (is_readable($fileGeminiService)) {
         require_once $fileGeminiService;
+    } else if (is_readable($fileCommentGuardService)) {
+        require_once $fileCommentGuardService;
     }
 });
 

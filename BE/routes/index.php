@@ -326,6 +326,14 @@ switch ($action) {
         (new CommentController)->adminDelete();
         break;
 
+    // API kiểm duyệt nội dung bình luận bằng AI Comment Guard mỗi lần user bình luận (POST, body text). Yêu cầu đăng nhập.
+    // API test để thử 2 model trên Google Colab (trả nguyên nhãn và điểm AI). FE không dùng API này.
+    case 'api-comment-guard':
+        // Middleware kiểm tra Bearer JWT; chỉ user đã đăng nhập mới được gọi để tránh người lạ spam dịch vụ AI.
+        $authPayload = (new AuthMiddleware())->requireAuth();
+        (new CommentGuardController)->analyze($authPayload);
+        break;
+
     case 'api-products':
         // (new AuthMiddleware())->requireAuth();
         (new ProductController)->index();
