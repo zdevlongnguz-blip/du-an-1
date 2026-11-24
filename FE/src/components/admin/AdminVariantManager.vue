@@ -10,6 +10,7 @@ import api from '@/helpers/api/client'
 import { showToast } from '@/helpers/ui/toast'
 import { formatPrice } from '@/helpers/format/price'
 import { resolveImageUrl } from '@/helpers/media/imageUrl'
+import { toSlug } from '@/helpers/format/slug'
 import { IMAGE_ACCEPT, validateImageFile } from '@/helpers/media/imageUpload'
 import AdminTable from '@/components/admin/AdminTable.vue'
 
@@ -20,6 +21,28 @@ const props = defineProps({
 
 // Mẫu key của khóa tự do: chữ thường không dấu, số, gạch dưới (khớp VariantAttributes::KEY_PATTERN ở BE).
 const KEY_PATTERN = /^[a-z0-9_]{1,50}$/
+
+// Đổi nhãn thuộc tính thành key: "Xuất xứ" -> "xuat_xu" (cùng cách sinh slug, chỉ nối bằng gạch dưới).
+// Key chỉ sinh khi thêm mới; khóa đã lưu của biến thể cũ được giữ nguyên để không lệch dữ liệu đã có.
+function keyFromLabel(label) {
+  return toSlug(label).replace(/-/g, '_')
+}
+// Key thực tế của một thuộc tính tự do: khóa đã lưu (biến thể cũ) hoặc sinh từ nhãn (thêm mới).
+function customKey(custom) {
+  return custom.key || keyFromLabel(custom.label)
+}
+
+// Phần đuôi ngẫu nhiên của SKU gợi ý, ví dụ FULE-003-AWM: 3 ký tự chữ hoa và số.
+const SKU_SUFFIX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+const SKU_SUFFIX_LENGTH = 3
+// Số lần tự sinh SKU khác khi SKU gợi ý bị trùng với sản phẩm khác (BE trả 409).
+const SKU_RETRY_LIMIT = 3
+// Chọn ngẫu nhiên từng ký tự bằng crypto (không đoán được, khác Math.random).
+function randomSkuSuffix() {
+  const bytes = new Uint32Array(SKU_SUFFIX_LENGTH)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (n) => SKU_SUFFIX_CHARS[n % SKU_SUFFIX_CHARS.length]).join('')
+}
 
 const columns = [
   { key: 'image', label: 'Ảnh', align: 'center' },
@@ -51,6 +74,12 @@ const defaultKeys = computed(() => attributeConfig.value.defaults ?? [])
 const editorOpen = ref(false)
 const editingId = ref(null)
 const saving = ref(false)
+// Mã sản phẩm (ví dụ FULE-003) làm tiền tố của SKU gợi ý; lấy từ api-admin-product-detail.
+const productCode = ref('')
+// true khi ô SKU đang là gợi ý do hệ thống sinh và admin chưa sửa tay: chỉ khi đó mới tự đổi SKU khi bị trùng.
+const skuAuto = ref(false)
+// Số lần đã tự sinh lại SKU trong lần lưu hiện tại (reset khi mở form thêm mới).
+let skuRetries = 0
 const editor = reactive({
   variant_name: '', sku: '', price: '', sale_price: '', stock: '', is_active: true,
   // Mức đang chọn trong ô select: '' = chưa rõ; còn lại là số dạng chuỗi ('1', '2'...) vì select luôn trả chuỗi.
@@ -74,6 +103,7 @@ async function loadVariants() {
     const response = await api.get('/?action=api-admin-product-detail', { params: { id: props.productId } })
     variants.value = response.data?.product?.variants ?? []
     productImage.value = response.data?.product?.image ?? ''
+    productCode.value = response.data?.product?.code ?? ''
     if (response.data?.product?.attribute_config) attributeConfig.value = response.data.product.attribute_config
   } catch (error) {
     loadError.value = error.response?.data?.message || 'Không tải được danh sách biến thể.'
@@ -82,12 +112,28 @@ async function loadVariants() {
   }
 }
 
-// Mở form thêm mới: ô trống, thuộc tính mặc định rỗng.
+// Sinh SKU gợi ý = mã sản phẩm + "-" + 3 ký tự ngẫu nhiên, không trùng SKU đang có trong sản phẩm này.
+// Trùng với sản phẩm khác thì BE trả 409 và FE sinh lại khi lưu (xem saveEditor).
+function suggestSku() {
+  if (!productCode.value) return ''
+  const taken = new Set(variants.value.map((v) => String(v.sku ?? '').toLowerCase()))
+  let candidate = ''
+  for (let attempt = 0; attempt < 50; attempt++) {
+    candidate = `${productCode.value}-${randomSkuSuffix()}`
+    if (!taken.has(candidate.toLowerCase())) break
+  }
+  return candidate
+}
+
+// Mở form thêm mới: ô trống, thuộc tính mặc định rỗng, SKU gợi ý tự điền.
 function openCreate() {
   editingId.value = null
   originalStock.value = null
   Object.assign(editor, { variant_name: '', sku: '', price: '', sale_price: '', stock: '', is_active: true, hold_level: '', shine_level: '', customs: [] })
   editor.defaults = Object.fromEntries(defaultKeys.value.map((a) => [a.key, '']))
+  editor.sku = suggestSku()
+  skuAuto.value = true
+  skuRetries = 0
   clearErrors()
   editorOpen.value = true
 }
@@ -95,6 +141,8 @@ function openCreate() {
 // Mở form sửa: đổ dữ liệu biến thể vào form; tách thuộc tính thành khóa mặc định + khóa tự do, kèm 2 mức giữ nếp / độ bóng.
 function openEdit(variant) {
   editingId.value = variant.id
+  // Biến thể đã có SKU thật: không phải gợi ý nên không tự đổi.
+  skuAuto.value = false
   originalStock.value = variant.stock
   originalActive.value = variant.is_active
   Object.assign(editor, {
@@ -137,10 +185,11 @@ function validateEditor() {
 
   const seen = new Set(defaultKeys.value.map((a) => a.key))
   for (const custom of editor.customs) {
-    if (!KEY_PATTERN.test(custom.key)) { editorErrors.customs = `Key "${custom.key}" chỉ gồm chữ thường không dấu, số, gạch dưới (ví dụ: xuat_xu).`; break }
-    if (seen.has(custom.key)) { editorErrors.customs = `Key "${custom.key}" bị trùng.`; break }
     if (!String(custom.label).trim()) { editorErrors.customs = 'Mỗi thuộc tính tự do cần có nhãn hiển thị.'; break }
-    seen.add(custom.key)
+    const key = customKey(custom)
+    if (!KEY_PATTERN.test(key)) { editorErrors.customs = `Nhãn "${custom.label}" không tạo được key hợp lệ, hãy đổi nhãn (ví dụ: Xuất xứ).`; break }
+    if (seen.has(key)) { editorErrors.customs = `Thuộc tính "${custom.label}" bị trùng key ${key}, hãy đổi nhãn.`; break }
+    seen.add(key)
   }
   return Object.values(editorErrors).every((message) => !message)
 }
@@ -154,7 +203,7 @@ async function saveEditor() {
   const toValue = (value) => (String(value ?? '').trim() === '' ? null : String(value).trim())
   const attributes = [
     ...defaultKeys.value.map((a) => ({ key: a.key, label: a.label, value: toValue(editor.defaults[a.key]) })),
-    ...editor.customs.map((c) => ({ key: c.key, label: String(c.label).trim(), value: toValue(c.value) })),
+    ...editor.customs.map((c) => ({ key: customKey(c), label: String(c.label).trim(), value: toValue(c.value) })),
   ]
   const isCreate = editingId.value === null
   const body = {
@@ -177,6 +226,8 @@ async function saveEditor() {
     body.stock = editor.stock
     body.expected_stock = originalStock.value
   }
+  // retrying: true khi đang tự lưu lại với SKU mới; lúc đó không tắt trạng thái đang lưu.
+  let retrying = false
   try {
     const response = isCreate
       ? await api.post('/?action=api-admin-variant-create', { product_id: props.productId, ...body })
@@ -186,6 +237,15 @@ async function saveEditor() {
     await loadVariants()
   } catch (error) {
     const data = error.response?.data
+    // SKU gợi ý bị trùng với sản phẩm khác (409): sinh SKU khác rồi lưu lại, tối đa SKU_RETRY_LIMIT lần.
+    // Admin đã tự nhập SKU, hoặc lỗi không phải SKU, thì không tự đổi mà chỉ báo lỗi bên dưới.
+    if (isCreate && skuAuto.value && error.response?.status === 409 && skuRetries < SKU_RETRY_LIMIT) {
+      skuRetries += 1
+      editor.sku = suggestSku()
+      retrying = true
+      saving.value = false
+      return saveEditor()
+    }
     // 409 kèm current_stock: kho vừa bị đơn hàng khác thay đổi. Giữ form mở, ĐẶT LẠI ô kho theo số hiện tại
     // (không giữ số admin gõ theo mốc cũ, nếu không bấm Lưu lần nữa sẽ ghi đè đúng đơn hàng vừa chen vào),
     // và cập nhật mốc so sánh. Admin nhập lại số kho mới dựa trên số hiện tại rồi lưu.
@@ -197,7 +257,7 @@ async function saveEditor() {
     }
     showToast(data?.message || 'Không lưu được biến thể.', 'danger')
   } finally {
-    saving.value = false
+    if (!retrying) saving.value = false
   }
 }
 
@@ -431,9 +491,10 @@ onMounted(loadVariants)
         <!-- SKU: nhập khi tạo; khi sửa thì chỉ đọc (BE khóa đổi SKU sau khi tạo) -->
         <label class="admin-field">
           <span>SKU *</span>
-          <input v-model="editor.sku" type="text" maxlength="100" placeholder="POMADE-ABC-113G" :readonly="editingId !== null" />
+          <input v-model="editor.sku" type="text" maxlength="100" placeholder="POMADE-ABC-113G" :readonly="editingId !== null" @input="skuAuto = false" />
           <small v-if="editorErrors.sku" class="admin-error">{{ editorErrors.sku }}</small>
           <small v-else-if="editingId !== null" class="admin-hint">Không đổi được SKU sau khi tạo.</small>
+          <small v-else-if="skuAuto" class="admin-hint">Gợi ý từ mã sản phẩm, bạn có thể sửa.</small>
         </label>
         <label class="admin-field">
           <span>Giá gốc (đ) *</span>
@@ -485,8 +546,11 @@ onMounted(loadVariants)
         </label>
       </div>
       <div v-for="(custom, index) in editor.customs" :key="index" class="variant-custom">
-        <input v-model="custom.key" type="text" maxlength="50" placeholder="key (vd: xuat_xu)" aria-label="Key thuộc tính" />
-        <input v-model="custom.label" type="text" maxlength="100" placeholder="Nhãn (vd: Xuất xứ)" aria-label="Nhãn thuộc tính" />
+        <div class="variant-custom-label">
+          <input v-model="custom.label" type="text" maxlength="100" placeholder="Nhãn (vd: Xuất xứ)" aria-label="Nhãn thuộc tính" />
+          <!-- Key tự sinh từ nhãn, chỉ để xem; admin không nhập key nữa. -->
+          <small v-if="custom.label" class="admin-hint">Key: {{ customKey(custom) }}</small>
+        </div>
         <input v-model="custom.value" type="text" maxlength="255" placeholder="Giá trị" aria-label="Giá trị thuộc tính" />
         <button type="button" class="admin-link admin-link--danger" @click="removeCustom(index)">Bỏ</button>
       </div>
@@ -535,7 +599,8 @@ onMounted(loadVariants)
 .admin-field > span { color: #4a5565; font-weight: 600; }
 .admin-field input, .admin-field select, .variant-custom input { width: 100%; min-height: 38px; padding: 6px 10px; border: 1px solid #d9d4ca; border-radius: 6px; background: #ffffff; font: inherit; }
 .admin-check { display: flex; align-items: center; gap: 8px; min-height: 38px; font-weight: 600; color: #4a5565; }
-.variant-custom { display: grid; gap: 8px; grid-template-columns: 1fr 1fr 1.5fr auto; align-items: center; }
+.variant-custom { display: grid; gap: 8px; grid-template-columns: 1fr 1.5fr auto; align-items: center; }
+.variant-custom-label { display: grid; gap: 4px; }
 .variant-add-custom { justify-self: start; }
 .admin-error { color: #ba1a1a; font-size: 13px; }
 .variant-editor-actions { display: flex; justify-content: flex-end; gap: 10px; }
