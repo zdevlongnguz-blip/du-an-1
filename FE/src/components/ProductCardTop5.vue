@@ -138,9 +138,9 @@ const isOutOfStock = computed(() => {
 }
 
 .top5-card:hover {
-  border-color: rgb(184 137 62 / 80%);
-  box-shadow: 0 12px 32px -8px rgb(28 42 58 / 10%), 0 0 24px rgb(184 137 62 / 30%);
-  transform: translateY(-4px);
+  border-color: rgb(184 137 62 / 70%);
+  box-shadow: 0 8px 20px -10px rgb(28 42 58 / 18%);
+  transform: translateY(-2px);
 }
 
 .top5-card-media {
@@ -157,6 +157,12 @@ const isOutOfStock = computed(() => {
   height: 100%;
   object-fit: cover;
   transition: transform 500ms ease;
+}
+
+/* Ảnh sản phẩm: hiện TRỌN ảnh (contain) có khoảng đệm, không cắt mép logo, nhãn như cover cũ. */
+.top5-card-image {
+  padding: 10px;
+  object-fit: contain;
 }
 
 .top5-card:hover .top5-card-image {
@@ -485,7 +491,7 @@ const isOutOfStock = computed(() => {
   }
 
   .top5-card-name {
-    font-size: 22px;
+    font-size: 18px;
   }
 
   .top5-card-description {
@@ -494,7 +500,7 @@ const isOutOfStock = computed(() => {
   }
 
   .top5-card-price {
-    font-size: 22px;
+    font-size: 18px;
   }
 
   .top5-card-actions {

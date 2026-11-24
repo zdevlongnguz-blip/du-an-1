@@ -62,6 +62,13 @@ function onSlugInput() {
   fieldErrors.slug = ''
 }
 
+// Bấm "Tạo lại slug theo tên": lấy slug từ tên hiện tại. Chỉ làm khi admin bấm, không tự đổi lúc sửa tên,
+// vì đổi slug làm hỏng link đã chia sẻ.
+function regenerateSlug() {
+  form.slug = toSlug(form.name)
+  fieldErrors.slug = ''
+}
+
 // Tải danh mục cho ô chọn (api-categories trả { categories: [{ id, name, slug }] }).
 async function loadCategories() {
   try {
@@ -241,6 +248,8 @@ onMounted(() => {
               <input v-model="form.slug" type="text" maxlength="255" @input="onSlugInput" />
               <small v-if="fieldErrors.slug" class="admin-error">{{ fieldErrors.slug }}</small>
               <small v-else class="admin-hint">/product-detail/{{ form.slug || '...' }}</small>
+              <!-- Chỉ khi sửa: slug giữ nguyên theo mặc định; admin bấm để lấy lại slug theo tên hiện tại. -->
+              <button v-if="isEdit" type="button" class="admin-link" @click="regenerateSlug">Tạo lại slug theo tên</button>
             </label>
             <label class="admin-field">
               <span>Mã sản phẩm *</span>
@@ -503,4 +512,18 @@ onMounted(() => {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Nút chữ nhỏ dưới ô slug (Tạo lại slug theo tên). */
+.admin-link {
+  align-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #9e7432;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.admin-link:hover { text-decoration: underline; }
 </style>

@@ -21,7 +21,8 @@
  *        {"key": "kieu_toc",  "label": "Kiểu tóc",  "value": "side part"},
  *        {"key": "mui_huong", "label": "Mùi hương", "value": "cam chanh"}   <- khóa tự do
  *      ]
- *    Các giá trị này được gom vào products.metadata (xem Product::METADATA_REFRESH_SQL) để khách lọc theo tag bằng LIKE.
+ *    Các giá trị này được gom vào products.metadata (xem Product::metadataRefreshSql) để khách lọc theo tag bằng LIKE.
+ *    Metadata còn có thêm cụm chữ của 2 mức giữ nếp / độ bóng (xem metadataLevelPhrases) để ô tìm kiếm bắt được.
  *
  * Vì sao dùng mảng thay vì object {"dung_tich": "113g"}:
  * - Giữ đúng thứ tự (object JSON bị MySQL tự sắp lại khóa).
@@ -200,6 +201,29 @@ class VariantAttributes
         }
 
         return $options;
+    }
+
+    /**
+     * Cụm chữ của độ giữ nếp / độ bóng ghi vào products.metadata, để ô tìm kiếm (catalog và trợ lý AI)
+     * bắt được "giữ nếp mạnh", "bóng cao"... Lấy từ HOLD_LEVELS / SHINE_LEVELS nên đổi nhãn ở đây là đủ.
+     * - Giữ nếp thêm tiền tố "giữ nếp ": nhãn trơn ("Trung bình") dễ nhầm với độ bóng.
+     * - Độ bóng giữ nguyên nhãn vì nhãn đã có chữ "bóng" ("Bóng cao", "Không bóng (mờ)").
+     * Viết thường để giống các tag khác trong metadata.
+     *
+     * @return array ['hold' => [mức => cụm chữ], 'shine' => [mức => cụm chữ]]
+     */
+    public static function metadataLevelPhrases()
+    {
+        $hold = [];
+        foreach (self::HOLD_LEVELS as $level => $label) {
+            $hold[$level] = 'giữ nếp ' . mb_strtolower($label, 'UTF-8');
+        }
+        $shine = [];
+        foreach (self::SHINE_LEVELS as $level => $label) {
+            $shine[$level] = mb_strtolower($label, 'UTF-8');
+        }
+
+        return ['hold' => $hold, 'shine' => $shine];
     }
 
     /**

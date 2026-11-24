@@ -319,8 +319,8 @@ onMounted(() => {
   /* Ô hạng 1 cao bằng 2 hàng: cho ảnh giãn lấp phần cao dư, không để khoảng trắng dưới chữ.
      :deep(...) cho phép trang cha chỉnh phần tử bên trong component ProductCardTop5. */
   .top-products-grid[data-count="5"] > :first-child :deep(.top5-card-media) {
-    flex: 1 1 auto;
-    min-height: 240px;
+    flex: 0 0 auto;
+    height: clamp(260px, 30vw, 400px);
     aspect-ratio: auto;
   }
 

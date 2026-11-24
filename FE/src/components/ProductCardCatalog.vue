@@ -133,18 +133,22 @@ const salesCount = computed(() => Number(props.product.sales_count ?? 0).toLocal
   transform: translateY(-2px);
 }
 
+/* Khung ảnh vuông: hợp với phần lớn ảnh sản phẩm (ảnh vuông hoặc ngang). Nền trắng để ảnh nền trắng liền khung. */
 .catalog-product-media {
   position: relative;
   display: block;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
-  background: #f7f4ee;
+  background: #ffffff;
 }
 
+/* contain: hiện TRỌN ảnh trong khung, không cắt mép (cover cũ cắt mất logo, nhãn ở mép ảnh).
+   padding tạo khoảng thở giữa sản phẩm và viền thẻ. */
 .catalog-product-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  padding: 12px;
+  object-fit: contain;
   transition: transform 400ms ease;
 }
 
