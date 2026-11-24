@@ -19,7 +19,7 @@ USE `du-an-1`;
 -- Chạy lại nhiều lần an toàn: chỉ thêm khi chưa có (theo slug danh mục, code sản phẩm, SKU biến thể);
 -- lần chạy sau không còn sản phẩm "Dưỡng tóc" nên bước 2 không xóa gì thêm.
 -- Chỉ chạy trên DB local/dev, không chạy trên DB dùng chung khi chưa thống nhất với nhóm.
--- attributes là MẢNG [{key, label, value}] với đủ 5 khóa mặc định ở đầu (xem BE/extensions/VariantAttributes.php).
+-- attributes là MẢNG [{key, label, value}] với đủ 3 khóa mặc định ở đầu (xem BE/extensions/VariantAttributes.php); độ giữ nếp / độ bóng là cột số hold_level, shine_level.
 -- =====================================================================
 
 START TRANSACTION;
@@ -65,37 +65,37 @@ WHERE `c`.`slug` = 'pomade' AND NOT EXISTS (SELECT 1 FROM `products` WHERE `code
 -- Biến thể 340g của Reuzel dùng cùng giá trị với seed/catalog_product_variants.sql để hai file không lệch nhau.
 INSERT INTO `product_variants`
   (`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`)
-SELECT `p`.`id`, 'POMADE-REUZEL-RED', 'Hũ 113g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '113g'), JSON_OBJECT('key', 'do_giu_nep', 'label', 'Độ giữ nếp', 'value', NULL), JSON_OBJECT('key', 'do_bong', 'label', 'Độ bóng', 'value', NULL), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 390000, NULL, 40, 1, 1
+SELECT `p`.`id`, 'POMADE-REUZEL-RED', 'Hũ 113g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '113g'), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 390000, NULL, 40, 1, 1
 FROM `products` AS `p`
 WHERE `p`.`code` = 'POMADE-REUZEL-RED' AND NOT EXISTS (SELECT 1 FROM `product_variants` WHERE `sku` = 'POMADE-REUZEL-RED');
 
 INSERT INTO `product_variants`
   (`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`)
-SELECT `p`.`id`, 'POMADE-REUZEL-RED-340G', 'Hũ 340g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '340g'), JSON_OBJECT('key', 'do_giu_nep', 'label', 'Độ giữ nếp', 'value', NULL), JSON_OBJECT('key', 'do_bong', 'label', 'Độ bóng', 'value', NULL), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 890000, NULL, 8, 0, 1
+SELECT `p`.`id`, 'POMADE-REUZEL-RED-340G', 'Hũ 340g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '340g'), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 890000, NULL, 8, 0, 1
 FROM `products` AS `p`
 WHERE `p`.`code` = 'POMADE-REUZEL-RED' AND NOT EXISTS (SELECT 1 FROM `product_variants` WHERE `sku` = 'POMADE-REUZEL-RED-340G');
 
 INSERT INTO `product_variants`
   (`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`)
-SELECT `p`.`id`, 'POMADE-REUZEL-BLUE', 'Hũ 113g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '113g'), JSON_OBJECT('key', 'do_giu_nep', 'label', 'Độ giữ nếp', 'value', NULL), JSON_OBJECT('key', 'do_bong', 'label', 'Độ bóng', 'value', NULL), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 420000, 390000, 35, 1, 1
+SELECT `p`.`id`, 'POMADE-REUZEL-BLUE', 'Hũ 113g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '113g'), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 420000, 390000, 35, 1, 1
 FROM `products` AS `p`
 WHERE `p`.`code` = 'POMADE-REUZEL-BLUE' AND NOT EXISTS (SELECT 1 FROM `product_variants` WHERE `sku` = 'POMADE-REUZEL-BLUE');
 
 INSERT INTO `product_variants`
   (`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`)
-SELECT `p`.`id`, 'POMADE-REUZEL-BLUE-340G', 'Hũ 340g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '340g'), JSON_OBJECT('key', 'do_giu_nep', 'label', 'Độ giữ nếp', 'value', NULL), JSON_OBJECT('key', 'do_bong', 'label', 'Độ bóng', 'value', NULL), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 940000, 899000, 6, 0, 1
+SELECT `p`.`id`, 'POMADE-REUZEL-BLUE-340G', 'Hũ 340g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '340g'), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 940000, 899000, 6, 0, 1
 FROM `products` AS `p`
 WHERE `p`.`code` = 'POMADE-REUZEL-BLUE' AND NOT EXISTS (SELECT 1 FROM `product_variants` WHERE `sku` = 'POMADE-REUZEL-BLUE-340G');
 
 INSERT INTO `product_variants`
   (`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`)
-SELECT `p`.`id`, 'POMADE-SUAVECITO-ORIGINAL', 'Hũ 113g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '113g'), JSON_OBJECT('key', 'do_giu_nep', 'label', 'Độ giữ nếp', 'value', NULL), JSON_OBJECT('key', 'do_bong', 'label', 'Độ bóng', 'value', NULL), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 320000, NULL, 50, 1, 1
+SELECT `p`.`id`, 'POMADE-SUAVECITO-ORIGINAL', 'Hũ 113g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '113g'), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 320000, NULL, 50, 1, 1
 FROM `products` AS `p`
 WHERE `p`.`code` = 'POMADE-SUAVECITO-ORIGINAL' AND NOT EXISTS (SELECT 1 FROM `product_variants` WHERE `sku` = 'POMADE-SUAVECITO-ORIGINAL');
 
 INSERT INTO `product_variants`
   (`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`)
-SELECT `p`.`id`, 'POMADE-LAYRITE-ORIGINAL', 'Hũ 120g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '120g'), JSON_OBJECT('key', 'do_giu_nep', 'label', 'Độ giữ nếp', 'value', NULL), JSON_OBJECT('key', 'do_bong', 'label', 'Độ bóng', 'value', NULL), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 450000, 420000, 25, 1, 1
+SELECT `p`.`id`, 'POMADE-LAYRITE-ORIGINAL', 'Hũ 120g', JSON_ARRAY(JSON_OBJECT('key', 'dung_tich', 'label', 'Dung tích', 'value', '120g'), JSON_OBJECT('key', 'phu_hop', 'label', 'Phù hợp', 'value', NULL), JSON_OBJECT('key', 'kieu_toc', 'label', 'Kiểu tóc', 'value', NULL)), 450000, 420000, 25, 1, 1
 FROM `products` AS `p`
 WHERE `p`.`code` = 'POMADE-LAYRITE-ORIGINAL' AND NOT EXISTS (SELECT 1 FROM `product_variants` WHERE `sku` = 'POMADE-LAYRITE-ORIGINAL');
 
@@ -110,5 +110,23 @@ WHERE `c`.`slug` = 'pomade'
     SELECT 1 FROM `product_images` AS `i`
     WHERE `i`.`product_id` = `p`.`id` AND `i`.`image_path` = `p`.`image`
   );
+
+
+-- Tạo lại metadata của mọi sản phẩm vì thuộc tính biến thể vừa đổi (seed chạy riêng lẻ cũng không làm metadata lệch).
+-- ĐÚNG câu SQL của Product::METADATA_REFRESH_SQL (nguồn duy nhất): giá trị thuộc tính các biến thể đang bán,
+-- bỏ trùng và sắp xếp theo từng byte (utf8mb4_bin), nối bằng " | ". JSON_TABLE biến mảng JSON thành các dòng.
+-- group_concat_max_len: mặc định chỉ 1024 byte và bị CẮT ngầm; nới lên 65535 (sức chứa cột TEXT) cho phiên này.
+SET SESSION group_concat_max_len = 65535;
+
+UPDATE `products` AS `p`
+SET `p`.`metadata` = (
+  SELECT GROUP_CONCAT(DISTINCT TRIM(`jt`.`attr_value`) ORDER BY TRIM(`jt`.`attr_value`) SEPARATOR ' | ')
+  FROM `product_variants` AS `v`,
+       JSON_TABLE(`v`.`attributes`, '$[*]' COLUMNS (`attr_value` VARCHAR(255) COLLATE utf8mb4_bin PATH '$.value')) AS `jt`
+  WHERE `v`.`product_id` = `p`.`id`
+    AND `v`.`is_active` = 1
+    AND `jt`.`attr_value` IS NOT NULL
+    AND TRIM(`jt`.`attr_value`) <> ''
+);
 
 COMMIT;

@@ -17,62 +17,116 @@ Mỗi tool kế thừa `GeminiTool` và viết 4 phương thức:
 
 | Tool | File | Tham số | Đọc/ghi | Lệnh điều hướng |
 | --- | --- | --- | --- | --- |
-| `search_product` | `GeminiToolSearchProduct.php` | `keyword` (bắt buộc) | Đọc `v_product_catalog` | `product-detail` hoặc `catalog` |
+| `search_product` | `GeminiToolSearchProduct.php` | `keyword`, `category`, `min_price`, `max_price`, `hold`, `shine`, `tags`, `sort` (đều không bắt buộc, giống bộ lọc catalog) | Đọc `v_product_catalog`, `product_variants` | `product-detail` hoặc `catalog` (kèm bộ lọc) |
 | `fule_sing` | `GeminiToolFuleSing.php` | `song` (không bắt buộc) | Không đọc DB, dùng mảng `PLAYLIST` | `fule-sing` |
 | `create_order_draft` | `GeminiToolCreateOrderDraft.php` | `ops`: danh sách lệnh `add`/`set`/`subtract`/`remove` (bắt buộc; không có tham số thông tin cá nhân) | Đọc `product_variants`, `products` (không ghi, không đọc hồ sơ) | `checkout-draft` |
 
 ## 3. Tool `search_product`
 
+Từ 23/11/2026 tool dùng **đúng bộ lọc của trang catalog**: tham số được kiểm tra bằng `BE/extensions/CatalogFilter.php` (dùng chung với `api-products`), rồi truy vấn bằng `Product::getFiltered()`. Trợ lý và trang catalog luôn ra cùng kết quả.
+
 ### 3.1. Đầu vào
 
-- `keyword`: chuỗi, sau khi trim không rỗng, tối đa 100 ký tự. Sai kiểu hoặc quá dài thì tool ném `InvalidArgumentException` và AI nhận thông báo lỗi.
+Mọi tham số đều không bắt buộc, kết hợp được với nhau:
+
+| Tham số | Kiểu | Ý nghĩa |
+| --- | --- | --- |
+| `keyword` | string | Tìm rộng (OR) trong tên, mã, mô tả, `metadata` của sản phẩm và SKU, tên phiên bản đang bán (tối đa 100 ký tự). So khớp **cả cụm liền nhau**, nên prompt bắt AI chỉ đưa **thực thể cốt lõi** đã sửa chính tả: "con sáp nào được dùng bởi Sơn Tùng MTP" → `Sơn Tùng MTP`; "sáp KervinMurphy" → `Kevin Murphy` (chữ "sáp" sang `category`) |
+| `category` | string | **Tên** danh mục (AI chỉ biết tên). Tool đổi sang slug bằng `Product::findCategorySlug()`: trùng hẳn tên/slug, hoặc khớp một phần (từ 3 ký tự) nếu chỉ đúng 1 danh mục chứa chữ đó |
+| `min_price`, `max_price` | number | Khoảng giá bán (VND) |
+| `hold` | integer | Độ giữ nếp: 1 = nhẹ, 2 = trung bình, 3 = mạnh |
+| `shine` | integer | Độ bóng: 0 = không bóng (mờ), 1 = bóng nhẹ, 2 = bóng vừa, 3 = bóng cao |
+| `tags` | string[] | Tối đa 5 đặc điểm (loại tóc, kiểu tóc, dung tích, mùi hương), phải khớp tất cả |
+| `sort` | `newest` \| `oldest` | Mặc định mới nhất |
+
+Tham số sai (hold ngoài thang, danh mục không có, giá âm, quá 5 tag...) thì `CatalogFilter` ném `InvalidArgumentException`; `Gemini::runTool` gửi câu báo lỗi cho AI để nó tự sửa và gọi lại.
 
 ### 3.2. Truy vấn
 
-Gọi `Product::searchByKeyword($keyword, 5)`:
+`Product::getFiltered($filters, 1, 5)` (xem `docs/trang-thai-du-an.md`, mục kế hoạch 23/11):
 
-- Tìm `LIKE %keyword%` trên `name`, `code`, `description` của `v_product_catalog`.
-- Escape `%`, `_`, `\` trong từ khóa để không bị hiểu thành ký tự đại diện.
-- Sắp xếp: còn hàng trước, sau đó mới nhất.
-- Giới hạn 5 dòng.
+- Giá, giữ nếp, độ bóng: sản phẩm khớp khi có **ít nhất 1 biến thể đang bán** thỏa cả 3 cùng lúc (`EXISTS`).
+- Tag: `products.metadata LIKE %tag%`, mọi tag (AND). Không phân biệt hoa thường và dấu.
+- Escape `%`, `_`, `\` trong từ khóa và tag. Tag có dấu phẩy được tách thành nhiều tag (cùng cách với URL catalog), nên kết quả của tool luôn khớp trang catalog nó mở.
+- Xếp hạng chung với catalog: còn hàng trước, rồi theo `sort`. Nhờ vậy 5 kết quả gửi AI không bị lấp đầy bởi hàng hết.
 
 ### 3.3. Đầu ra gửi cho AI
 
 ```json
 {
+  "total_found": 2,
+  "applied_filters": ["Độ giữ nếp: Mạnh", "Độ bóng: Không bóng (mờ)", "Đặc điểm: tóc dày"],
   "products": [
-    { "id": 3, "name": "Tinh Dầu Dưỡng Tóc Moroccanoil Treatment", "code": "MOROCCANOIL",
-      "category": "Dưỡng tóc", "price_from": 290000, "price_to": 720000, "in_stock": true,
-      "variant_count": 2,
+    { "id": 83, "name": "Glanzen Clay Wax", "code": "FULE-001", "category": "Gel, Sáp vuốt tóc",
+      "description": "Sáp vuốt tóc nam Glanzen Clay Wax ... (tối đa 300 ký tự)",
+      "sales_count": 10, "price_from": 268000, "price_to": 399000, "in_stock": true, "variant_count": 2,
       "variants": [
-        { "name": "Chai 100ml", "sku": "MOROCCANOIL", "price": 720000, "original_price": 750000, "stock": 25, "is_default": true },
-        { "name": "Chai 25ml", "sku": "MOROCCANOIL-25ML", "price": 290000, "original_price": null, "stock": 40, "is_default": false }
+        { "name": "Mặc định", "sku": "FULE-001", "price": 268000, "original_price": null, "stock": 99, "is_default": true,
+          "hold": "Mạnh", "shine": "Không bóng (mờ)",
+          "attributes": { "Dung tích": "113 g", "Phù hợp": "Tóc trung bình đến dày cứng, tóc nhiều dầu", "Kiểu tóc": "Undercut, mohican" } }
       ] }
   ]
 }
 ```
 
-- `price_from`, `price_to`: giá thấp nhất và cao nhất của các phiên bản đang bán (đã tính giảm giá), lấy từ `v_product_catalog`.
-- `variants`: các phiên bản đang bán (`is_active = 1`) lấy từ bảng `product_variants` bằng `Product::getActiveVariantsByProductIds()`, một truy vấn cho cả 5 sản phẩm. Mặc định đứng đầu, sau đó theo giá tăng dần, tối đa 5 phiên bản mỗi sản phẩm.
-- `price` là giá bán thực tế; `original_price` là giá niêm yết, chỉ có khi đang giảm giá. `stock` là số lượng lúc tra cứu, 0 nghĩa là phiên bản đó hết hàng.
-- `variant_count` là tổng số phiên bản đang bán; lớn hơn số phần tử `variants` nghĩa là danh sách đã bị cắt.
-- Gửi kèm phiên bản trong cùng kết quả (không tách tool riêng) để không tốn thêm request Gemini, vì gói miễn phí giới hạn số request mỗi phút.
+- `total_found`: tổng số sản phẩm khớp (có thể lớn hơn 5 sản phẩm gửi kèm).
+- `applied_filters`: điều kiện đã dùng bằng chữ, để AI nhắc lại với khách.
+- `description` (cắt 300 ký tự), `sales_count`: để AI giải thích và trả lời "loại nào bán chạy".
+- `variants`: tối đa 5 phiên bản đang bán mỗi sản phẩm, lấy bằng `Product::getActiveVariantsByProductIds()` (một truy vấn cho cả 5 sản phẩm). Mỗi phiên bản có `hold`, `shine` (nhãn, `null` = cửa hàng chưa cập nhật, AI không được đoán) và `attributes` dạng `{nhãn: giá trị}` (bỏ giá trị trống).
+- `price` là giá bán thực tế; `original_price` chỉ có khi đang giảm giá; `stock` = 0 là hết hàng.
 
-Không gửi cho AI: `slug`, ảnh, mô tả, thuộc tính JSON của phiên bản.
+Không gửi cho AI: `slug`, ảnh, `metadata`.
 
-Khi không có kết quả: `products: []` kèm `message` dặn AI báo cửa hàng chưa có hoặc chưa cập nhật sản phẩm đó.
+Khi không có kết quả: `products: []`, `total_found: 0` kèm `message` dặn AI báo chưa có sản phẩm như vậy và gợi ý nới bớt tiêu chí.
+
+Prompt (`GeminiPrompt.php`, mục "Tư vấn theo nhu cầu") dạy AI đổi câu của khách thành tham số: "giữ nếp mạnh" → `hold = 3`, "không bóng" → `shine = 0`, "dưới 500 nghìn" → `max_price = 500000`, loại tóc / kiểu tóc → `tags`.
 
 ### 3.4. Quyết định điều hướng
 
 ```mermaid
 flowchart TD
-    R[Kết quả truy vấn] --> N{Số dòng}
+    R[Kết quả truy vấn] --> N{total_found}
     N -- 0 --> A0["action: catalog không tham số"]
     N -- 1 và có slug --> A1["action: product-detail {slug}"]
-    N -- Nhiều --> AN["action: catalog {search: keyword}"]
+    N -- Nhiều --> AN["action: catalog {đúng bộ lọc vừa dùng}"]
 ```
 
+Nhiều kết quả thì mở catalog với đúng bộ lọc (`CatalogFilter::toQuery()`, mọi giá trị là chuỗi), nên khách thấy cùng danh sách với câu trả lời. FE nhận các khóa `search, category, min_price, max_price, hold, shine, tags, sort` (whitelist trong `FE/src/helpers/ai/chatAssistant.js`).
+
 Quy tắc này nằm trong code PHP. AI không tham gia quyết định, nên không thể "đoán" sai trang để mở.
+
+### 3.5. Ép AI chọn keyword đúng và tự thử lại
+
+Vấn đề: `keyword` so khớp **cả cụm liền nhau** (LIKE `%cụm%`). AI hay đưa nguyên câu hoặc cụm thừa chữ
+("dùng bởi Sơn Tùng MTP", "sáp Kevin Murphy") nên không ra gì, hoặc giữ lỗi gõ của khách ("KervinMurphy").
+
+Cách làm: nhắc cùng một quy tắc ở **3 chỗ**, mỗi chỗ đúng thời điểm AI ra quyết định.
+
+| # | Chỗ | AI đọc lúc nào | Nội dung |
+|---|-----|----------------|----------|
+| 1 | `GeminiPrompt.php`, mục "Cách chọn keyword cho search_product" | Mọi lượt (system prompt) | Luật đầy đủ: lý do (khớp cả cụm), chỉ giữ thực thể cốt lõi 1-3 từ, phần bỏ đi chuyển sang đâu (loại sản phẩm → `category`, nhu cầu → `hold`/`shine`/giá/`tags`), sửa chính tả tên riêng, ví dụ đúng / sai đặt cạnh nhau |
+| 2 | `GeminiToolSearchProduct.php`, `description` của tham số `keyword` | Lúc điền tham số để gọi tool | Bản tóm tắt 1 câu + 4 ví dụ mẫu ("Sơn Tùng MTP", "Kevin Murphy", "Reuzel", "CLAYMATION-113G") |
+| 3 | `GeminiToolSearchProduct.php`, `message` khi `total_found = 0` | Lúc đọc kết quả rỗng | Chỉ cách gọi lại: bỏ `category`, rút keyword còn 1-2 từ đặc trưng, thử có dấu / không dấu, tối đa 2 lần; hết cách mới báo khách "chưa có" |
+
+Mẹo viết prompt rút ra:
+- Nói **lý do** (khớp cả cụm) chứ không chỉ ra lệnh: AI làm theo ổn định hơn.
+- Ví dụ **đúng kèm sai** ("`Sơn Tùng MTP` (KHÔNG phải `dùng bởi Sơn Tùng MTP`)") hiệu quả nhất.
+- Chữ bị bỏ khỏi keyword phải có **chỗ để đi** (category, hold, tags...), nếu không AI sẽ cố nhét lại vào keyword.
+
+**Thử lại diễn ra ngay trong vòng lặp tool** của `Gemini::chat()`, khách không phải hỏi lại:
+
+```text
+Vòng 0: câu hỏi          -> Gemini: functionCall search_product {keyword: "Kevin Murphy", category: "Sáp"}
+        tool chạy         -> total_found 0 + message "bỏ category / rút keyword... gọi lại"
+Vòng 1: functionResponse  -> Gemini đọc message: functionCall search_product {keyword: "Kevin Murphy"}
+        tool chạy         -> total_found 2
+Vòng 2: functionResponse  -> Gemini trả chữ, hết vòng lặp, câu trả lời về FE
+```
+
+- Khách chỉ thấy **một** câu trả lời cuối; mỗi lần gọi tool có một chip dưới câu trả lời.
+- "Tối đa 2 lần" chỉ là **lời dặn AI**, code không đếm. Giới hạn cứng là `Gemini::MAX_TOOL_ROUNDS = 5`; vượt thì ném lỗi, khách nhận 502.
+- Trang được mở theo **lần gọi tool cuối** (mục 5), nên lần rỗng trước đó không làm mở sai trang.
+- Kiểm chứng 23/11/2026 bằng chat thật với Gemini: 4/4 câu ra keyword đúng ngay lần gọi đầu.
 
 ## 4. Tool `fule_sing`
 

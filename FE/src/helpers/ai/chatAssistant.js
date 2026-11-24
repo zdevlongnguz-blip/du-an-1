@@ -11,7 +11,9 @@ export const MAX_MESSAGE_LENGTH = 2000
 // Danh sách route mà BE được phép yêu cầu mở, kèm các tham số được nhận.
 // Route hoặc tham số khác bị bỏ qua: FE không điều hướng theo URL tự do do AI/BE gửi về.
 const ALLOWED_ROUTES = {
-  catalog: { query: ['search'], params: [] },
+  // Trang danh sách: nhận đủ bộ lọc giống ô lọc của catalog (BE tạo bằng CatalogFilter::toQuery),
+  // để trợ lý mở đúng trang đã lọc khớp với câu trả lời.
+  catalog: { query: ['search', 'category', 'min_price', 'max_price', 'hold', 'shine', 'tags', 'sort'], params: [] },
   'product-detail': { query: [], params: ['slug'] },
   // Trang sân khấu: Louis hát tặng một bài (song = tên bài, video = tên file video).
   'fule-sing': { query: ['song', 'video'], params: [] },

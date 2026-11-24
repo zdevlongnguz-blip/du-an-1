@@ -35,6 +35,7 @@ class Cart extends BaseModel
             . '`products`.`slug` AS `product_slug`, `products`.`image`, '
             . '`product_variants`.`image` AS `variant_image`, '
             . '`product_variants`.`variant_name`, `product_variants`.`attributes`, '
+            . '`product_variants`.`hold_level`, `product_variants`.`shine_level`, '
             . '`product_variants`.`final_price` AS `unit_price`, `product_variants`.`stock`, '
             . '`product_variants`.`is_active` '
             . 'FROM `cart_items` '
@@ -54,10 +55,11 @@ class Cart extends BaseModel
             $item['product_id'] = (int) $item['product_id'];
             $item['quantity'] = (int) $item['quantity'];
             $item['stock'] = (int) $item['stock'];
-            // Mảng chuẩn [{key, label, value}], cùng định dạng với trang chi tiết sản phẩm.
-            $item['attributes'] = VariantAttributes::decode($item['attributes']);
+            // Mảng chuẩn [{key, label, value}], cùng định dạng với trang chi tiết sản phẩm:
+            // forDisplay ghép thêm 2 dòng "Độ giữ nếp", "Độ bóng" lấy từ 2 cột số hold_level, shine_level.
+            $item['attributes'] = VariantAttributes::forDisplay($item['attributes'], $item['hold_level'], $item['shine_level']);
             $item['is_available'] = (int) $item['is_active'] === 1 && $item['stock'] > 0;
-            unset($item['is_active']);
+            unset($item['is_active'], $item['hold_level'], $item['shine_level']);
 
             $unitPriceCents = $this->toCents((string) $item['unit_price']);
             $lineCents = $unitPriceCents * $item['quantity'];

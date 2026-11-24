@@ -118,23 +118,24 @@ sequenceDiagram
     participant DB as v_product_catalog
     participant FE as Popup
 
-    K->>AI: "Vinh Râu"
-    AI-->>T: functionCall search_product {keyword: "Vinh Râu"}
-    T->>T: Kiểm tra keyword (chuỗi, 1-100 ký tự)
-    T->>DB: LIKE trên name, code, description (có escape % _ \)
-    DB-->>T: tối đa 5 dòng, còn hàng xếp trước
+    K->>AI: "con sáp nào được dùng bởi Sơn Tùng MTP vậy anh Fule"
+    Note over AI: Prompt: keyword chỉ lấy thực thể cốt lõi đã sửa chính tả;<br/>loại sản phẩm -> category; nhu cầu -> hold/shine/giá/tags
+    AI-->>T: functionCall search_product {keyword: "Sơn Tùng MTP"}
+    T->>T: CatalogFilter kiểm tra tham số (dùng chung với api-products);<br/>đổi tên danh mục -> slug; sai -> lỗi để AI gọi lại
+    T->>DB: Product::getFiltered: keyword LIKE trên tên, mã, mô tả, metadata, SKU / tên phiên bản đang bán;<br/>giá + giữ nếp + độ bóng: EXISTS biến thể đang bán; tag: metadata LIKE
+    DB-->>T: tối đa 5 dòng (còn hàng trước), total_found
     alt 0 dòng
-        T-->>AI: products=[], message "chưa có/chưa cập nhật"
+        T-->>AI: products=[], message "thử lại: bỏ category / rút keyword (tối đa 2 lần)"
         T-->>FE: action catalog (không tham số)
     else 1 dòng
-        T-->>AI: products=[1 sản phẩm]
+        T-->>AI: products=[1 sản phẩm] + applied_filters
         T-->>FE: action product-detail {slug}
     else nhiều dòng
-        T-->>AI: products=[n sản phẩm]
-        T-->>FE: action catalog {search: "Vinh Râu"}
+        T-->>AI: products=[n sản phẩm] + applied_filters
+        T-->>FE: action catalog {đúng bộ lọc vừa dùng}
     end
-    AI-->>K: Trả lời đầy đủ: tên, giá, còn hàng, nhắc trang vừa mở
-    FE->>FE: Chip "Đã tra cứu sản phẩm: Vinh Râu"
+    AI-->>K: Trả lời: tên, giá, còn hàng, vì sao hợp (giữ nếp, độ bóng, thuộc tính), nhắc trang vừa mở
+    FE->>FE: Chip theo tool_calls[].summary, ví dụ "Đã tra cứu sản phẩm: “Sơn Tùng MTP”"
     FE->>FE: Mở trang tương ứng
 ```
 

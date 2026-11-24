@@ -64,6 +64,12 @@ A: Chỉ giữ lệnh điều hướng của lần gọi cuối cùng, vì câu 
 **Q: Tối đa bao nhiêu vòng tool?**
 A: 5 vòng, cộng câu hỏi gốc thành tối đa 6 lượt gọi API. Vượt quá thì trả 502.
 
+**Q: Khách hỏi "con sáp nào được dùng bởi Sơn Tùng MTP", làm sao AI tìm đúng `Sơn Tùng MTP` mà không đưa cả câu?**
+A: Ô tìm khớp cả cụm liền nhau nên cả câu sẽ không ra. Quy tắc "chỉ lấy thực thể cốt lõi, đã sửa chính tả" được nhắc ở 3 chỗ: system prompt (luật + ví dụ đúng / sai), mô tả tham số `keyword` (AI đọc lúc gọi tool), và `message` khi không có kết quả (chỉ cách thử lại). Chi tiết ở `05-tools.md` mục 3.5.
+
+**Q: Không có kết quả thì AI có báo "không có" luôn không?**
+A: Không. Kết quả rỗng kèm `message` bảo AI bỏ category hoặc rút keyword rồi gọi lại, tối đa 2 lần. Việc này chạy ngay trong vòng lặp tool của cùng một request, khách chỉ thấy câu trả lời cuối. "2 lần" là lời dặn AI; chặn cứng vẫn là 5 vòng tool.
+
 ## Giao diện
 
 **Q: Vì sao popup nằm ở `App.vue`?**

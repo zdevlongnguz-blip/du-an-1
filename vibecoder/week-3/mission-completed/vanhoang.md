@@ -85,3 +85,22 @@ Xóa bình luận: ĐẠT
 [12/11/2026 22:46:59] Y A Cờ Long: Xóa bình luận: ĐẠT
 [12/11/2026 22:49:05] Y A Cờ Long: *chưa đăng nhập -> bắt buộc đăng nhập mới bình luận được -> ĐẠT
 *chưa test các trường hợp lỗi bảo mật hoặc bị tấn công bảo mật để can thiệp vào bình luận của user khác vì đang tạm tin tưởng BE bên anh Long
+
+## Ghi công bổ sung (ngày 2026-11-23)
+
+Người thực hiện: Văn Hoàng (FE + kiểm thử trên trình duyệt). Làm việc cùng Claude Code, nhánh `feature/fule-product-filter`. Phần kế hoạch, BE và database do Long, xem `long.md`.
+
+### FE
+- `FE/src/views/products/catalog.vue`:
+  - Khung lọc đầy đủ: tìm kiếm, danh mục, khoảng giá, độ giữ nếp, độ bóng, tag (gợi ý tag phổ biến, nhập nhiều tag), sắp xếp mới nhất / cũ nhất.
+  - Mọi bộ lọc nằm trên URL (chia sẻ link được, trợ lý Fule mở đúng trang đã lọc); đổi trang / đổi sắp xếp không làm mất chữ đang nhập dở.
+  - Danh sách sắp xếp, thang mức, giới hạn lấy từ API `api-product-filters`, không viết cứng ở FE.
+  - Câu dẫn kết quả: "Tìm thấy N sản phẩm khớp với …".
+  - Sửa lỗi sidebar bộ lọc cao hơn màn hình bị che: giới hạn chiều cao, cuộn bên trong.
+- `FE/src/components/admin/AdminVariantManager.vue`: ô chọn độ giữ nếp, độ bóng khi admin tạo / sửa biến thể.
+- `FE/src/components/chat/ChatAssistant.vue`: chip "trợ lý đã làm gì" cho mọi tool (tra cứu kèm bộ lọc, đơn nháp, chọn bài hát).
+- `FE/src/helpers/ai/chatAssistant.js`: cho phép trợ lý mở catalog kèm đủ 8 tham số lọc.
+
+### Kiểm thử trên trình duyệt (Chrome qua ngrok)
+- `npm run build` trong `FE/`: OK.
+- Các luồng đã kiểm thử: lọc từng điều kiện và kết hợp nhiều điều kiện, nhập tag, sắp xếp, phân trang, xóa bộ lọc, báo lỗi giá; sidebar trên màn hình thấp và trên điện thoại; trang admin biến thể; chat với Fule (mở catalog đã lọc, chip tool).

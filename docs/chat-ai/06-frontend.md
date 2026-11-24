@@ -100,13 +100,20 @@ Danh sách cho phép hiện tại:
 
 | Route | Tham số query | Tham số params |
 | --- | --- | --- |
-| `catalog` | `search` | — |
+| `catalog` | `search`, `category`, `min_price`, `max_price`, `hold`, `shine`, `tags`, `sort` (đúng bộ lọc của trang catalog) | — |
 | `product-detail` | — | `slug` (bắt buộc) |
 | `fule-sing` | `song`, `video` | — |
 
 FE gọi `router.push` theo **tên route**, không bao giờ nhận chuỗi URL từ server.
 
 ## 8. Chip gợi ý
+
+**Chip "trợ lý đã làm gì"** (dưới mỗi câu trả lời, không bấm được): hiện `tool_calls[].summary` do BE tạo
+(`BE/geminiServices/GeminiToolSummary.php`), ví dụ "Đã tra cứu sản phẩm: Danh mục: Pomade; Độ giữ nếp: Trung bình",
+"Đã cập nhật đơn nháp: thêm 2 × CLAYMATION", "Đã bỏ đơn nháp", "Đã chọn bài hát: “…”". FE chỉ hiển thị, không giữ bảng nhãn;
+bỏ chip trùng; câu dài thì xuống dòng. Tin cũ chưa có `summary` vẫn hiện "Đã tra cứu sản phẩm: “từ khóa”" như trước.
+
+**Chip gợi ý câu hỏi** (bấm được):
 
 - Nếu tin assistant gần nhất có `suggestions`, hiện các câu đó.
 - Nếu không, hiện ba chip mặc định: "Hát 1 bài", "Tôi muốn xem sản phẩm "sáp Vinh Râu"", "Tôi muốn xem các sản phẩm Sáp".

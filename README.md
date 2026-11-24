@@ -274,7 +274,7 @@ Các endpoint đánh dấu "đăng nhập" cần header `Authorization: Bearer <
 | --- | --- | --- |
 | Tài khoản | `api-register`, `api-verify-email`, `api-login`, `api-logout`, `api-forgot-password`, `api-reset-password`, `reset-password-bridge`, `api-check` | Công khai |
 | Tài khoản | `api-change-password` | Đăng nhập |
-| Sản phẩm | `api-products`, `api-products-top`, `api-product-detail`, `api-categories`, `api-banners` | Công khai |
+| Sản phẩm | `api-products` (lọc: `search`, `category`, `min_price`, `max_price`, `hold`, `shine`, `tags`, `sort`), `api-product-filters`, `api-products-top`, `api-product-detail`, `api-categories`, `api-banners` | Công khai |
 | Bài viết | `api-posts` | Đăng nhập |
 | Bình luận | `api-product-comments` | Công khai |
 | Bình luận | `api-comment-create`, `api-comment-update`, `api-comment-delete` | Đăng nhập |

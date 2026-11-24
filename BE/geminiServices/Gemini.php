@@ -164,7 +164,12 @@ class Gemini
             // đúng thứ tự các functionCall, vì Gemini ghép kết quả theo thứ tự đó.
             $responseParts = [];
             foreach ($calls as $call) {
-                $toolCalls[] = ['name' => $call['name'], 'args' => $call['args']];
+                // summary: câu mô tả để FE hiện chip dưới câu trả lời (xem GeminiToolSummary).
+                $toolCalls[] = [
+                    'name' => $call['name'],
+                    'args' => $call['args'],
+                    'summary' => GeminiToolSummary::describe($call['name'], $call['args']),
+                ];
                 $result = $this->runTool($call['name'], $call['args'], $context);
 
                 // Tách lệnh cho FE ra khỏi kết quả trước khi gửi cho Gemini và trước khi lưu lịch sử.
@@ -585,8 +590,8 @@ class Gemini
      * - Lượt user có chữ: thành tin nhắn 'user'.
      * - Lượt model có chữ: thành tin nhắn 'assistant', đã tách dòng gợi ý [[GOI_Y: ...]] ra 'suggestions'.
      * - Lượt gọi tool (functionCall) và kết quả tool (functionResponse): không hiển thị. Tên tool được gắn vào
-     *   câu trả lời ngay sau đó; chỉ giữ từ khóa của search_product (để hiện chip "Đã tra cứu"),
-     *   tham số của tool khác bị bỏ vì có thể chứa thông tin cá nhân (SĐT, địa chỉ khách nhập).
+     *   câu trả lời ngay sau đó, kèm 'summary' (câu mô tả cho chip, xem GeminiToolSummary); chỉ giữ từ khóa của
+     *   search_product trong args, tham số khác bị bỏ vì có thể chứa thông tin cá nhân (SĐT, địa chỉ khách nhập ở bản cũ).
      *
      * @param array $turns Các lượt ['role', 'parts', 'created_at'] theo thứ tự cũ -> mới
      * @return array Danh sách ['role', 'text', 'created_at', 'tool_calls', 'suggestions']
@@ -614,10 +619,14 @@ class Gemini
             foreach ($parts as $part) {
                 if (isset($part['functionCall']['name'])) {
                     $name = (string)$part['functionCall']['name'];
-                    $keyword = $part['functionCall']['args']['keyword'] ?? null;
+                    $fullArgs = is_array($part['functionCall']['args'] ?? null) ? $part['functionCall']['args'] : [];
+                    $keyword = $fullArgs['keyword'] ?? null;
                     $pendingTools[] = [
                         'name' => $name,
                         'args' => $name === 'search_product' && is_string($keyword) ? ['keyword' => $keyword] : new stdClass(),
+                        // Câu mô tả cho chip, tạo từ tham số ĐẦY ĐỦ nhưng chỉ dùng phần an toàn (bộ lọc, SKU, số lượng,
+                        // tên bài); tham số gốc vẫn không gửi ra ngoài (xem GeminiToolSummary).
+                        'summary' => GeminiToolSummary::describe($name, $fullArgs),
                     ];
                 }
             }

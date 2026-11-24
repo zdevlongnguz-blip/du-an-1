@@ -210,3 +210,36 @@ Người thực hiện: Long (BE). Làm việc cùng Claude Code, nhánh `chore/
 ### Lưu ý
 - URL `trycloudflare` đổi mỗi lần chạy lại Colab, phải sửa `COMMENT_GUARD_URL` trong `BE/.env`.
 - Colab hiện chưa kiểm tra header `x-api-key`. `BE/.env.example` chỉ ghi URL mẫu, URL thật để trong `BE/.env`.
+
+## Ghi công bổ sung (ngày 2026-11-23)
+
+Người thực hiện: Long (plan + BE + database). Làm việc cùng Claude Code, nhánh `feature/fule-product-filter`. Phần FE và kiểm thử trên trình duyệt do Văn Hoàng, xem `vanhoang.md`.
+
+### Lên kế hoạch
+- Kế hoạch dựng lại bộ lọc catalog và cấp dữ liệu cho trợ lý Fule, ghi trong `docs/trang-thai-du-an.md`: tìm kiếm + danh mục + khoảng giá + độ giữ nếp (1-3) + độ bóng (0-3) + tag + sắp xếp mới nhất / cũ nhất; tool `search_product` của Fule dùng chung đúng bộ lọc đó. Luồng làm: BE -> FE -> test API -> test trên Chrome qua ngrok.
+
+### Database
+- `BE/database/migrations/20261123_01_variant_levels_and_product_metadata.sql` (mới):
+  - `product_variants`: thêm `hold_level` (CHECK 1-3) và `shine_level` (CHECK 0-3); chuyển giá trị chữ cũ ("rất mạnh", "bóng lộn", "không bóng, mờ tự nhiên"...) sang số rồi bỏ 2 khóa `do_giu_nep`, `do_bong` khỏi JSON `attributes`.
+  - `products`: thêm cột `metadata` (gom thuộc tính các biến thể đang bán, dùng cho tìm kiếm và lọc tag).
+  - Tạo lại view `v_product_catalog` có `metadata`.
+- Cập nhật 3 file seed (`catalog_product_variants.sql`, `pomade_replace_hair_care.sql`, `products_variant_attributes.sql`) theo cấu trúc mới, dùng chung một câu SQL làm mới metadata.
+- Đã chạy trên DB local; sao lưu thuộc tính cũ trước khi chạy.
+
+### BE
+- `BE/extensions/CatalogFilter.php` (mới): kiểm tra tham số lọc dùng chung cho `api-products` và tool của Fule (sai thì báo lỗi rõ ràng), danh sách kiểu sắp xếp, giới hạn đầu vào, câu mô tả bộ lọc.
+- `BE/extensions/VariantAttributes.php`: thang giữ nếp / độ bóng và nhãn, thứ tự hiển thị thuộc tính.
+- `BE/models/Product.php`: `getFiltered()` lọc theo mọi điều kiện; ô tìm kiếm khớp tên, mã, mô tả, metadata, SKU và tên phiên bản đang bán; còn hàng xếp trước; làm mới metadata khi admin sửa biến thể.
+- `BE/controllers/ProductController.php` + `BE/routes/index.php`: `api-products` dùng bộ lọc mới; API mới `api-product-filters` (thang mức, khoảng giá, tag gợi ý, kiểu sắp xếp); admin tạo / sửa biến thể có giữ nếp, độ bóng.
+- `BE/models/Cart.php`: giỏ hàng hiện thuộc tính theo thứ tự mới.
+- Trợ lý Fule:
+  - `GeminiToolSearchProduct.php`: thêm tham số lọc giống catalog, trả `total_found`, `applied_filters`; mở catalog kèm đúng bộ lọc.
+  - `GeminiToolSummary.php` (mới): câu mô tả cho chip "trợ lý đã làm gì" của mọi tool.
+  - `GeminiPrompt.php` + mô tả tham số `keyword`: ép AI chỉ lấy thực thể cốt lõi đã sửa chính tả ("…được dùng bởi Sơn Tùng MTP" -> `Sơn Tùng MTP`, "sáp KervinMurphy" -> `Kevin Murphy`), không ra kết quả thì tự thử lại.
+- Tài liệu: `README.md`, `docs/chat-ai/02, 04, 05, 06, 09`, `docs/trang-thai-du-an.md`.
+
+### Đã kiểm tra
+- `php -l` cho các file PHP đã sửa: OK.
+- Test API bộ lọc: 76/76 PASS (lọc 27, phạm vi tìm kiếm 11, sửa sau review 11, hồi quy chi tiết / giỏ hàng 9, admin biến thể 18).
+- Metadata tạo bằng migration và bằng code giống nhau ở 11/11 sản phẩm.
+- Chat thật với Gemini: lọc theo nhu cầu đúng; 4/4 câu chọn keyword đúng ngay lần gọi đầu.

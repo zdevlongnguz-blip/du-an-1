@@ -37,6 +37,7 @@ Dự án môn học: PHP MVC thuần + MySQL (PDO). Ưu tiên đơn giản, đú
 - Mọi API đọc/ghi dữ liệu riêng của user (ví dụ giỏ hàng, đơn hàng, hóa đơn) bắt buộc gọi `requireAuth()` ở router; API quản trị phải xác minh thêm `role` phù hợp. Chỉ để public khi endpoint được thiết kế công khai.
 - Kiểm tra method (`$_SERVER['REQUEST_METHOD']`) trong controller với endpoint POST/PUT/DELETE.
 - Với endpoint có lọc hoặc phân trang, đọc mặc định, validate query và truyền tham số ngay trong action controller theo mẫu `ProductController::index`; không tách sang helper phân trang chung hoặc dùng cờ khó hiểu. Model nhận tham số có tên rõ ràng và đặt câu truy vấn lọc/phân trang tại method tương ứng.
+  - Ngoại lệ đã chốt (23/11/2026): bộ lọc **danh sách sản phẩm** dùng chung cho `api-products` và tool AI `search_product`, nên luật kiểm tra nằm ở `extensions/CatalogFilter.php` (một nguồn duy nhất, tránh catalog và trợ lý hiểu bộ lọc khác nhau) và `Product::getFiltered` nhận mảng bộ lọc đã kiểm tra. Không mở rộng cách này cho endpoint khác nếu không có nhu cầu dùng chung tương tự.
 
 ## 5. Validate và bảo mật dữ liệu
 - Validate tại ranh giới request: kiểu, định dạng, trường bắt buộc, miền giá trị, độ dài. Chuẩn validate: viết thủ công theo mẫu `AuthController` (`is_array`, `is_string`, `filter_var`, `strlen`). `extensions/Validator.php` hiện chưa được dùng, chỉ dùng khi task yêu cầu.

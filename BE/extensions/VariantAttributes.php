@@ -2,41 +2,75 @@
 
 /**
  * Định dạng thuộc tính (attributes) của biến thể sản phẩm (tầng extension, dùng chung cho model và controller).
- * Đây là NƠI DUY NHẤT định nghĩa 5 thuộc tính mặc định và cách chuẩn hóa product_variants.attributes.
+ * Đây là NƠI DUY NHẤT định nghĩa: 3 thuộc tính mặc định, 2 thang mức "giữ nếp / độ bóng" (kèm nhãn),
+ * cách chuẩn hóa product_variants.attributes và cách tạo products.metadata.
  */
 
 /**
- * Định dạng lưu trong cột product_variants.attributes (JSON): MẢNG các phần tử { key, label, value }.
+ * Thông tin của một biến thể chia làm 2 loại (từ migration 20261123_01):
  *
- *   [
- *     {"key": "dung_tich",  "label": "Dung tích",  "value": "113g"},
- *     {"key": "do_giu_nep", "label": "Độ giữ nếp", "value": "trung bình"},
- *     {"key": "do_bong",    "label": "Độ bóng",    "value": null},
- *     {"key": "phu_hop",    "label": "Phù hợp",    "value": "tóc dày"},
- *     {"key": "kieu_toc",   "label": "Kiểu tóc",   "value": "side part"},
- *     {"key": "mui_huong",  "label": "Mùi hương",  "value": "cam chanh"}   <- khóa tự do
- *   ]
+ * 1. TIÊU CHÍ LỌC dạng chọn (select-option), lưu ở CỘT SỐ riêng, có CHECK giới hạn miền giá trị:
+ *    - product_variants.hold_level  (1-3): độ giữ nếp, xem HOLD_LEVELS.
+ *    - product_variants.shine_level (0-3): độ bóng, xem SHINE_LEVELS.
+ *    Vì sao không để trong JSON: chữ tự do không lọc được ("Cực cao", "bóng lộn", "3"...). Cột số lọc bằng "=".
+ *
+ * 2. THUỘC TÍNH MÔ TẢ, lưu trong cột product_variants.attributes (JSON): MẢNG các phần tử { key, label, value }.
+ *      [
+ *        {"key": "dung_tich", "label": "Dung tích", "value": "113g"},
+ *        {"key": "phu_hop",   "label": "Phù hợp",   "value": "tóc dày"},
+ *        {"key": "kieu_toc",  "label": "Kiểu tóc",  "value": "side part"},
+ *        {"key": "mui_huong", "label": "Mùi hương", "value": "cam chanh"}   <- khóa tự do
+ *      ]
+ *    Các giá trị này được gom vào products.metadata (xem Product::METADATA_REFRESH_SQL) để khách lọc theo tag bằng LIKE.
  *
  * Vì sao dùng mảng thay vì object {"dung_tich": "113g"}:
  * - Giữ đúng thứ tự (object JSON bị MySQL tự sắp lại khóa).
  * - Mỗi thuộc tính có nhãn tiếng Việt đúng dấu (label), kể cả khóa tự do; FE đọc thẳng, không giữ bảng nhãn riêng.
  *
  * Quy tắc chuẩn hóa (normalize):
- * - 5 khóa mặc định LUÔN có và LUÔN đứng đầu theo thứ tự DEFAULTS; nhãn lấy từ DEFAULTS (không tin nhãn bên ngoài);
+ * - 3 khóa mặc định LUÔN có và LUÔN đứng đầu theo thứ tự DEFAULTS; nhãn lấy từ DEFAULTS (không tin nhãn bên ngoài);
  *   chưa rõ giá trị thì value = null.
  * - Khóa tự do đứng sau, giữ thứ tự nhập. key chỉ gồm a-z, 0-9, _ (không dấu), không trùng.
+ * - Khóa trong RESERVED_KEYS (do_giu_nep, do_bong) bị BỎ: 2 thông tin này đã có cột riêng.
  * - value là chuỗi đã bỏ khoảng trắng hai đầu, hoặc null.
+ *
+ * Khi trả cho khách xem (trang chi tiết, giỏ hàng), forDisplay() ghép thêm 2 dòng "Độ giữ nếp", "Độ bóng"
+ * (lấy nhãn từ 2 cột số) vào ngay sau "Dung tích", nên FE vẫn đọc một mảng attributes như trước.
  */
 class VariantAttributes
 {
-    // 5 thuộc tính mặc định: key => nhãn tiếng Việt. Thứ tự ở đây là thứ tự hiển thị.
+    // 3 thuộc tính mặc định: key => nhãn tiếng Việt. Thứ tự ở đây là thứ tự hiển thị.
     const DEFAULTS = [
         'dung_tich' => 'Dung tích',
-        'do_giu_nep' => 'Độ giữ nếp',
-        'do_bong' => 'Độ bóng',
         'phu_hop' => 'Phù hợp',
         'kieu_toc' => 'Kiểu tóc',
     ];
+
+    // Khóa đã chuyển sang cột số riêng: không còn được lưu trong JSON, normalize bỏ qua nếu ai đó gửi lên.
+    const RESERVED_KEYS = ['do_giu_nep', 'do_bong'];
+
+    // Thang độ giữ nếp (cột hold_level): giá trị => nhãn. 1-2-3 tương ứng low - medium - high.
+    const HOLD_LEVELS = [
+        1 => 'Nhẹ',
+        2 => 'Trung bình',
+        3 => 'Mạnh',
+    ];
+
+    // Thang độ bóng (cột shine_level): giá trị => nhãn. 0 = không bóng (mờ), 1-2-3 = bóng tăng dần.
+    const SHINE_LEVELS = [
+        0 => 'Không bóng (mờ)',
+        1 => 'Bóng nhẹ',
+        2 => 'Bóng vừa',
+        3 => 'Bóng cao',
+    ];
+
+    // Nhãn hiển thị của 2 tiêu chí, dùng khi ghép vào attributes cho khách xem và trong cấu hình gửi FE.
+    const HOLD_LABEL = 'Độ giữ nếp';
+    const SHINE_LABEL = 'Độ bóng';
+
+    // Ký tự nối các giá trị trong products.metadata. Dùng " | " để không lẫn với dấu phẩy trong một giá trị
+    // (ví dụ "tóc dày, tóc cứng" vẫn là một giá trị).
+    const METADATA_SEPARATOR = ' | ';
 
     // Regex kiểm tra key: chỉ chữ thường không dấu, số, gạch dưới, dài 1-50 ký tự.
     const KEY_PATTERN = '/^[a-z0-9_]{1,50}$/';
@@ -87,7 +121,8 @@ class VariantAttributes
             }
 
             $key = trim($item['key']);
-            if (!preg_match(self::KEY_PATTERN, $key) || array_key_exists($key, $valuesByKey)) {
+            // Bỏ khóa đã chuyển sang cột riêng (do_giu_nep, do_bong), để JSON không giữ bản sao lệch với cột.
+            if (!preg_match(self::KEY_PATTERN, $key) || array_key_exists($key, $valuesByKey) || in_array($key, self::RESERVED_KEYS, true)) {
                 continue;
             }
 
@@ -98,7 +133,7 @@ class VariantAttributes
         }
 
         $result = [];
-        // 5 khóa mặc định trước, theo đúng thứ tự và nhãn trong DEFAULTS.
+        // 3 khóa mặc định trước, theo đúng thứ tự và nhãn trong DEFAULTS.
         foreach (self::DEFAULTS as $key => $label) {
             $result[] = ['key' => $key, 'label' => $label, 'value' => $valuesByKey[$key] ?? null];
         }
@@ -129,7 +164,93 @@ class VariantAttributes
     }
 
     /**
-     * Chuỗi JSON cho biến thể mới tạo: đủ 5 khóa mặc định, value = null.
+     * Đọc một mức (giữ nếp / độ bóng) từ request hoặc DB, kiểm tra có nằm trong thang không.
+     * Nhận số hoặc chuỗi số ("2"); null, chuỗi rỗng = chưa rõ.
+     *
+     * @param mixed $value  Giá trị cần đọc
+     * @param array $levels HOLD_LEVELS hoặc SHINE_LEVELS
+     * @return int|null|false Mức hợp lệ; null nếu để trống; false nếu sai (ngoài thang hoặc không phải số nguyên)
+     */
+    public static function readLevel($value = null, $levels = [])
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        // Chặn true/false trước: filter_var(true, FILTER_VALIDATE_INT) trả 1, sẽ bị hiểu nhầm là mức 1.
+        if (is_bool($value) || is_array($value)) {
+            return false;
+        }
+        // filter_var FILTER_VALIDATE_INT: chỉ nhận số nguyên ("2" -> 2), từ chối "2.5", "abc".
+        $level = filter_var($value, FILTER_VALIDATE_INT);
+
+        return $level !== false && array_key_exists($level, $levels) ? $level : false;
+    }
+
+    /**
+     * Danh sách lựa chọn của một thang để gửi FE dựng ô chọn (select-option): [{value, label}, ...].
+     *
+     * @param array $levels HOLD_LEVELS hoặc SHINE_LEVELS
+     * @return array Danh sách lựa chọn theo thứ tự tăng dần
+     */
+    public static function levelOptions($levels = [])
+    {
+        $options = [];
+        foreach (is_array($levels) ? $levels : [] as $value => $label) {
+            $options[] = ['value' => (int) $value, 'label' => $label];
+        }
+
+        return $options;
+    }
+
+    /**
+     * Cấu hình thuộc tính gửi cho FE (form admin, bộ lọc catalog), để FE không viết cứng khóa, số khóa hay nhãn.
+     *
+     * @return array ['defaults' => [{key, label}], 'hold_levels' => [{value, label}], 'shine_levels' => [{value, label}]]
+     */
+    public static function config()
+    {
+        $defaults = [];
+        foreach (self::DEFAULTS as $key => $label) {
+            $defaults[] = ['key' => $key, 'label' => $label];
+        }
+
+        return [
+            'defaults' => $defaults,
+            'hold_label' => self::HOLD_LABEL,
+            'shine_label' => self::SHINE_LABEL,
+            'hold_levels' => self::levelOptions(self::HOLD_LEVELS),
+            'shine_levels' => self::levelOptions(self::SHINE_LEVELS),
+        ];
+    }
+
+    /**
+     * Thuộc tính để KHÁCH xem: mảng chuẩn từ JSON + 2 dòng "Độ giữ nếp", "Độ bóng" ghép vào ngay sau "Dung tích".
+     * Nhờ vậy trang chi tiết và giỏ hàng vẫn đọc một mảng attributes như trước, không phải sửa FE.
+     * Mức chưa rõ (null) thì value = null; FE tự ẩn dòng không có giá trị.
+     *
+     * @param mixed    $raw        Chuỗi JSON attributes hoặc mảng
+     * @param int|null $holdLevel  Cột hold_level
+     * @param int|null $shineLevel Cột shine_level
+     * @return array Mảng [{key, label, value}, ...]
+     */
+    public static function forDisplay($raw = null, $holdLevel = null, $shineLevel = null)
+    {
+        $items = self::decode($raw);
+        $hold = self::readLevel($holdLevel, self::HOLD_LEVELS);
+        $shine = self::readLevel($shineLevel, self::SHINE_LEVELS);
+        $levelItems = [
+            ['key' => 'do_giu_nep', 'label' => self::HOLD_LABEL, 'value' => is_int($hold) ? self::HOLD_LEVELS[$hold] : null],
+            ['key' => 'do_bong', 'label' => self::SHINE_LABEL, 'value' => is_int($shine) ? self::SHINE_LEVELS[$shine] : null],
+        ];
+
+        // array_splice chèn 2 dòng mức vào vị trí 1 (sau "Dung tích" luôn đứng đầu), giữ thứ tự hiển thị quen thuộc.
+        array_splice($items, 1, 0, $levelItems);
+
+        return $items;
+    }
+
+    /**
+     * Chuỗi JSON cho biến thể mới tạo: đủ 3 khóa mặc định, value = null.
      *
      * @return string Chuỗi JSON mảng
      */
