@@ -15,7 +15,7 @@
  * - hold:      độ giữ nếp 1-3 (VariantAttributes::HOLD_LEVELS)
  * - shine:     độ bóng 0-3 (VariantAttributes::SHINE_LEVELS)
  * - tags:      tối đa 5 tag, mỗi tag tối đa 50 ký tự, so khớp LIKE trong products.metadata (phải khớp TẤT CẢ tag)
- * - sort:      newest (mới nhất, mặc định) | oldest (cũ nhất)
+ * - sort:      newest (mới nhất, mặc định) | oldest | price_asc | price_desc | views | sales
  *
  * Lỗi: ném InvalidArgumentException với câu tiếng Việt dễ hiểu. Controller đổi thành HTTP 400;
  * tool AI để nguyên exception để Gemini nhận được câu báo lỗi và tự sửa tham số.
@@ -28,6 +28,10 @@ class CatalogFilter
     const SORTS = [
         'newest' => 'Mới nhất',
         'oldest' => 'Cũ nhất',
+        'price_asc' => 'Giá tăng dần',
+        'price_desc' => 'Giá giảm dần',
+        'views' => 'Xem nhiều nhất',
+        'sales' => 'Bán chạy nhất',
     ];
 
     const MAX_SEARCH_LENGTH = 100;
@@ -68,7 +72,7 @@ class CatalogFilter
         $minPrice = self::readPrice($input['min_price'] ?? null, 'min_price');
         $maxPrice = self::readPrice($input['max_price'] ?? null, 'max_price');
         if ($minPrice !== null && $maxPrice !== null && $minPrice > $maxPrice) {
-            throw new InvalidArgumentException('Giá thấp nhất không được lớn hơn giá cao nhất');
+            throw new InvalidArgumentException('min_price không được lớn hơn max_price');
         }
 
         $hold = VariantAttributes::readLevel($input['hold'] ?? null, VariantAttributes::HOLD_LEVELS);

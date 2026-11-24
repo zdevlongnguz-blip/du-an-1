@@ -8,6 +8,7 @@ import api from '@/helpers/api/client'
 import { formatPrice } from '@/helpers/format/price'
 import ProductCardCatalog from '@/components/ProductCardCatalog.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
+import StateBlock from '@/components/StateBlock.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -535,26 +536,23 @@ onMounted(() => {
                     </label>
                 </div>
 
-                <!-- Khi đang tải, placeholder giữ nguyên tỷ lệ của card trong thiết kế. -->
-                <div v-if="loading" class="catalog-grid" role="status" aria-label="Đang tải sản phẩm" aria-busy="true">
-                    <div v-for="placeholderIndex in 8" :key="placeholderIndex" class="catalog-skeleton" aria-hidden="true"></div>
-                </div>
+                <!-- Trạng thái danh sách sản phẩm (StateBlock): đang tải → lỗi có Thử lại → rỗng có Xóa bộ lọc.
+                     Lỗi API ưu tiên hơn "không có sản phẩm" để không báo nhầm khi server lỗi.
+                     Không dùng khung xương lưới: StateBlock chưa hỗ trợ kiểu đó (FE/CLAUDE.md mục 13). -->
+                <StateBlock
+                    :loading="loading"
+                    :error="errorMessage"
+                    :empty="products.length === 0"
+                    loading-text="Đang tải sản phẩm..."
+                    empty-text="Không tìm thấy sản phẩm phù hợp."
+                    :on-retry="fetchProducts"
+                >
+                    <template #empty-action>
+                        <button class="catalog-outline-button" type="button" @click="clearFilters">Xóa bộ lọc</button>
+                    </template>
 
-                <!-- Lỗi API được tách khỏi trạng thái không có sản phẩm và có thể thử lại. -->
-                <div v-else-if="errorMessage" class="catalog-state catalog-state--error" role="alert">
-                    <p>{{ errorMessage }}</p>
-                    <button class="catalog-outline-button" type="button" @click="fetchProducts">Thử lại</button>
-                </div>
-
-                <!-- Empty state thay grid/pagination và cho phép xóa bộ lọc. -->
-                <div v-else-if="products.length === 0" class="catalog-state" role="status">
-                    <p>Không tìm thấy sản phẩm phù hợp.</p>
-                    <button class="catalog-outline-button" type="button" @click="clearFilters">Xóa bộ lọc</button>
-                </div>
-
-                <template v-else>
                     <!-- Grid responsive: 3 cột desktop, 2 cột tablet và mobile. -->
-                    <div class="catalog-grid" :aria-busy="loading">
+                    <div class="catalog-grid">
                         <ProductCardCatalog v-for="product in products" :key="product.id" :product="product" />
                     </div>
 
@@ -565,7 +563,7 @@ onMounted(() => {
                         :total-pages="Number(pagination.total_pages)"
                         @change="changePage"
                     />
-                </template>
+                </StateBlock>
             </div>
         </div>
     </section>
