@@ -15,7 +15,7 @@ class ProductController{
      * - min_price, max_price: khoảng giá bán (VND)
      * - hold: độ giữ nếp 1-3; shine: độ bóng 0-3
      * - tags: các tag cách nhau bằng dấu phẩy, ví dụ "tóc dày,quiff" (tối đa 5, phải khớp tất cả)
-     * - sort: newest (mặc định) | oldest
+     * - sort: newest (mặc định) | oldest | price_asc | price_desc | views | sales
      * - page, per_page (hoặc perPage)
      * Giá, giữ nếp, độ bóng: sản phẩm khớp khi có ít nhất 1 biến thể đang bán thỏa cả 3 cùng lúc.
      * Quy tắc kiểm tra ở CatalogFilter (dùng chung với trợ lý AI).

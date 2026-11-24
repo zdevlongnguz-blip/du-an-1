@@ -9,11 +9,17 @@ class Product extends BaseModel
     // Quy tắc xếp hạng CHUNG cho trang catalog và trợ lý AI (cùng gọi getFiltered):
     // 1. Còn hàng trước (in_stock: view tính 1 nếu có ít nhất 1 biến thể đang bán còn kho) - khách và trợ lý
     //    thấy hàng mua được trước, trợ lý chỉ lấy 5 sản phẩm đầu nên không bị lấp đầy bởi hàng hết.
-    // 2. Rồi theo kiểu khách chọn: created_at (mới nhất / cũ nhất).
-    // 3. Cùng thời điểm thì theo id, để thứ tự luôn cố định giữa các trang (phân trang không lặp / sót sản phẩm).
+    // 2. Rồi theo kiểu khách chọn (newest/oldest/giá/lượt xem/bán chạy).
+    // 3. Hòa thì theo id, để thứ tự luôn cố định giữa các trang (phân trang không lặp / sót sản phẩm).
+    // Giá: dùng min_final_price (giá thấp nhất của sản phẩm). `min_final_price IS NULL` xếp trước ASC rồi mới
+    // so giá: sản phẩm chưa có giá (NULL) luôn nằm cuối dù tăng dần hay giảm dần.
     const CATALOG_SORT_SQL = [
         'newest' => '`products`.`in_stock` DESC, `products`.`created_at` DESC, `products`.`id` DESC',
         'oldest' => '`products`.`in_stock` DESC, `products`.`created_at` ASC, `products`.`id` ASC',
+        'price_asc' => '`products`.`in_stock` DESC, `products`.`min_final_price` IS NULL ASC, `products`.`min_final_price` ASC, `products`.`id` DESC',
+        'price_desc' => '`products`.`in_stock` DESC, `products`.`min_final_price` IS NULL ASC, `products`.`min_final_price` DESC, `products`.`id` DESC',
+        'views' => '`products`.`in_stock` DESC, `products`.`view_count` DESC, `products`.`id` DESC',
+        'sales' => '`products`.`in_stock` DESC, `products`.`sales_count` DESC, `products`.`id` DESC',
     ];
 
     // Câu SQL tạo lại products.metadata - NGUỒN DUY NHẤT của quy tắc gom metadata ở runtime.

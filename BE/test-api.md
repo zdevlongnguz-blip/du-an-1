@@ -55,6 +55,17 @@ Trong test: đặt 3 sản phẩm biến thể 4 làm kho giảm 100 -> 97 và `
 | GET | `api-products`?per_page=2 | api-products danh sách | 200 | 200 | PASS |
 | GET | `api-products`?search=cocoon | api-products tìm kiếm | 200 | 200 | PASS |
 | GET | `api-products`?category=duong-toc | api-products lọc theo danh mục (slug) | 200 | 200 | PASS |
+| GET | `api-products` (không tham số sort/giá) | api-products request cũ: mặc định sort=newest, không lọc giá | 200 + filters.sort=newest | *(chưa chạy HTTP: máy local không có BE/.env; đã kiểm tra CatalogFilter::fromInput([]) → newest)* | PENDING |
+| GET | `api-products`?sort=newest / oldest / price_asc / price_desc / views / sales | api-products từng kiểu sắp xếp hợp lệ | 200 + filters.sort đúng | *(validate CatalogFilter PASS 6/6; ORDER BY lấy từ CATALOG_SORT_SQL allowlist)* | PARTIAL |
+| GET | `api-products`?min_price=100000 | api-products lọc giá từ | 200 | *(validate CatalogFilter PASS; SQL EXISTS final_price)* | PARTIAL |
+| GET | `api-products`?max_price=500000 | api-products lọc giá đến | 200 | *(validate CatalogFilter PASS)* | PARTIAL |
+| GET | `api-products`?min_price=100000&max_price=500000 | api-products khoảng giá | 200 | *(validate CatalogFilter PASS)* | PARTIAL |
+| GET | `api-products`?search=sáp&category=duong-toc&min_price=100000&sort=price_asc&page=1 | api-products kết hợp search + category + giá + sort + page | 200 | *(validate CatalogFilter PASS)* | PARTIAL |
+| GET | `api-products`?sort=bogus | api-products sort sai | 400 | 400 *(CatalogFilter ném InvalidArgumentException)* | PARTIAL |
+| GET | `api-products`?min_price=abc / min_price=-1 | api-products giá chữ / âm | 400 | 400 *(CatalogFilter)* | PARTIAL |
+| GET | `api-products`?min_price=500&max_price=100 | api-products min > max | 400 `min_price không được lớn hơn max_price` | PASS *(CatalogFilter unit)* | PASS |
+| GET | `api-products`?sort[]=newest / min_price[]=1 | api-products tham số dạng mảng | 400 | PASS *(CatalogFilter unit)* | PASS |
+| GET | `api-product-filters` | api-product-filters sorts gồm 6 kiểu (newest, oldest, price_asc, price_desc, views, sales) | 200 + 6 sorts | *(CatalogFilter::sortOptions() = 6)* | PARTIAL |
 | GET | `api-products-top`?sort_by=sales | api-products-top sort sales | 200 | 200 | PASS |
 | GET | `api-products-top`?sort_by=views | api-products-top sort views | 200 | 200 | PASS |
 | GET | `api-products-top`?sort_by=invalid | api-products-top sort sai | 400 | 400 | PASS |

@@ -89,7 +89,9 @@ class GeminiToolSearchProduct extends GeminiTool
                 'sort' => [
                     'type' => 'string',
                     'enum' => array_keys(CatalogFilter::SORTS),
-                    'description' => 'newest = mới nhất (mặc định), oldest = cũ nhất.',
+                    'description' => 'newest = mới nhất (mặc định), oldest = cũ nhất, '
+                        . 'price_asc = giá tăng dần, price_desc = giá giảm dần, '
+                        . 'views = xem nhiều nhất, sales = bán chạy nhất.',
                 ],
             ],
         ];
