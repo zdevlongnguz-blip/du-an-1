@@ -32,7 +32,7 @@
   "conversation_id": 12,
   "reply": "Sáp vuốt tóc Vinh Râu có giá 250.000đ, hiện còn hàng...",
   "tool_calls": [
-    { "name": "search_product", "args": { "keyword": "Vinh Râu" } }
+    { "name": "search_product", "args": { "keyword": "Vinh Râu" }, "summary": "Đã tra cứu sản phẩm: “Vinh Râu”" }
   ],
   "actions": [
     { "type": "navigate", "route": "product-detail", "query": {}, "params": { "slug": "sap-vuot-toc-vinh-rau" } }
@@ -49,7 +49,7 @@
 | `actions` | Lệnh điều hướng (tối đa 1) | `[]` |
 | `suggestions` | Tối đa 3 câu gợi ý | `[]` (FE dùng chip mặc định) |
 
-`tool_calls` chỉ có `name` và `args`, không chứa kết quả tool.
+`tool_calls` có `name`, `args` và `summary`, không chứa kết quả tool. `summary` là câu mô tả do BE tạo (`BE/geminiServices/GeminiToolSummary.php`) để FE hiện chip dưới câu trả lời, ví dụ "Đã tra cứu sản phẩm: Danh mục: Pomade; Độ giữ nếp: Trung bình", "Đã cập nhật đơn nháp: thêm 2 × CLAYMATION", "Đã bỏ đơn nháp", "Đã chọn bài hát: “…”". Nhãn nghiệp vụ (giữ nếp, độ bóng) nằm ở BE nên FE không viết cứng.
 
 ## 4. Các dạng `actions`
 
@@ -108,7 +108,7 @@ Dùng khi khung chat mở sau lúc đăng nhập lại hoặc tải lại trang,
 - `conversation_id`: cuộc có lượt mới nhất của user; `null` nếu chưa chat lần nào (khi đó `messages: []`).
 - `messages`: `[{ role: 'user' | 'assistant', text, created_at, tool_calls, suggestions }]`, cũ trước mới sau, tối đa `Gemini::MAX_HISTORY` lượt gần nhất.
 - Đã lọc: lượt gọi tool (`functionCall`/`functionResponse`) không hiện thành tin nhắn; dòng `[[GOI_Y: ...]]` được tách ra `suggestions`.
-- `tool_calls` chỉ giữ từ khóa của `search_product` (chip "Đã tra cứu"); tham số tool khác bị bỏ vì có thể chứa SĐT, địa chỉ.
+- `tool_calls` có `summary` giống hệt lúc chat (tạo từ tham số đầy đủ nhưng chỉ dùng phần an toàn: bộ lọc, SKU, số lượng, tên bài); `args` chỉ giữ từ khóa của `search_product`, tham số tool khác bị bỏ vì bản cũ có thể chứa SĐT, địa chỉ.
 - Lệnh `_action` không lưu trong DB, nên nạp lại lịch sử không mở lại trang nào.
 
 Phía FE (`chatAssistant.js`): `loadHistory()` chạy 1 lần khi khung chat mở lúc đã đăng nhập. Nút "cuộc mới" không nạp lại cuộc cũ. Đăng xuất gọi `forgetChat()` để lần đăng nhập sau nạp đúng lịch sử của người mới.

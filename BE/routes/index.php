@@ -124,6 +124,11 @@ switch ($action) {
         (new ProductController)->stock();
         break;
 
+    // API dữ liệu dựng bộ lọc catalog (thang giữ nếp / độ bóng, khoảng giá, tag gợi ý), không yêu cầu đăng nhập.
+    case 'api-product-filters':
+        (new ProductController)->filterOptions();
+        break;
+
     // API lấy danh sách danh mục sản phẩm
     case 'api-categories':
         (new CategoryController)->index();

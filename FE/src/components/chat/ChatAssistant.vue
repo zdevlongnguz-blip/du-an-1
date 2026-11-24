@@ -183,11 +183,19 @@ async function handleOpen() {
   inputEl.value?.focus()
 }
 
-// Lấy từ khóa mà tool search_product đã dùng, để hiện chip "Đã tra cứu" dưới câu trả lời.
-function searchedKeywords(toolCalls) {
-  return toolCalls
-    .filter((call) => call?.name === 'search_product' && typeof call.args?.keyword === 'string')
-    .map((call) => call.args.keyword)
+// Danh sách chip "trợ lý đã làm gì" dưới câu trả lời: tra cứu sản phẩm (kèm bộ lọc), cập nhật / bỏ đơn nháp, chọn bài hát.
+// Câu chữ do BE tạo sẵn trong tool_calls[].summary (BE giữ nhãn nghiệp vụ như "Độ giữ nếp: Mạnh"), FE chỉ hiển thị.
+// Bản cũ chưa có summary: vẫn hiện "Đã tra cứu sản phẩm: “từ khóa”" như trước. Bỏ chip trùng (trợ lý gọi lại tool cùng điều kiện).
+function toolChips(toolCalls) {
+  const chips = []
+  for (const call of Array.isArray(toolCalls) ? toolCalls : []) {
+    let text = typeof call?.summary === 'string' ? call.summary.trim() : ''
+    if (!text && call?.name === 'search_product' && typeof call.args?.keyword === 'string') {
+      text = `Đã tra cứu sản phẩm: “${call.args.keyword}”`
+    }
+    if (text && !chips.includes(text)) chips.push(text)
+  }
+  return chips
 }
 
 // computed: style đặt cạnh trên của panel ngay dưới thanh điều hướng.
@@ -371,13 +379,13 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
                   <span class="chat-time">{{ message.time }}</span>
                 </div>
 
-                <!-- Chip cho biết trợ lý đã tra cứu dữ liệu thật với từ khóa nào -->
+                <!-- Chip cho biết trợ lý đã dùng dữ liệu / thao tác thật nào: tra cứu (kèm bộ lọc), đơn nháp, bài hát -->
                 <span
-                  v-for="keyword in message.role === 'assistant' ? searchedKeywords(message.toolCalls) : []"
-                  :key="keyword"
+                  v-for="chip in message.role === 'assistant' ? toolChips(message.toolCalls) : []"
+                  :key="chip"
                   class="chat-tool-chip"
                 >
-                  Đã tra cứu sản phẩm: “{{ keyword }}”
+                  {{ chip }}
                 </span>
 
                 <!-- Tin nhắn gửi lỗi: hiện lý do và nút thử lại -->
@@ -833,14 +841,19 @@ watch([isOpen, () => props.authenticated], async ([open, loggedIn]) => {
   opacity: 0.6;
 }
 
+/* Chip "trợ lý đã làm gì". Câu mô tả bộ lọc có thể dài nên cho xuống dòng (bo góc vừa phải thay vì hình viên thuốc,
+   để chip nhiều dòng không bị méo); không rộng quá khung tin nhắn. */
 .chat-tool-chip {
+  align-self: flex-start;
+  max-width: 100%;
   padding: 3px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--color-soft);
   color: var(--color-muted);
   font-size: 0.7rem;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .chat-error {

@@ -3,38 +3,78 @@ class Product extends BaseModel
 {
     protected $table = 'products';
 
-    public function getFiltered($search = '', $category = null, $page = 1, $perPage = 8)
+    // Kiểu sắp xếp danh sách sản phẩm => mệnh đề ORDER BY. Chỉ dùng chuỗi trong danh sách này,
+    // không đưa giá trị từ request vào SQL (chống SQL injection). Khóa phải khớp CatalogFilter::SORTS.
+    //
+    // Quy tắc xếp hạng CHUNG cho trang catalog và trợ lý AI (cùng gọi getFiltered):
+    // 1. Còn hàng trước (in_stock: view tính 1 nếu có ít nhất 1 biến thể đang bán còn kho) - khách và trợ lý
+    //    thấy hàng mua được trước, trợ lý chỉ lấy 5 sản phẩm đầu nên không bị lấp đầy bởi hàng hết.
+    // 2. Rồi theo kiểu khách chọn: created_at (mới nhất / cũ nhất).
+    // 3. Cùng thời điểm thì theo id, để thứ tự luôn cố định giữa các trang (phân trang không lặp / sót sản phẩm).
+    const CATALOG_SORT_SQL = [
+        'newest' => '`products`.`in_stock` DESC, `products`.`created_at` DESC, `products`.`id` DESC',
+        'oldest' => '`products`.`in_stock` DESC, `products`.`created_at` ASC, `products`.`id` ASC',
+    ];
+
+    // Câu SQL tạo lại products.metadata - NGUỒN DUY NHẤT của quy tắc gom metadata ở runtime.
+    // Migration 20261123_01 và 3 file seed chép đúng câu này (file .sql không gọi được code PHP); sửa thì sửa cả ở đó.
+    //
+    // Quy tắc: GIÁ TRỊ (không lấy nhãn) mọi khóa thuộc tính của các biến thể ĐANG BÁN, bỏ rỗng, bỏ trùng,
+    // sắp xếp, nối bằng " | " (xem VariantAttributes::METADATA_SEPARATOR). Không có giá trị nào thì NULL.
+    // - JSON_TABLE: biến mảng JSON [{key, label, value}] thành các dòng để GROUP_CONCAT gom lại.
+    // - COLLATE utf8mb4_bin: bỏ trùng và sắp xếp theo đúng từng byte, kết quả luôn giống hệt nhau mỗi lần chạy.
+    // - Chạy MỘT câu UPDATE (đọc và ghi cùng lúc trong DB): 2 admin sửa cùng lúc thì câu chạy sau luôn đọc dữ liệu
+    //   mới nhất, không có chuyện ghi đè bằng bản đọc cũ như khi SELECT ở PHP rồi mới UPDATE.
+    // Code nối thêm "WHERE `p`.`id` = :id" ở cuối để chỉ tạo lại một sản phẩm.
+    const METADATA_REFRESH_SQL = "UPDATE `products` AS `p`
+        SET `p`.`metadata` = (
+          SELECT GROUP_CONCAT(DISTINCT TRIM(`jt`.`attr_value`) ORDER BY TRIM(`jt`.`attr_value`) SEPARATOR ' | ')
+          FROM `product_variants` AS `v`,
+               JSON_TABLE(`v`.`attributes`, '$[*]' COLUMNS (`attr_value` VARCHAR(255) COLLATE utf8mb4_bin PATH '$.value')) AS `jt`
+          WHERE `v`.`product_id` = `p`.`id`
+            AND `v`.`is_active` = 1
+            AND `jt`.`attr_value` IS NOT NULL
+            AND TRIM(`jt`.`attr_value`) <> ''
+        )";
+
+    // Độ dài tối đa (byte) của chuỗi GROUP_CONCAT. Mặc định MySQL chỉ 1024 byte và CẮT ngầm phần thừa,
+    // làm tag ở cuối metadata không bao giờ lọc ra. 65535 = sức chứa của cột TEXT.
+    const GROUP_CONCAT_MAX_LEN = 65535;
+
+    /**
+     * Danh sách sản phẩm có lọc, sắp xếp và phân trang. Dùng cho trang catalog (api-products)
+     * và tool tra sản phẩm của trợ lý AI (search_product), nên 2 nơi luôn ra cùng kết quả.
+     *
+     * @param array $filters  Bộ lọc đã kiểm tra bởi CatalogFilter::fromInput()
+     *                        (search, category, min_price, max_price, hold, shine, tags, sort)
+     * @param int   $page     Trang hiện tại, bắt đầu từ 1
+     * @param int   $perPage  Số sản phẩm mỗi trang
+     * @return array ['data' => danh sách, 'pagination' => thông tin phân trang]
+     */
+    public function getFiltered($filters = [], $page = 1, $perPage = 8)
     {
         $page = max(1, (int)$page);
         $perPage = max(1, (int)$perPage);
+        // OFFSET = số dòng bỏ qua. Trang 1 bỏ 0, trang 2 bỏ $perPage, ...
         $offset = ($page - 1) * $perPage;
-        $params = [];
-        $conditions = [];
 
-        $search = trim((string)$search);
-        if ($search !== '') {
-            $conditions[] = "(`products`.`name` LIKE :keyword OR `products`.`code` LIKE :keyword OR `products`.`description` LIKE :keyword)";
-            $params['keyword'] = "%{$search}%";
-        }
-
-        if ($category !== null && $category !== '') {
-            $conditions[] = "`categories`.`slug` = :category";
-            $params['category'] = (string)$category;
-        }
-
+        [$conditions, $params] = $this->buildCatalogFilters(is_array($filters) ? $filters : []);
         $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
+        $orderSql = self::CATALOG_SORT_SQL[$filters['sort'] ?? 'newest'] ?? self::CATALOG_SORT_SQL['newest'];
 
+        // v_product_catalog: view đã tính sẵn giá thấp/cao nhất, tổng tồn kho, số biến thể đang bán của mỗi sản phẩm.
+        // LEFT JOIN biến thể mặc định để lấy giá hiển thị trên thẻ sản phẩm.
         $sql = "SELECT `products`.*, `products`.`total_stock` AS `stock`, `dv`.`price`, `dv`.`sale_price`, `categories`.`name` AS `category_name`
                 FROM `v_product_catalog` AS `products`
                 LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
                 LEFT JOIN `product_variants` AS `dv` ON `dv`.`product_id` = `products`.`id` AND `dv`.`is_default` = 1 AND `dv`.`is_active` = 1
                 {$whereSql}
-                ORDER BY `products`.`id` DESC
+                ORDER BY {$orderSql}
                 LIMIT :limit OFFSET :offset";
 
         $stmt = $this->pdo->prepare($sql);
         foreach ($params as $key => $value) {
-            $stmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
+            $stmt->bindValue(':' . $key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
         }
         $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
@@ -47,7 +87,7 @@ class Product extends BaseModel
                      {$whereSql}";
         $countStmt = $this->pdo->prepare($countSql);
         foreach ($params as $key => $value) {
-            $countStmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
+            $countStmt->bindValue(':' . $key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
         }
         $countStmt->execute();
         $countRow = $countStmt->fetch(PDO::FETCH_ASSOC);
@@ -64,6 +104,223 @@ class Product extends BaseModel
                 'total_pages' => $totalPages,
             ],
         ];
+    }
+
+    /**
+     * Thêm dấu \ trước ký tự đặc biệt của LIKE (% = chuỗi bất kỳ, _ = một ký tự bất kỳ),
+     * để khách gõ "%" hay "_" thì tìm đúng ký tự đó, không vô tình khớp mọi thứ.
+     *
+     * @param string $text Chữ khách nhập
+     * @return string Chữ đã thoát, chưa bọc %...%
+     */
+    private function escapeLike($text = '')
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], (string)$text);
+    }
+
+    /**
+     * Dựng điều kiện WHERE + tham số bind cho danh sách sản phẩm từ bộ lọc đã kiểm tra.
+     *
+     * Ngữ nghĩa lọc:
+     * - search: TÌM RỘNG, khớp một trong các trường: tên, mã, mô tả, metadata của sản phẩm; SKU, tên phiên bản của biến thể đang bán.
+     * - category: đúng slug danh mục.
+     * - Giá, giữ nếp, độ bóng là thông tin của TỪNG BIẾN THỂ: sản phẩm được giữ nếu có ÍT NHẤT MỘT biến thể ĐANG BÁN
+     *   thỏa ĐỒNG THỜI các điều kiện này. EXISTS (truy vấn con) chỉ hỏi "có dòng nào thỏa không", không lấy dữ liệu ra.
+     *   Gộp chung một EXISTS (không tách mỗi điều kiện một EXISTS) để không khớp nhầm kiểu "hũ nhỏ đủ rẻ, hũ to đủ giữ nếp".
+     * - tags: products.metadata phải chứa TẤT CẢ tag (AND). Collation utf8mb4_unicode_ci không phân biệt hoa thường
+     *   và dấu, nên gõ "toc day" vẫn khớp "tóc dày".
+     *
+     * Mọi giá trị đều đi qua tham số bind (:ten), không nối chuỗi vào SQL, để chống SQL injection.
+     *
+     * @param array $filters Bộ lọc từ CatalogFilter::fromInput()
+     * @return array [mảng điều kiện SQL, mảng tham số bind theo tên (không có dấu :)]
+     */
+    private function buildCatalogFilters($filters = [])
+    {
+        $conditions = [];
+        $params = [];
+
+        $search = trim((string)($filters['search'] ?? ''));
+        if ($search !== '') {
+            // Ô search là TÌM RỘNG: khớp ở BẤT KỲ trường nào (nối bằng OR), khác tag là LỌC CHẶT (phải khớp mọi tag).
+            // - Của sản phẩm: tên, mã, mô tả, metadata (dung tích, phù hợp, kiểu tóc, khóa tự do).
+            // - Của biến thể ĐANG BÁN: SKU, tên phiên bản (ví dụ "CLAYMATION-113G", "Hũ 340g"). Dùng EXISTS vì một sản phẩm
+            //   có nhiều biến thể; biến thể đã ngừng bán thì không tìm ra (khách không mua được).
+            // Mỗi chỗ một tên tham số riêng để không phụ thuộc cách PDO xử lý tham số trùng tên.
+            $conditions[] = '(`products`.`name` LIKE :kw_name OR `products`.`code` LIKE :kw_code'
+                . ' OR `products`.`description` LIKE :kw_desc OR `products`.`metadata` LIKE :kw_meta'
+                . ' OR EXISTS (SELECT 1 FROM `product_variants` AS `sv` WHERE `sv`.`product_id` = `products`.`id`'
+                . ' AND `sv`.`is_active` = 1 AND (`sv`.`sku` LIKE :kw_sku OR `sv`.`variant_name` LIKE :kw_vname)))';
+            $like = '%' . $this->escapeLike($search) . '%';
+            foreach (['kw_name', 'kw_code', 'kw_desc', 'kw_meta', 'kw_sku', 'kw_vname'] as $param) {
+                $params[$param] = $like;
+            }
+        }
+
+        if (($filters['category'] ?? null) !== null && $filters['category'] !== '') {
+            $conditions[] = '`categories`.`slug` = :category';
+            $params['category'] = (string)$filters['category'];
+        }
+
+        // Điều kiện theo biến thể: gom vào một EXISTS.
+        $variantConditions = [];
+        if (($filters['min_price'] ?? null) !== null) {
+            $variantConditions[] = '`pv`.`final_price` >= :min_price';
+            // Giá là số thập phân: bind dạng chuỗi, MySQL tự so sánh đúng với cột DECIMAL.
+            $params['min_price'] = (string)$filters['min_price'];
+        }
+        if (($filters['max_price'] ?? null) !== null) {
+            $variantConditions[] = '`pv`.`final_price` <= :max_price';
+            $params['max_price'] = (string)$filters['max_price'];
+        }
+        if (($filters['hold'] ?? null) !== null) {
+            $variantConditions[] = '`pv`.`hold_level` = :hold';
+            $params['hold'] = (int)$filters['hold'];
+        }
+        if (($filters['shine'] ?? null) !== null) {
+            $variantConditions[] = '`pv`.`shine_level` = :shine';
+            $params['shine'] = (int)$filters['shine'];
+        }
+        if ($variantConditions !== []) {
+            $conditions[] = 'EXISTS (SELECT 1 FROM `product_variants` AS `pv` '
+                . 'WHERE `pv`.`product_id` = `products`.`id` AND `pv`.`is_active` = 1 AND '
+                . implode(' AND ', $variantConditions) . ')';
+        }
+
+        // Tag: mỗi tag một điều kiện LIKE, nối bằng AND (phải khớp tất cả).
+        foreach (array_values($filters['tags'] ?? []) as $i => $tag) {
+            $conditions[] = "`products`.`metadata` LIKE :tag{$i}";
+            $params["tag{$i}"] = '%' . $this->escapeLike($tag) . '%';
+        }
+
+        return [$conditions, $params];
+    }
+
+    /**
+     * Tạo lại products.metadata của một sản phẩm từ thuộc tính các biến thể ĐANG BÁN.
+     * Gọi sau MỌI thao tác admin làm đổi thuộc tính hoặc trạng thái bán của biến thể (thêm, sửa, xóa biến thể),
+     * để cột metadata (bản sao gom lại phục vụ lọc tag) không bị lệch với dữ liệu gốc.
+     * Quy tắc gom nằm trong METADATA_REFRESH_SQL (nguồn duy nhất, dùng chung với migration và seed).
+     *
+     * @param int $productId ID sản phẩm
+     * @return void
+     */
+    public function refreshMetadata(int $productId = 0): void
+    {
+        if ($productId < 1) {
+            return;
+        }
+        // Nới giới hạn GROUP_CONCAT cho phiên kết nối này (chỉ ảnh hưởng request hiện tại), tránh bị cắt ngầm ở 1024 byte.
+        $this->pdo->exec('SET SESSION group_concat_max_len = ' . self::GROUP_CONCAT_MAX_LEN);
+
+        $statement = $this->pdo->prepare(self::METADATA_REFRESH_SQL . ' WHERE `p`.`id` = :id');
+        $statement->bindValue(':id', $productId, PDO::PARAM_INT);
+        $statement->execute();
+    }
+
+    /**
+     * Tách metadata thành các tag gợi ý: tách theo " | " rồi theo dấu phẩy, bỏ phần trong ngoặc,
+     * ví dụ "tóc dày, tóc cứng | chĩa gai (spiky)" -> ["tóc dày", "tóc cứng", "chĩa gai"].
+     * Mỗi tag tách ra là một phần của metadata, nên lọc bằng tag đó (LIKE) chắc chắn ra chính sản phẩm này.
+     *
+     * @param string|null $metadata Giá trị cột products.metadata
+     * @return string[] Tag chữ thường, đã bỏ trùng
+     */
+    private function metadataTags($metadata = null)
+    {
+        $tags = [];
+        foreach (explode(VariantAttributes::METADATA_SEPARATOR, (string)$metadata) as $value) {
+            foreach (explode(',', $value) as $part) {
+                // preg_replace bỏ phần "(...)" và khoảng trắng thừa ở giữa.
+                $tag = trim(preg_replace(['/\(.*?\)/u', '/\s+/u'], ['', ' '], mb_strtolower($part, 'UTF-8')));
+                if ($tag !== '' && mb_strlen($tag, 'UTF-8') <= CatalogFilter::MAX_TAG_LENGTH) {
+                    $tags[$tag] = true;
+                }
+            }
+        }
+
+        return array_keys($tags);
+    }
+
+    /**
+     * Dữ liệu để FE dựng các ô lọc ở catalog (api-product-filters), không phải viết cứng:
+     * - khoảng giá thấp nhất / cao nhất của các biến thể đang bán (gợi ý cho 2 ô giá);
+     * - tag gợi ý phổ biến nhất (đếm theo số sản phẩm có tag đó).
+     *
+     * Tag gợi ý lấy từ CHÍNH cột metadata mà bộ lọc tag dùng để so khớp, nên tag nào được gợi ý thì bấm vào
+     * chắc chắn có kết quả. Đọc 1 dòng / sản phẩm (metadata đã gom sẵn) thay vì đọc và giải mã JSON của mọi biến thể.
+     *
+     * @param int $tagLimit Số tag gợi ý tối đa (1-30)
+     * @return array ['price_range' => ['min' => ?float, 'max' => ?float], 'popular_tags' => [{tag, count}]]
+     */
+    public function getFilterOptions($tagLimit = 10)
+    {
+        $tagLimit = min(30, max(1, (int)$tagLimit));
+
+        // View đã tính sẵn giá thấp/cao nhất của các biến thể đang bán theo từng sản phẩm.
+        $range = $this->pdo->query(
+            'SELECT MIN(`min_final_price`) AS `min_price`, MAX(`max_final_price`) AS `max_price` FROM `v_product_catalog`'
+        )->fetch(PDO::FETCH_ASSOC);
+
+        // Đếm mỗi tag theo SỐ SẢN PHẨM có tag đó.
+        $productsByTag = [];
+        $rows = $this->pdo->query(
+            'SELECT `id`, `metadata` FROM `products` WHERE `metadata` IS NOT NULL'
+        )->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $row) {
+            foreach ($this->metadataTags($row['metadata']) as $tag) {
+                $productsByTag[$tag][(int)$row['id']] = true;
+            }
+        }
+        $popular = [];
+        foreach ($productsByTag as $tag => $productIds) {
+            $popular[] = ['tag' => (string)$tag, 'count' => count($productIds)];
+        }
+        // Tag phổ biến trước; bằng nhau thì theo chữ cái để thứ tự luôn cố định.
+        usort($popular, static fn($a, $b) => [$b['count'], $a['tag']] <=> [$a['count'], $b['tag']]);
+
+        return [
+            'price_range' => [
+                'min' => $range['min_price'] === null ? null : (float)$range['min_price'],
+                'max' => $range['max_price'] === null ? null : (float)$range['max_price'],
+            ],
+            'popular_tags' => array_slice($popular, 0, $tagLimit),
+        ];
+    }
+
+    /**
+     * Tìm slug danh mục theo TÊN hoặc SLUG (không phân biệt hoa thường), dùng cho trợ lý AI:
+     * AI chỉ biết tên danh mục (có trong system prompt), còn bộ lọc cần slug.
+     *
+     * Thứ tự so khớp: trùng hẳn tên/slug trước; không có thì chấp nhận khớp MỘT PHẦN (từ 3 ký tự) nếu chỉ đúng 1 danh mục
+     * chứa chữ đó (AI hay viết gọn, ví dụ "Sáp vuốt tóc" cho danh mục "Gel, Sáp vuốt tóc"). Khớp nhiều danh mục
+     * thì coi như không tìm thấy để AI chọn lại, tránh lọc nhầm danh mục.
+     *
+     * @param string $nameOrSlug Tên hoặc slug danh mục
+     * @return array ['slug' => ?string, 'names' => string[]] slug tìm được (null nếu không có) và mọi tên danh mục
+     *               (để báo lại cho AI khi không tìm thấy)
+     */
+    public function findCategorySlug($nameOrSlug = '')
+    {
+        $needle = mb_strtolower(trim((string)$nameOrSlug), 'UTF-8');
+        $exact = null;
+        $partial = [];
+        $names = [];
+        foreach ($this->pdo->query('SELECT `name`, `slug` FROM `categories` ORDER BY `id`')->fetchAll(PDO::FETCH_ASSOC) as $category) {
+            $names[] = $category['name'];
+            if ($needle === '') {
+                continue;
+            }
+            $name = mb_strtolower($category['name'], 'UTF-8');
+            if ($needle === $name || $needle === mb_strtolower($category['slug'], 'UTF-8')) {
+                $exact = $category['slug'];
+            } elseif (mb_strlen($needle, 'UTF-8') >= 3 && mb_strpos($name, $needle, 0, 'UTF-8') !== false) {
+                // Cần ít nhất 3 ký tự: chữ quá ngắn (ví dụ "o") dễ khớp nhầm danh mục.
+                $partial[] = $category['slug'];
+            }
+        }
+
+        return ['slug' => $exact ?? (count($partial) === 1 ? $partial[0] : null), 'names' => $names];
     }
 
     /**
@@ -118,62 +375,9 @@ class Product extends BaseModel
     }
 
     /**
-     * Tìm sản phẩm theo từ khóa, dùng cho tool của trợ lý AI (Gemini).
-     * Khác getFiltered: không đếm tổng, không phân trang, chỉ trả các cột AI cần để gọn token.
-     *
-     * Tìm trong tên, mã và mô tả sản phẩm. Ưu tiên sản phẩm còn hàng, rồi đến sản phẩm mới hơn.
-     *
-     * @param string $keyword Từ khóa khách hỏi (rỗng = không tìm, trả mảng rỗng)
-     * @param int    $limit   Số sản phẩm tối đa trả về, được giới hạn trong khoảng 1-10
-     * @return array Danh sách sản phẩm (id, name, slug, code, category_name, min_final_price, max_final_price, in_stock)
-     */
-    public function searchByKeyword($keyword = '', $limit = 5)
-    {
-        $keyword = trim((string)$keyword);
-        if ($keyword === '') {
-            return [];
-        }
-
-        // Giới hạn số dòng để tránh AI yêu cầu quá nhiều dữ liệu cùng lúc.
-        $limit = min(10, max(1, (int)$limit));
-
-        // Ký tự % và _ trong LIKE có nghĩa đặc biệt ("bất kỳ chuỗi" và "một ký tự").
-        // Thêm dấu \ phía trước để coi chúng là ký tự thường, tránh khách vô tình tìm rộng hơn ý muốn.
-        $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $keyword);
-
-        // LEFT JOIN (không phải INNER JOIN) để sản phẩm vẫn được trả về khi chưa gán danh mục
-        // hoặc danh mục đã bị xóa; khi đó category_name là NULL.
-        // slug chưa dùng trong tool, nhưng sẽ cần để điều hướng tới trang chi tiết (đã chốt trong kế hoạch).
-        $sql = "SELECT `products`.`id`, `products`.`name`, `products`.`slug`, `products`.`code`,
-                       `categories`.`name` AS `category_name`,
-                       `products`.`min_final_price`, `products`.`max_final_price`, `products`.`in_stock`,
-                       `products`.`variant_count`
-                FROM `v_product_catalog` AS `products`
-                LEFT JOIN `categories` ON `products`.`category_id` = `categories`.`id`
-                WHERE `products`.`name` LIKE :kw_name
-                   OR `products`.`code` LIKE :kw_code
-                   OR `products`.`description` LIKE :kw_desc
-                ORDER BY `products`.`in_stock` DESC, `products`.`id` DESC
-                LIMIT :limit";
-
-        // Mỗi cột dùng một tên tham số riêng (:kw_name, :kw_code, :kw_desc) để không phụ thuộc
-        // vào cách PDO xử lý tham số trùng tên.
-        $likeValue = '%' . $escaped . '%';
-        $stmt = $this->pdo->prepare($sql);
-        // Bọc %...% ở đây để controller/tool không phải biết cú pháp LIKE.
-        $stmt->bindValue(':kw_name', $likeValue, PDO::PARAM_STR);
-        $stmt->bindValue(':kw_code', $likeValue, PDO::PARAM_STR);
-        $stmt->bindValue(':kw_desc', $likeValue, PDO::PARAM_STR);
-        // LIMIT không dùng được dấu ? hay tham số chuỗi, phải bind đúng kiểu số nguyên.
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->execute();
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
      * Lấy các biến thể ĐANG BÁN của nhiều sản phẩm trong một truy vấn, nhóm theo sản phẩm.
-     * Dùng cho tool AI search_product để AI biết từng phiên bản: tên, SKU, giá, tồn kho.
+     * Dùng cho tool AI search_product để AI biết từng phiên bản: tên, SKU, giá, tồn kho,
+     * độ giữ nếp / độ bóng (cột số) và thuộc tính (dung tích, phù hợp, kiểu tóc...) để tư vấn.
      *
      * Thứ tự trong mỗi sản phẩm: biến thể mặc định trước, rồi giá bán tăng dần.
      * Mỗi sản phẩm chỉ giữ tối đa $perProduct biến thể để kết quả gửi AI không quá dài.
@@ -201,7 +405,8 @@ class Product extends BaseModel
             $placeholders[] = ':id' . $i;
         }
 
-        $sql = 'SELECT `product_id`, `sku`, `variant_name`, `price`, `sale_price`, `final_price`, `stock`, `is_default`
+        $sql = 'SELECT `product_id`, `sku`, `variant_name`, `price`, `sale_price`, `final_price`, `stock`, `is_default`,
+                       `attributes`, `hold_level`, `shine_level`
                 FROM `product_variants`
                 WHERE `is_active` = 1 AND `product_id` IN (' . implode(', ', $placeholders) . ')
                 ORDER BY `product_id`, `is_default` DESC, `final_price` ASC, `id` ASC';
@@ -368,7 +573,7 @@ class Product extends BaseModel
         }
 
         // image: ảnh riêng của biến thể (NULL = chưa có, FE dùng ảnh sản phẩm thay thế).
-        $variantsSql = "SELECT `id`, `sku`, `variant_name`, `attributes`, `image`, `price`, `sale_price`, `final_price`, `stock`, `is_default`
+        $variantsSql = "SELECT `id`, `sku`, `variant_name`, `attributes`, `hold_level`, `shine_level`, `image`, `price`, `sale_price`, `final_price`, `stock`, `is_default`
                         FROM `product_variants`
                         WHERE `product_id` = :product_id AND `is_active` = 1
                         ORDER BY `is_default` DESC, `id` ASC";
@@ -470,7 +675,7 @@ class Product extends BaseModel
         // Biến thể mặc định đứng đầu, sau đó theo thứ tự tạo.
         // order_count: số đơn hàng có chứa biến thể (truy vấn con), để FE khóa nút Xóa trước khi admin bấm.
         $variantStatement = $this->pdo->prepare(
-            'SELECT `v`.`id`, `v`.`sku`, `v`.`variant_name`, `v`.`attributes`, `v`.`image`, `v`.`price`, `v`.`sale_price`, `v`.`final_price`, '
+            'SELECT `v`.`id`, `v`.`sku`, `v`.`variant_name`, `v`.`attributes`, `v`.`hold_level`, `v`.`shine_level`, `v`.`image`, `v`.`price`, `v`.`sale_price`, `v`.`final_price`, '
             . '`v`.`stock`, `v`.`is_default`, `v`.`is_active`, '
             . '(SELECT COUNT(DISTINCT `od`.`order_id`) FROM `order_details` AS `od` WHERE `od`.`variant_id` = `v`.`id`) AS `order_count` '
             . 'FROM `product_variants` AS `v` WHERE `v`.`product_id` = :product_id '
@@ -558,7 +763,7 @@ class Product extends BaseModel
             $variantStatement->bindValue(':product_id', $productId, PDO::PARAM_INT);
             $variantStatement->bindValue(':sku', $data['code'], PDO::PARAM_STR);
             $variantStatement->bindValue(':variant_name', 'Mặc định', PDO::PARAM_STR);
-            // Biến thể mới có sẵn 5 thuộc tính mặc định với value = null (cột chỉ nhận mảng JSON).
+            // Biến thể mặc định mới có sẵn 3 thuộc tính mặc định với value = null (cột chỉ nhận mảng JSON); giữ nếp / độ bóng để NULL (chưa rõ).
             $variantStatement->bindValue(':attributes', VariantAttributes::defaultsJson(), PDO::PARAM_STR);
             $variantStatement->bindValue(':price', $data['price'], PDO::PARAM_STR);
             $variantStatement->bindValue(':sale_price', $data['sale_price'], $data['sale_price'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
@@ -978,20 +1183,26 @@ class Product extends BaseModel
      * Trùng SKU (toàn hệ thống) hoặc trùng tên biến thể trong cùng sản phẩm: DB ném PDOException mã 1062.
      *
      * @param int   $productId ID sản phẩm cha
-     * @param array $data      sku, variant_name, attributes (chuỗi JSON mảng), price, sale_price, stock, is_active
+     * @param array $data      sku, variant_name, attributes (chuỗi JSON mảng), hold_level, shine_level (số hoặc null),
+     *                         price, sale_price, stock, is_active
      * @return int ID biến thể vừa tạo
      */
     public function createVariant(int $productId = 0, array $data = []): int
     {
         $statement = $this->pdo->prepare(
             'INSERT INTO `product_variants` '
-            . '(`product_id`, `sku`, `variant_name`, `attributes`, `price`, `sale_price`, `stock`, `is_default`, `is_active`) '
-            . 'VALUES (:product_id, :sku, :variant_name, :attributes, :price, :sale_price, :stock, 0, :is_active)'
+            . '(`product_id`, `sku`, `variant_name`, `attributes`, `hold_level`, `shine_level`, `price`, `sale_price`, `stock`, `is_default`, `is_active`) '
+            . 'VALUES (:product_id, :sku, :variant_name, :attributes, :hold_level, :shine_level, :price, :sale_price, :stock, 0, :is_active)'
         );
         $statement->bindValue(':product_id', $productId, PDO::PARAM_INT);
         $statement->bindValue(':sku', $data['sku'], PDO::PARAM_STR);
         $statement->bindValue(':variant_name', $data['variant_name'], PDO::PARAM_STR);
         $statement->bindValue(':attributes', $data['attributes'], PDO::PARAM_STR);
+        // Mức chưa rõ thì lưu NULL (cột cho phép NULL); có giá trị thì DB kiểm tra lại miền bằng CHECK.
+        foreach (['hold_level', 'shine_level'] as $levelColumn) {
+            $level = $data[$levelColumn] ?? null;
+            $statement->bindValue(":{$levelColumn}", $level, $level === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        }
         $statement->bindValue(':price', $data['price'], PDO::PARAM_STR);
         $statement->bindValue(':sale_price', $data['sale_price'], $data['sale_price'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
         $statement->bindValue(':stock', $data['stock'], PDO::PARAM_INT);
@@ -1023,6 +1234,8 @@ class Product extends BaseModel
             'sku' => PDO::PARAM_STR,
             'variant_name' => PDO::PARAM_STR,
             'attributes' => PDO::PARAM_STR,
+            'hold_level' => PDO::PARAM_INT,
+            'shine_level' => PDO::PARAM_INT,
             'price' => PDO::PARAM_STR,
             'sale_price' => PDO::PARAM_STR,
             'stock' => PDO::PARAM_INT,

@@ -6,46 +6,88 @@ class ProductController{
         $this->product = new Product();
     }
 
+    /**
+     * Danh sách sản phẩm có lọc, sắp xếp và phân trang: GET ?action=api-products. Không yêu cầu đăng nhập.
+     *
+     * Query (đều không bắt buộc; không gửi tham số mới thì kết quả như trước):
+     * - search (hoặc q): tìm rộng: tên, mã, mô tả, metadata sản phẩm hoặc SKU, tên phiên bản đang bán chứa từ khóa (tối đa 100 ký tự)
+     * - category: slug danh mục
+     * - min_price, max_price: khoảng giá bán (VND)
+     * - hold: độ giữ nếp 1-3; shine: độ bóng 0-3
+     * - tags: các tag cách nhau bằng dấu phẩy, ví dụ "tóc dày,quiff" (tối đa 5, phải khớp tất cả)
+     * - sort: newest (mặc định) | oldest
+     * - page, per_page (hoặc perPage)
+     * Giá, giữ nếp, độ bóng: sản phẩm khớp khi có ít nhất 1 biến thể đang bán thỏa cả 3 cùng lúc.
+     * Quy tắc kiểm tra ở CatalogFilter (dùng chung với trợ lý AI).
+     *
+     * Thành công 200: { status, products: { data, pagination }, filters: { ...bộ lọc đã áp dụng, page, per_page } }
+     * Lỗi 400: tham số sai (sai kiểu, ngoài miền giá trị, giá thấp nhất lớn hơn giá cao nhất...).
+     *
+     * @return void
+     */
     public function index(){
-        $search = $_GET['search'] ?? $_GET['q'] ?? '';
-        // URL kiểu ?search[]=x làm PHP đọc ra MẢNG thay vì chuỗi. Không chặn ở đây thì model ép mảng
-        // thành chuỗi, PHP báo lỗi "Array to string conversion" và API trả trang lỗi thay vì JSON.
-        if (!is_string($search)) {
-            response_json([
-                'status' => 'error',
-                'message' => 'Từ khóa tìm kiếm không hợp lệ',
-            ], 400);
+        // search: hỗ trợ tên cũ "q" để link cũ vẫn chạy.
+        $input = $_GET;
+        $input['search'] = $_GET['search'] ?? $_GET['q'] ?? '';
+        try {
+            $filters = CatalogFilter::fromInput($input);
+        } catch (InvalidArgumentException $exception) {
+            response_json(['status' => 'error', 'message' => $exception->getMessage()], 400);
         }
-        $category = $_GET['category'] ?? '';
-        if (!is_string($category) || strlen(trim($category)) > 255) {
-            response_json([
-                'status' => 'error',
-                'message' => 'Slug danh mục không hợp lệ',
-            ], 400);
-        }
-        $category = trim($category);
-        $category = $category === '' ? null : $category;
+
         // Trả lại kho của đơn SePay quá hạn trước khi đọc tồn kho, để danh sách không hiện "hết hàng" oan.
         Order::releaseExpiredStock();
         $page = $_GET['page'] ?? 1;
         $perPage = $_GET['per_page'] ?? $_GET['perPage'] ?? 8;
 
-        $products = $this->product->getFiltered(
-            $search,
-            $category,
-            $page,
-            $perPage
-        );
+        $products = $this->product->getFiltered($filters, $page, $perPage);
         $products['data'] = array_map([$this, 'formatProductListItem'], $products['data']);
 
         response_json([
             'status' => 'success',
             'products' => $products,
-            'filters' => [
-                'search' => $search,
-                'category' => $category,
+            // Echo lại bộ lọc đã áp dụng (đã chuẩn hóa) để FE hiển thị đúng trạng thái ô lọc.
+            'filters' => $filters + [
                 'page' => $page,
                 'per_page' => $perPage,
+            ],
+        ]);
+    }
+
+    /**
+     * Dữ liệu dựng các ô lọc ở trang catalog: GET ?action=api-product-filters. Không yêu cầu đăng nhập.
+     * Giúp FE không viết cứng nhãn hay khoảng giá: thang giữ nếp / độ bóng (giá trị + nhãn), khoảng giá đang có,
+     * tag gợi ý phổ biến. Danh mục lấy riêng ở api-categories.
+     *
+     * Thành công 200: { status, filters: { hold_label, shine_label, hold_levels: [{value, label}],
+     *   shine_levels: [{value, label}], sorts: [{value, label}],
+     *   limits: { max_search_length, max_tags, max_tag_length }, price_range: { min, max },
+     *   popular_tags: [{ tag, count }] } }
+     * Lỗi 405: sai method.
+     *
+     * @return void
+     */
+    public function filterOptions(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            response_json(['status' => 'error', 'message' => 'Phương thức không được hỗ trợ'], 405);
+        }
+
+        $config = VariantAttributes::config();
+        $options = $this->product->getFilterOptions(10);
+
+        response_json([
+            'status' => 'success',
+            'filters' => [
+                'hold_label' => $config['hold_label'],
+                'shine_label' => $config['shine_label'],
+                'hold_levels' => $config['hold_levels'],
+                'shine_levels' => $config['shine_levels'],
+                // Nhãn sắp xếp và giới hạn đầu vào lấy từ CatalogFilter (nguồn duy nhất), FE không viết cứng.
+                'sorts' => CatalogFilter::sortOptions(),
+                'limits' => CatalogFilter::limits(),
+                'price_range' => $options['price_range'],
+                'popular_tags' => $options['popular_tags'],
             ],
         ]);
     }
@@ -53,7 +95,8 @@ class ProductController{
     private function formatProductListItem(array $product): array
     {
         $product['stock'] = (int)($product['stock'] ?? 0);
-        unset($product['total_stock']);
+        // metadata: cột kỹ thuật chỉ để lọc tag ở server, không cần gửi FE.
+        unset($product['total_stock'], $product['metadata']);
         $product['variant_count'] = (int)$product['variant_count'];
         $product['in_stock'] = (bool)$product['in_stock'];
         $product['min_final_price'] = $product['min_final_price'] === null ? null : (float)$product['min_final_price'];
@@ -207,8 +250,12 @@ class ProductController{
                 'id' => (int)$variant['id'],
                 'sku' => $variant['sku'],
                 'variant_name' => $variant['variant_name'],
-                // Mảng chuẩn [{key, label, value}], luôn đủ 5 khóa mặc định (xem extensions/VariantAttributes.php).
-                'attributes' => VariantAttributes::decode($variant['attributes']),
+                // Mảng [{key, label, value}] để hiển thị bảng thông số: 3 khóa mặc định + khóa tự do (JSON),
+                // kèm 2 dòng "Độ giữ nếp", "Độ bóng" lấy nhãn từ 2 cột số (xem VariantAttributes::forDisplay).
+                'attributes' => VariantAttributes::forDisplay($variant['attributes'], $variant['hold_level'], $variant['shine_level']),
+                // Mức số của 2 tiêu chí lọc (null = chưa rõ), để FE so khớp với bộ lọc nếu cần.
+                'hold_level' => $variant['hold_level'] === null ? null : (int)$variant['hold_level'],
+                'shine_level' => $variant['shine_level'] === null ? null : (int)$variant['shine_level'],
                 // Ảnh riêng của biến thể (tên file), null = chưa có, FE dùng product.image thay thế.
                 'image' => $variant['image'] === null || $variant['image'] === '' ? null : $variant['image'],
                 'price' => (float)$variant['price'],
@@ -288,8 +335,11 @@ class ProductController{
                 'can_delete' => (int) $variant['is_default'] !== 1 && $orderCount === 0,
                 'sku' => $variant['sku'],
                 'variant_name' => $variant['variant_name'],
-                // Mảng chuẩn [{key, label, value}], luôn đủ 5 khóa mặc định (xem extensions/VariantAttributes.php).
+                // Mảng chuẩn [{key, label, value}] để SỬA: 3 khóa mặc định + khóa tự do (không ghép 2 mức,
+                // vì form admin sửa 2 mức bằng ô chọn riêng, gửi lên qua hold_level / shine_level).
                 'attributes' => VariantAttributes::decode($variant['attributes']),
+                'hold_level' => $variant['hold_level'] === null ? null : (int) $variant['hold_level'],
+                'shine_level' => $variant['shine_level'] === null ? null : (int) $variant['shine_level'],
                 // Ảnh riêng của biến thể (tên file), null = chưa có ảnh riêng.
                 'image' => $variant['image'] === null || $variant['image'] === '' ? null : $variant['image'],
                 'price' => (float) $variant['price'],
@@ -307,6 +357,10 @@ class ProductController{
                 'sort_order' => (int) $image['sort_order'],
             ];
         }, $product['images']);
+        // metadata là cột BE tự tạo (gom thuộc tính để lọc tag), admin không sửa trực tiếp nên không gửi về form.
+        unset($product['metadata']);
+        // Cấu hình thuộc tính (khóa mặc định, thang giữ nếp / độ bóng) để form admin dựng ô nhập, không viết cứng.
+        $product['attribute_config'] = VariantAttributes::config();
 
         response_json(['status' => 'success', 'product' => $product]);
     }
@@ -710,6 +764,8 @@ class ProductController{
             $this->respondIfPriceCheckFailed($exception);
             throw $exception;
         }
+        // Biến thể mới có thể mang thuộc tính mới: tạo lại metadata để bộ lọc tag thấy ngay.
+        $this->syncMetadata($productId);
 
         response_json(['status' => 'success', 'message' => 'Đã thêm biến thể', 'variant' => ['id' => $variantId]], 201);
     }
@@ -784,6 +840,8 @@ class ProductController{
             $this->respondIfPriceCheckFailed($exception);
             throw $exception;
         }
+        // Sửa thuộc tính hoặc bật/tắt bán đều làm đổi metadata (chỉ gom biến thể đang bán): tạo lại.
+        $this->syncMetadata((int) $current['product_id']);
 
         response_json(['status' => 'success', 'message' => $makeDefault ? 'Đã đặt làm biến thể mặc định' : 'Đã cập nhật biến thể']);
     }
@@ -818,6 +876,8 @@ class ProductController{
         if (!$deleted) {
             response_json(['status' => 'error', 'message' => 'Không tìm thấy biến thể'], 404);
         }
+        // Biến thể bị xóa không còn đóng góp thuộc tính: tạo lại metadata của sản phẩm.
+        $this->syncMetadata((int) $variant['product_id']);
         // Dọn file ảnh riêng của biến thể vừa xóa, chỉ khi không còn bản ghi nào khác dùng file đó.
         $this->deleteImageIfUnused((string) ($variant['image'] ?? ''));
 
@@ -938,7 +998,25 @@ class ProductController{
             $data['is_active'] = 1;
         }
 
-        // attributes: mảng [{key, label, value}]. normalize luôn trả đủ 5 khóa mặc định ở đầu, bỏ phần tử sai định dạng.
+        // Độ giữ nếp (1-3) / độ bóng (0-3): chọn từ thang cố định (VariantAttributes). Rỗng hoặc null = chưa rõ.
+        $levelFields = [
+            'hold_level' => [VariantAttributes::HOLD_LEVELS, 'Độ giữ nếp'],
+            'shine_level' => [VariantAttributes::SHINE_LEVELS, 'Độ bóng'],
+        ];
+        foreach ($levelFields as $field => [$levels, $label]) {
+            if (array_key_exists($field, $input)) {
+                $level = VariantAttributes::readLevel($input[$field], $levels);
+                if ($level === false) {
+                    response_json(['status' => 'error', 'message' => "{$label} phải là một trong: " . implode(', ', array_keys($levels))], 422);
+                }
+                $data[$field] = $level;
+            } elseif ($isCreate) {
+                $data[$field] = null;
+            }
+        }
+
+        // attributes: mảng [{key, label, value}]. normalize luôn trả đủ 3 khóa mặc định ở đầu, bỏ phần tử sai định dạng
+        // và bỏ khóa do_giu_nep / do_bong (đã chuyển sang 2 cột số ở trên).
         if (array_key_exists('attributes', $input)) {
             if (!is_array($input['attributes']) || count($input['attributes']) > 30) {
                 response_json(['status' => 'error', 'message' => 'Thuộc tính biến thể không hợp lệ'], 422);
@@ -1005,6 +1083,28 @@ class ProductController{
     {
         if ($exception !== null && ($exception->errorInfo[1] ?? null) === 3819) {
             response_json(['status' => 'error', 'message' => 'Giá khuyến mãi phải thấp hơn giá gốc (giá vừa được thay đổi, hãy tải lại rồi kiểm tra).'], 422);
+        }
+    }
+
+    /**
+     * Tạo lại products.metadata sau khi admin thêm/sửa/xóa biến thể, KHÔNG để lỗi ở bước này làm hỏng response.
+     *
+     * Vì sao bắt lỗi: lúc gọi hàm này, thay đổi chính của admin ĐÃ được lưu (transaction đã commit). Nếu để lỗi văng ra,
+     * admin nhận 500 cho một lần lưu thực ra đã thành công rồi bấm lưu lại. Metadata chỉ là bản sao gom lại để lọc tag,
+     * lần sửa biến thể kế tiếp sẽ tự tạo lại. Lỗi được ghi log (PHP + log API) để dev biết mà xử lý.
+     *
+     * @param int $productId ID sản phẩm vừa đổi biến thể
+     * @return void
+     */
+    private function syncMetadata(int $productId = 0): void
+    {
+        try {
+            $this->product->refreshMetadata($productId);
+        } catch (Throwable $exception) {
+            error_log('[ProductController] Không tạo lại được metadata sản phẩm #' . $productId . ': ' . $exception->getMessage());
+            if (class_exists('ApiLogger', false)) {
+                ApiLogger::note('Không tạo lại được metadata sản phẩm #' . $productId . ' (bộ lọc tag có thể lệch tới lần sửa sau).', 'WARN');
+            }
         }
     }
 

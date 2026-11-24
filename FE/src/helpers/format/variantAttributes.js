@@ -3,7 +3,8 @@
 //
 // attributes do BE trả về là MẢNG các phần tử { key, label, value } (xem BE/extensions/VariantAttributes.php):
 //   [{ key: 'dung_tich', label: 'Dung tích', value: '113g' }, { key: 'do_bong', label: 'Độ bóng', value: null }, ...]
-// - 5 khóa mặc định luôn đứng đầu theo thứ tự cố định, khóa tự do đứng sau.
+// - 3 khóa mặc định (dung tích, phù hợp, kiểu tóc) luôn đứng đầu; BE ghép thêm 2 dòng "Độ giữ nếp", "Độ bóng"
+//   ngay sau dung tích khi trả cho khách (VariantAttributes::forDisplay). Khóa tự do đứng sau.
 // - label là nhãn tiếng Việt do BE gửi, FE hiển thị thẳng, không giữ bảng nhãn riêng.
 // - value null nghĩa là chưa rõ, không hiển thị.
 

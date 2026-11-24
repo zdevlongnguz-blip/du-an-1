@@ -3,7 +3,8 @@
 // API: api-admin-product-detail (đọc), api-admin-variant-create / -update / -delete (ghi),
 //      api-admin-variant-image (đổi / bỏ ảnh riêng của biến thể, multipart).
 // Quy tắc (BE kiểm tra lại): mỗi sản phẩm đúng 1 biến thể mặc định; không tắt bán / không xóa biến thể mặc định
-// (đặt biến thể khác làm mặc định trước). Thuộc tính nhập tự do: 5 khóa mặc định + khóa tự do.
+// (đặt biến thể khác làm mặc định trước). Độ giữ nếp / độ bóng chọn từ thang cố định (cột số riêng ở BE);
+// thuộc tính còn lại nhập tự do: các khóa mặc định + khóa tự do (BE gom vào metadata để khách lọc theo tag).
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '@/helpers/api/client'
 import { showToast } from '@/helpers/ui/toast'
@@ -38,9 +39,13 @@ const loadError = ref('')
 // ID biến thể đang xử lý (đặt mặc định / bật tắt / xóa) để khóa nút; null = rảnh.
 const busyId = ref(null)
 
-// computed: 5 khóa mặc định (key + nhãn) lấy từ dữ liệu BE, để form thêm mới có đủ ô với nhãn đúng.
-// BE luôn trả 5 khóa mặc định ở đầu mảng attributes của mọi biến thể.
-const defaultKeys = computed(() => (variants.value[0]?.attributes ?? []).slice(0, 5).map((a) => ({ key: a.key, label: a.label })))
+// Cấu hình thuộc tính do BE gửi trong api-admin-product-detail (product.attribute_config):
+// { defaults: [{key, label}], hold_label, shine_label, hold_levels: [{value, label}], shine_levels: [{value, label}] }.
+// Nhờ vậy FE không viết cứng số khóa mặc định hay nhãn mức; BE đổi cấu hình thì form tự theo.
+const attributeConfig = ref({ defaults: [], hold_label: '', shine_label: '', hold_levels: [], shine_levels: [] })
+
+// computed: các khóa mặc định (key + nhãn), để form có đủ ô với nhãn đúng.
+const defaultKeys = computed(() => attributeConfig.value.defaults ?? [])
 
 // Form thêm/sửa biến thể. editingId: null = đang thêm mới; số = đang sửa biến thể đó; editorOpen: có hiện form không.
 const editorOpen = ref(false)
@@ -48,7 +53,9 @@ const editingId = ref(null)
 const saving = ref(false)
 const editor = reactive({
   variant_name: '', sku: '', price: '', sale_price: '', stock: '', is_active: true,
-  defaults: {}, // { dung_tich: '113g', ... } giá trị 5 khóa mặc định
+  // Mức đang chọn trong ô select: '' = chưa rõ; còn lại là số dạng chuỗi ('1', '2'...) vì select luôn trả chuỗi.
+  hold_level: '', shine_level: '',
+  defaults: {}, // { dung_tich: '113g', ... } giá trị các khóa mặc định
   customs: [], // [{ key, label, value }] khóa tự do
 })
 const editorErrors = reactive({ variant_name: '', sku: '', price: '', sale_price: '', stock: '', customs: '' })
@@ -67,6 +74,7 @@ async function loadVariants() {
     const response = await api.get('/?action=api-admin-product-detail', { params: { id: props.productId } })
     variants.value = response.data?.product?.variants ?? []
     productImage.value = response.data?.product?.image ?? ''
+    if (response.data?.product?.attribute_config) attributeConfig.value = response.data.product.attribute_config
   } catch (error) {
     loadError.value = error.response?.data?.message || 'Không tải được danh sách biến thể.'
   } finally {
@@ -78,13 +86,13 @@ async function loadVariants() {
 function openCreate() {
   editingId.value = null
   originalStock.value = null
-  Object.assign(editor, { variant_name: '', sku: '', price: '', sale_price: '', stock: '', is_active: true, customs: [] })
+  Object.assign(editor, { variant_name: '', sku: '', price: '', sale_price: '', stock: '', is_active: true, hold_level: '', shine_level: '', customs: [] })
   editor.defaults = Object.fromEntries(defaultKeys.value.map((a) => [a.key, '']))
   clearErrors()
   editorOpen.value = true
 }
 
-// Mở form sửa: đổ dữ liệu biến thể vào form; tách thuộc tính thành 5 khóa mặc định + khóa tự do.
+// Mở form sửa: đổ dữ liệu biến thể vào form; tách thuộc tính thành khóa mặc định + khóa tự do, kèm 2 mức giữ nếp / độ bóng.
 function openEdit(variant) {
   editingId.value = variant.id
   originalStock.value = variant.stock
@@ -96,10 +104,14 @@ function openEdit(variant) {
     sale_price: variant.sale_price ?? '',
     stock: variant.stock,
     is_active: variant.is_active,
+    hold_level: variant.hold_level === null || variant.hold_level === undefined ? '' : String(variant.hold_level),
+    shine_level: variant.shine_level === null || variant.shine_level === undefined ? '' : String(variant.shine_level),
   })
+  // Tách thuộc tính theo KHÓA (không theo vị trí): khóa nằm trong danh sách mặc định -> ô mặc định, còn lại -> khóa tự do.
+  const defaultKeySet = new Set(defaultKeys.value.map((a) => a.key))
   const attributes = variant.attributes ?? []
-  editor.defaults = Object.fromEntries(attributes.slice(0, 5).map((a) => [a.key, a.value ?? '']))
-  editor.customs = attributes.slice(5).map((a) => ({ key: a.key, label: a.label, value: a.value ?? '' }))
+  editor.defaults = Object.fromEntries(defaultKeys.value.map((a) => [a.key, attributes.find((item) => item.key === a.key)?.value ?? '']))
+  editor.customs = attributes.filter((a) => !defaultKeySet.has(a.key)).map((a) => ({ key: a.key, label: a.label, value: a.value ?? '' }))
   clearErrors()
   editorOpen.value = true
 }
@@ -149,6 +161,9 @@ async function saveEditor() {
     variant_name: String(editor.variant_name).trim(),
     price: editor.price,
     sale_price: editor.sale_price === null ? '' : editor.sale_price,
+    // '' (chưa rõ) gửi null; còn lại gửi số. BE kiểm tra lại thang (422 nếu ngoài thang).
+    hold_level: editor.hold_level === '' ? null : Number(editor.hold_level),
+    shine_level: editor.shine_level === '' ? null : Number(editor.shine_level),
     attributes,
   }
   // Trạng thái bán: tạo mới thì gửi; sửa thì chỉ gửi khi admin đổi ô "Đang bán".
@@ -441,9 +456,29 @@ onMounted(loadVariants)
         </label>
       </div>
 
-      <!-- Thuộc tính: 5 khóa mặc định (nhãn cố định) + khóa tự do (key không dấu, nhãn có dấu) -->
+      <!-- Thuộc tính: 2 tiêu chí lọc dạng chọn (độ giữ nếp, độ bóng; lưu ở cột số riêng)
+           + các khóa mặc định (nhãn cố định) + khóa tự do (key không dấu, nhãn có dấu).
+           Khóa mặc định và thang mức lấy từ attribute_config do BE gửi, FE không viết cứng. -->
       <h4>Thuộc tính <small class="admin-hint">(để trống nếu chưa rõ)</small></h4>
       <div class="variant-grid">
+        <label class="admin-field">
+          <span>{{ attributeConfig.hold_label || 'Độ giữ nếp' }}</span>
+          <select v-model="editor.hold_level">
+            <option value="">Chưa rõ</option>
+            <option v-for="level in attributeConfig.hold_levels" :key="level.value" :value="String(level.value)">
+              {{ level.value }} - {{ level.label }}
+            </option>
+          </select>
+        </label>
+        <label class="admin-field">
+          <span>{{ attributeConfig.shine_label || 'Độ bóng' }}</span>
+          <select v-model="editor.shine_level">
+            <option value="">Chưa rõ</option>
+            <option v-for="level in attributeConfig.shine_levels" :key="level.value" :value="String(level.value)">
+              {{ level.value }} - {{ level.label }}
+            </option>
+          </select>
+        </label>
         <label v-for="attribute in defaultKeys" :key="attribute.key" class="admin-field">
           <span>{{ attribute.label }}</span>
           <input v-model="editor.defaults[attribute.key]" type="text" maxlength="255" />
@@ -498,7 +533,7 @@ onMounted(loadVariants)
 .variant-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); align-items: end; }
 .admin-field { display: grid; gap: 6px; font-size: 14px; }
 .admin-field > span { color: #4a5565; font-weight: 600; }
-.admin-field input, .variant-custom input { width: 100%; min-height: 38px; padding: 6px 10px; border: 1px solid #d9d4ca; border-radius: 6px; background: #ffffff; font: inherit; }
+.admin-field input, .admin-field select, .variant-custom input { width: 100%; min-height: 38px; padding: 6px 10px; border: 1px solid #d9d4ca; border-radius: 6px; background: #ffffff; font: inherit; }
 .admin-check { display: flex; align-items: center; gap: 8px; min-height: 38px; font-weight: 600; color: #4a5565; }
 .variant-custom { display: grid; gap: 8px; grid-template-columns: 1fr 1fr 1.5fr auto; align-items: center; }
 .variant-add-custom { justify-self: start; }
