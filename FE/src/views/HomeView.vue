@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import BannerSlideshow from '@/components/BannerSlideshow.vue'
 import ProductCardTop5 from '@/components/ProductCardTop5.vue'
+import StateBlock from '@/components/StateBlock.vue'
 import api from '@/helpers/api/client'
 
 // Trang chủ: tải banner và top 5 sản phẩm từ các API công khai.
@@ -129,34 +130,28 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Trạng thái tải, lỗi và danh sách rỗng được trình bày riêng. -->
-      <p v-if="isLoadingTopProducts" class="top-products-state" role="status" aria-live="polite">
-        Đang tải top sản phẩm...
-      </p>
-      <div v-else-if="topProductsError" class="top-products-state top-products-state--error" role="alert">
-        <p>{{ topProductsError }}</p>
-        <button type="button" @click="fetchTopProducts()">Thử lại</button>
-      </div>
-      <p v-else-if="topProducts.length === 0" class="top-products-state">
-        Chưa có top sản phẩm để hiển thị.
-      </p>
-
-      <!-- Mỗi sản phẩm dùng chung card top 5 với thứ hạng và chỉ số hiện tại. -->
-      <!-- data-count để CSS chọn bố cục bất đối xứng theo số sản phẩm, tránh ô bị lẻ khi không đủ 5. -->
-      <div
-        v-else
-        class="top-products-grid"
-        :data-count="topProducts.length"
-        :aria-busy="isLoadingTopProducts"
+      <!-- StateBlock (component dùng chung): đang tải -> lỗi có nút "Thử lại" -> rỗng -> lưới sản phẩm.
+           Lỗi API luôn hiện thành lỗi, không bị hiểu nhầm là "chưa có sản phẩm". -->
+      <StateBlock
+        :loading="isLoadingTopProducts"
+        :error="topProductsError"
+        :empty="topProducts.length === 0"
+        loading-text="Đang tải top sản phẩm..."
+        empty-text="Chưa có top sản phẩm để hiển thị."
+        :on-retry="() => fetchTopProducts()"
       >
-        <ProductCardTop5
-          v-for="(product, index) in topProducts"
-          :key="product.id"
-          :product="product"
-          :rank="index + 1"
-          :sort-by="sortBy"
-        />
-      </div>
+        <!-- Mỗi sản phẩm dùng chung card top 5 với thứ hạng và chỉ số hiện tại. -->
+        <!-- data-count để CSS chọn bố cục theo số sản phẩm (đủ 5 thì hạng 1 chiếm khối lớn), tránh ô bị lẻ. -->
+        <div class="top-products-grid" :data-count="topProducts.length">
+          <ProductCardTop5
+            v-for="(product, index) in topProducts"
+            :key="product.id"
+            :product="product"
+            :rank="index + 1"
+            :sort-by="sortBy"
+          />
+        </div>
+      </StateBlock>
     </section>
   </div>
 </template>
@@ -225,53 +220,26 @@ onMounted(() => {
   opacity: 0.65;
 }
 
-.top-products-modes button:focus-visible,
-.top-products-state button:focus-visible {
+.top-products-modes button:focus-visible {
   outline: 3px solid #b8893e;
   outline-offset: 2px;
 }
 
+/*
+  Lưới Top 5:
+  - Điện thoại: hạng 1 rộng hết hàng, 4 thẻ còn lại xếp 2 cột.
+  - Từ 768px (đủ 5 sản phẩm): 4 cột, hạng 1 chiếm khối 2x2 bên trái, 4 thẻ còn lại 2x2 bên phải.
+  - Thiếu sản phẩm (1-4): các thẻ chia đều, tránh lưới bị thủng ô.
+  Thẻ tự thu gọn khi hẹp (container query trong ProductCardTop5), nên trang không phải chỉnh từng phần tử bên trong.
+*/
 .top-products-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-
-/* Khối trạng thái (đang tải, lỗi, rỗng): nền trắng, viền mỏng, căn giữa. */
-.top-products-state {
-  display: grid;
-  min-height: 180px;
-  place-content: center;
-  justify-items: center;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  padding: 24px;
-  border: 1px solid #d9d4ca;
-  background: #ffffff;
-  color: #2a3b4f;
-  font-size: 14px;
-  text-align: center;
 }
 
-.top-products-state p {
-  margin: 0;
-}
-
-.top-products-state--error {
-  border-color: #ba1a1a;
-  background: #fdf1f0;
-  color: #93000a;
-}
-
-.top-products-state button {
-  min-height: 40px;
-  padding: 0 16px;
-  border: 1px solid #1c2a3a;
-  background: #1c2a3a;
-  color: #f7f4ee;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
+.top-products-grid > :first-child {
+  grid-column: 1 / -1;
 }
 
 .home-banner-state {
@@ -329,8 +297,35 @@ onMounted(() => {
 
 @media (min-width: 768px) {
   .top-products-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+
+  /* Thiếu sản phẩm: hạng 1 không chiếm cả hàng nữa, mọi thẻ rộng bằng nhau. */
+  .top-products-grid > :first-child {
+    grid-column: auto;
+  }
+
+  /* Đủ 5 sản phẩm: bố cục 4 cột, hạng 1 chiếm 2 cột x 2 hàng. */
+  .top-products-grid[data-count="5"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .top-products-grid[data-count="5"] > :first-child {
+    grid-column: 1 / span 2;
+    grid-row: 1 / span 2;
+  }
+
+  /* Ô hạng 1 cao bằng 2 hàng: cho ảnh giãn lấp phần cao dư, không để khoảng trắng dưới chữ.
+     :deep(...) cho phép trang cha chỉnh phần tử bên trong component ProductCardTop5. */
+  .top-products-grid[data-count="5"] > :first-child :deep(.top5-card-media) {
+    flex: 1 1 auto;
+    min-height: 240px;
+    aspect-ratio: auto;
+  }
+
+  .top-products-grid[data-count="5"] > :first-child :deep(.top5-card-content) {
+    flex: 0 0 auto;
   }
 
   .home-banner-state {
@@ -341,99 +336,6 @@ onMounted(() => {
 @media (min-width: 1200px) {
   .home-banner-state {
     min-height: 400px;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 991.98px) {
-  .top-products-grid {
-    grid-template-rows: auto;
-  }
-
-  /* Số ô lẻ thì ô đầu chiếm cả hàng để hai cột còn lại luôn đủ cặp. */
-  .top-products-grid[data-count="1"] > :first-child,
-  .top-products-grid[data-count="3"] > :first-child,
-  .top-products-grid[data-count="5"] > :first-child {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (min-width: 992px) {
-  /* Lưới bất đối xứng 12 cột: ô hạng 1 nổi bật bên trái, bố cục khép kín theo số sản phẩm. */
-  .top-products-grid {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(clamp(280px, 28vw, 340px), auto));
-  }
-
-  .top-products-grid > :nth-child(1) {
-    grid-column: 1 / span 7;
-    grid-row: 1 / span 2;
-  }
-
-  .top-products-grid > :nth-child(2) {
-    grid-column: 8 / span 5;
-    grid-row: 1;
-  }
-
-  .top-products-grid > :nth-child(3) {
-    grid-column: 8 / span 5;
-    grid-row: 2;
-  }
-
-  /* 5 sản phẩm: hàng thứ ba gồm ô 4 hẹp và ô 5 rộng. */
-  .top-products-grid[data-count="5"] {
-    grid-template-rows:
-      minmax(clamp(280px, 28vw, 340px), auto)
-      minmax(clamp(280px, 28vw, 340px), auto)
-      minmax(clamp(210px, 22vw, 270px), auto);
-  }
-
-  .top-products-grid[data-count="5"] > :nth-child(4) {
-    grid-column: 1 / span 4;
-    grid-row: 3;
-  }
-
-  .top-products-grid[data-count="5"] > :nth-child(5) {
-    grid-column: 5 / span 8;
-    grid-row: 3;
-  }
-
-  /* 4 sản phẩm: hai hàng so le 7/5 rồi 5/7, không còn ô lẻ. */
-  .top-products-grid[data-count="4"] > :nth-child(1) {
-    grid-column: 1 / span 7;
-    grid-row: 1;
-  }
-
-  .top-products-grid[data-count="4"] > :nth-child(2) {
-    grid-column: 8 / span 5;
-    grid-row: 1;
-  }
-
-  .top-products-grid[data-count="4"] > :nth-child(3) {
-    grid-column: 1 / span 5;
-    grid-row: 2;
-  }
-
-  .top-products-grid[data-count="4"] > :nth-child(4) {
-    grid-column: 6 / span 7;
-    grid-row: 2;
-  }
-
-  .top-products-grid[data-count="2"] {
-    grid-template-rows: minmax(clamp(280px, 28vw, 340px), auto);
-  }
-
-  .top-products-grid[data-count="2"] > :nth-child(1) {
-    grid-row: 1;
-  }
-
-  .top-products-grid[data-count="1"] {
-    grid-template-columns: minmax(0, 420px);
-    grid-template-rows: auto;
-  }
-
-  .top-products-grid[data-count="1"] > :nth-child(1) {
-    grid-column: 1;
-    grid-row: 1;
   }
 }
 
@@ -470,13 +372,11 @@ onMounted(() => {
 }
 
 .top-products-modes,
-.top-products-state,
 .home-banner-state {
   border-color: #e6e0d4;
   border-radius: 8px;
 }
 
-.top-products-state button,
 .home-banner-state button {
   border-color: #b8893e;
   border-radius: 6px;
@@ -484,64 +384,4 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/*
-  ===== Thu nhỏ lưới Top 5 cho vừa tầm nhìn (vẫn giữ bố cục bất đối xứng) =====
-  Card con mặc định có ảnh tỉ lệ dọc 4:5 nên ô rộng sẽ rất cao.
-  :deep(...) cho phép trang cha chỉnh phần tử bên trong component ProductCardTop5.
-*/
-
-/* Tablet/điện thoại: thẻ vẫn dọc nhưng ảnh tỉ lệ ngang 4:3 cho thấp hơn. */
-@media (max-width: 991.98px) {
-  .top-products-grid :deep(.top5-card-media) {
-    aspect-ratio: 4 / 3;
-  }
-}
-
-@media (min-width: 992px) {
-  /* Bỏ chiều cao hàng cố định: hàng cao theo nội dung thẻ. */
-  .top-products-grid,
-  .top-products-grid[data-count="5"],
-  .top-products-grid[data-count="2"],
-  .top-products-grid[data-count="1"] {
-    grid-template-rows: none;
-    grid-auto-rows: auto;
-    gap: 16px;
-  }
-
-  .top-products-grid[data-count="1"] {
-    grid-template-columns: minmax(0, 720px);
-  }
-
-  /* Mỗi thẻ dàn ngang: ảnh cột trái (cao hết thẻ), thông tin và nút ở cột phải. */
-  .top-products-grid > .top5-card {
-    display: grid;
-    height: 100%;
-    grid-template-columns: minmax(0, 40%) minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-  }
-
-  .top-products-grid :deep(.top5-card-media) {
-    grid-row: 1 / span 2;
-    height: 100%;
-    min-height: 200px;
-    aspect-ratio: auto;
-  }
-
-  .top-products-grid :deep(.top5-card-content) {
-    padding: 14px 16px 8px;
-  }
-
-  .top-products-grid :deep(.top5-card-actions) {
-    padding: 0 16px 14px;
-  }
-
-  /* Hạng 1 nổi bật nhất: ảnh chiếm nửa thẻ và cao hơn các ô khác. */
-  .top-products-grid > .top5-card:first-child {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .top-products-grid > .top5-card:first-child :deep(.top5-card-media) {
-    min-height: 320px;
-  }
-}
 </style>

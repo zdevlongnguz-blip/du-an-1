@@ -62,8 +62,13 @@ const activeField = ref('')
 const shownTotal = ref(null)
 // true khi con dấu "Đã duyệt" vừa đập xuống, dùng để chạy hiệu ứng rơi dấu và rung khối tóm tắt.
 const stamped = ref(false)
-// Phương thức thanh toán khách chọn: 'cod' (khi nhận hàng) hoặc 'sepay' (online).
-const paymentMethod = ref('cod')
+// Phương thức thanh toán khách chọn: 'cod' (khi nhận hàng) hoặc 'sepay' (online). Rỗng = khách chưa chọn,
+// không mặc định COD: khách phải chọn rõ rồi mới đặt được.
+const paymentMethod = ref('')
+// Lỗi chọn phương thức, hiện ngay dưới khối chọn (chốt chặn 1: kiểm tra ở FE trước khi gọi API).
+const paymentError = ref('')
+// Khi khách đã chọn, xóa lỗi cũ.
+watch(paymentMethod, (value) => { if (value) paymentError.value = '' })
 
 // true trong lúc đang gửi đơn hoặc đang chuyển sang SePay, dùng để khóa nút tránh gửi lặp.
 const submitting = ref(false)
@@ -190,7 +195,8 @@ function resetStage(nextDraft) {
   activeField.value = ''
   shownTotal.value = null
   stamped.value = false
-  paymentMethod.value = 'cod'
+  paymentMethod.value = ''
+  paymentError.value = ''
   checkoutError.value = ''
   createdOrder.value = null
   draftChanges.value = []
@@ -493,10 +499,14 @@ async function handleConfirm() {
     showToast('Có món đã hết hàng hoặc ngừng bán, quý ông bỏ món đó trước khi đặt.', 'warning')
     return
   }
-  if (!validateForm()) {
+  // Chốt chặn 1 (FE): chưa chọn phương thức thì báo ngay dưới khối chọn, không gửi API.
+  if (!paymentMethod.value) paymentError.value = 'Vui lòng chọn phương thức thanh toán.'
+  const formOk = validateForm()
+  if (!formOk) {
     showToast('Quý ông kiểm tra lại thông tin người nhận giúp Louis nhé.', 'warning')
     return
   }
+  if (!paymentMethod.value) return
 
   submitting.value = true
   checkoutError.value = ''
@@ -857,6 +867,7 @@ onBeforeUnmount(() => {
                 <span class="pay-desc">Chuyển khoản qua SePay</span>
               </label>
             </div>
+            <p v-if="paymentError" class="qo-field-error" role="alert">{{ paymentError }}</p>
 
             <!-- Các thay đổi vừa áp theo kho/giá mới nhất (kẹp số lượng, đổi giá, món hết hàng) -->
             <div v-if="draftChanges.length" class="qo-changes" role="status">
@@ -1435,16 +1446,18 @@ onBeforeUnmount(() => {
 }
 
 /* ---------- Con dấu ---------- */
+/* Vị trí: khoảng trống giữa dòng "Tạm tính" (giữa chữ bên trái và số tiền bên phải), ngay trên dòng tổng,
+   để KHÔNG che số tiền và chữ "Tổng thanh toán" (admin yêu cầu dời 24/11/2026, chỉ sửa CSS). */
 .stamp {
   position: absolute;
-  top: -2rem;
-  left: 36%;
+  top: -4.6rem;
+  left: 34%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 5.6rem;
-  height: 5.6rem;
+  width: 6rem;
+  height: 6rem;
   border: 3px solid #b8893e;
   border-radius: 50%;
   outline: 1.5px solid #b8893e;
@@ -1466,16 +1479,19 @@ onBeforeUnmount(() => {
   100% { opacity: 0.85; transform: scale(1) rotate(-12deg); }
 }
 
+/* nowrap: chữ trong dấu không được xuống dòng (trước đây "Louis Dé Fule" bị gãy 2 dòng, đè lên "Đã duyệt"). */
 .stamp-top,
 .stamp-bottom {
-  font-size: 0.48rem;
-  letter-spacing: 0.12em;
+  font-size: 0.42rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .stamp-main {
   margin: 0.05rem 0;
+  white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 0.92rem;
+  font-size: 0.82rem;
   letter-spacing: 0.04em;
 }
 
@@ -1606,6 +1622,13 @@ onBeforeUnmount(() => {
 }
 
 /* Khối báo lỗi khi gửi đơn: nền đỏ nhạt, chữ đỏ đậm theo bảng màu Stitch. */
+.qo-field-error {
+  margin: 0.5rem 0 0;
+  color: #93000a;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .qo-alert {
   margin: 1rem 0 0.75rem;
   padding: 0.6rem 0.75rem;

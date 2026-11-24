@@ -59,7 +59,7 @@ PHP đọc `.env` ở mỗi request, nên sau khi sửa không cần khởi đ�
   - Khi nhận IPN `ORDER_PAID` hợp lệ (đúng secret, đúng mã hóa đơn, đúng số tiền), BE chuyển đơn sang "Đã thanh toán".
 - Thanh toán xong, SePay quay về `/payment/success?order=<ID đơn>`. Trang này hỏi lại BE, BE hỏi lại SePay bằng khóa merchant
   và hiển thị trạng thái thật. Nhờ vậy chạy local không có ngrok vẫn xác nhận được thanh toán (IPN chỉ là đường dự phòng thứ hai).
-- Đơn thanh toán online chưa trả tiền sau 30 phút sẽ tự hủy và hoàn kho (xử lý khi có người xem đơn, đặt đơn hoặc thanh toán).
+- Đơn thanh toán online chưa trả tiền sau 2 phút sẽ tự hủy và hoàn kho (xử lý khi có người xem đơn, đặt đơn hoặc thanh toán).
 - Hãy mở FE bằng URL ngrok ngay từ đầu (đăng nhập, đặt hàng, thanh toán trên cùng một địa chỉ). Token đăng nhập
   lưu theo từng địa chỉ trang, nên bắt đầu ở `localhost` rồi quay về ngrok sẽ bị yêu cầu đăng nhập lại.
 

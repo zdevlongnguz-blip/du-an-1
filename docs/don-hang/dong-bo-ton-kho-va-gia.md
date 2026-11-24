@@ -29,7 +29,7 @@ Trường hợp giá đổi còn nguy hiểm hơn ở trang đặt hàng tay: tr
 4. **Kiểm tra sớm khi rẻ.** Mở trang là lấy số mới nhất một lần, để phần lớn trường hợp khách thấy đúng ngay từ đầu.
 5. **Không hỏi server liên tục (polling) và không giữ hàng cho trang đang mở.** Tốn tài nguyên mà vẫn không loại được khoảnh khắc giữa lần hỏi cuối và lúc bấm đặt. Nguyên tắc 1-3 đã đủ an toàn.
 
-> Ngoại lệ đã có từ trước: đơn **SePay** (thanh toán online) giữ hàng tới khi thanh toán hoặc quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (30 phút). Hàng của đơn quá hạn được trả "lười" (không có cron), nên server phải trả lại **trước mọi chỗ đọc tồn kho**:
+> Ngoại lệ đã có từ trước: đơn **SePay** (thanh toán online) giữ hàng tới khi thanh toán hoặc quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (2 phút). Hàng của đơn quá hạn được trả "lười" (không có cron), nên server phải trả lại **trước mọi chỗ đọc tồn kho**:
 >
 > | Chỗ đọc tồn kho | Gọi |
 > | --- | --- |
