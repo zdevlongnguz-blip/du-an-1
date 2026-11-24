@@ -113,8 +113,8 @@ WHERE `c`.`slug` = 'pomade'
 
 
 -- Tạo lại metadata của mọi sản phẩm vì thuộc tính biến thể vừa đổi (seed chạy riêng lẻ cũng không làm metadata lệch).
--- ĐÚNG câu SQL của Product::METADATA_REFRESH_SQL (nguồn duy nhất): giá trị thuộc tính các biến thể đang bán,
--- bỏ trùng và sắp xếp theo từng byte (utf8mb4_bin), nối bằng " | ". JSON_TABLE biến mảng JSON thành các dòng.
+-- ĐÚNG câu SQL của Product::metadataRefreshSql() (nguồn duy nhất): giá trị thuộc tính + cụm chữ độ giữ nếp /
+-- độ bóng của các biến thể đang bán, bỏ trùng, sắp xếp theo từng byte (utf8mb4_bin), nối bằng " | ".
 -- group_concat_max_len: mặc định chỉ 1024 byte và bị CẮT ngầm; nới lên 65535 (sức chứa cột TEXT) cho phiên này.
 SET SESSION group_concat_max_len = 65535;
 
@@ -122,7 +122,16 @@ UPDATE `products` AS `p`
 SET `p`.`metadata` = (
   SELECT GROUP_CONCAT(DISTINCT TRIM(`jt`.`attr_value`) ORDER BY TRIM(`jt`.`attr_value`) SEPARATOR ' | ')
   FROM `product_variants` AS `v`,
-       JSON_TABLE(`v`.`attributes`, '$[*]' COLUMNS (`attr_value` VARCHAR(255) COLLATE utf8mb4_bin PATH '$.value')) AS `jt`
+       JSON_TABLE(
+         JSON_MERGE_PRESERVE(
+           COALESCE(JSON_EXTRACT(`v`.`attributes`, '$[*].value'), JSON_ARRAY()),
+           JSON_ARRAY(
+             CASE `v`.`hold_level` WHEN 1 THEN 'giữ nếp nhẹ' WHEN 2 THEN 'giữ nếp trung bình' WHEN 3 THEN 'giữ nếp mạnh' END,
+             CASE `v`.`shine_level` WHEN 0 THEN 'không bóng (mờ)' WHEN 1 THEN 'bóng nhẹ' WHEN 2 THEN 'bóng vừa' WHEN 3 THEN 'bóng cao' END
+           )
+         ),
+         '$[*]' COLUMNS (`attr_value` VARCHAR(255) COLLATE utf8mb4_bin PATH '$')
+       ) AS `jt`
   WHERE `v`.`product_id` = `p`.`id`
     AND `v`.`is_active` = 1
     AND `jt`.`attr_value` IS NOT NULL

@@ -16,26 +16,60 @@ class Product extends BaseModel
         'oldest' => '`products`.`in_stock` DESC, `products`.`created_at` ASC, `products`.`id` ASC',
     ];
 
-    // Câu SQL tạo lại products.metadata - NGUỒN DUY NHẤT của quy tắc gom metadata ở runtime.
-    // Migration 20261123_01 và 3 file seed chép đúng câu này (file .sql không gọi được code PHP); sửa thì sửa cả ở đó.
-    //
-    // Quy tắc: GIÁ TRỊ (không lấy nhãn) mọi khóa thuộc tính của các biến thể ĐANG BÁN, bỏ rỗng, bỏ trùng,
-    // sắp xếp, nối bằng " | " (xem VariantAttributes::METADATA_SEPARATOR). Không có giá trị nào thì NULL.
-    // - JSON_TABLE: biến mảng JSON [{key, label, value}] thành các dòng để GROUP_CONCAT gom lại.
-    // - COLLATE utf8mb4_bin: bỏ trùng và sắp xếp theo đúng từng byte, kết quả luôn giống hệt nhau mỗi lần chạy.
-    // - Chạy MỘT câu UPDATE (đọc và ghi cùng lúc trong DB): 2 admin sửa cùng lúc thì câu chạy sau luôn đọc dữ liệu
-    //   mới nhất, không có chuyện ghi đè bằng bản đọc cũ như khi SELECT ở PHP rồi mới UPDATE.
-    // Code nối thêm "WHERE `p`.`id` = :id" ở cuối để chỉ tạo lại một sản phẩm.
-    const METADATA_REFRESH_SQL = "UPDATE `products` AS `p`
-        SET `p`.`metadata` = (
-          SELECT GROUP_CONCAT(DISTINCT TRIM(`jt`.`attr_value`) ORDER BY TRIM(`jt`.`attr_value`) SEPARATOR ' | ')
-          FROM `product_variants` AS `v`,
-               JSON_TABLE(`v`.`attributes`, '$[*]' COLUMNS (`attr_value` VARCHAR(255) COLLATE utf8mb4_bin PATH '$.value')) AS `jt`
-          WHERE `v`.`product_id` = `p`.`id`
-            AND `v`.`is_active` = 1
-            AND `jt`.`attr_value` IS NOT NULL
-            AND TRIM(`jt`.`attr_value`) <> ''
-        )";
+    /**
+     * Câu SQL tạo lại products.metadata - NGUỒN DUY NHẤT của quy tắc gom metadata ở runtime.
+     * Migration 20261124_01 và 3 file seed chép đúng câu này (file .sql không gọi được code PHP); sửa thì sửa cả ở đó.
+     *
+     * Quy tắc, chỉ xét các biến thể ĐANG BÁN:
+     * - GIÁ TRỊ (không lấy nhãn) mọi khóa thuộc tính, cả khóa mặc định lẫn khóa tự do;
+     * - cụm chữ độ giữ nếp / độ bóng ("giữ nếp mạnh", "bóng cao"...), lấy từ VariantAttributes::metadataLevelPhrases;
+     * bỏ rỗng, bỏ trùng, sắp xếp, nối bằng " | " (VariantAttributes::METADATA_SEPARATOR). Không có giá trị nào thì NULL.
+     *
+     * Cách làm trong SQL:
+     * - JSON_EXTRACT(attributes, '$[*].value'): lấy mảng các giá trị thuộc tính (không có thì NULL -> mảng rỗng).
+     * - JSON_MERGE_PRESERVE(..., JSON_ARRAY(mức giữ nếp, mức độ bóng)): nối thêm 2 cụm chữ của mức vào cùng mảng.
+     *   Mức chưa rõ (NULL) thành phần tử null và bị bỏ ở điều kiện WHERE.
+     * - JSON_TABLE: biến mảng JSON thành các dòng để GROUP_CONCAT gom lại.
+     * - COLLATE utf8mb4_bin: bỏ trùng và sắp xếp theo đúng từng byte, kết quả luôn giống hệt nhau mỗi lần chạy.
+     * - Chạy MỘT câu UPDATE (đọc và ghi cùng lúc trong DB): 2 admin sửa cùng lúc thì câu chạy sau luôn đọc dữ liệu
+     *   mới nhất, không có chuyện ghi đè bằng bản đọc cũ như khi SELECT ở PHP rồi mới UPDATE.
+     * Nơi gọi nối thêm "WHERE `p`.`id` = :id" ở cuối để chỉ tạo lại một sản phẩm.
+     *
+     * @return string Câu UPDATE (chưa có WHERE)
+     */
+    public static function metadataRefreshSql()
+    {
+        $phrases = VariantAttributes::metadataLevelPhrases();
+        // CASE: đổi số mức thành cụm chữ. Cụm chữ là hằng số của dự án (không đến từ request),
+        // vẫn nhân đôi dấu ' cho đúng cú pháp chuỗi SQL.
+        $levelCase = static function ($column, $map) {
+            $sql = 'CASE `v`.`' . $column . '`';
+            foreach ($map as $level => $phrase) {
+                $sql .= ' WHEN ' . (int)$level . " THEN '" . str_replace("'", "''", $phrase) . "'";
+            }
+            return $sql . ' END';
+        };
+
+        return "UPDATE `products` AS `p`\n"
+            . "SET `p`.`metadata` = (\n"
+            . "  SELECT GROUP_CONCAT(DISTINCT TRIM(`jt`.`attr_value`) ORDER BY TRIM(`jt`.`attr_value`) SEPARATOR ' | ')\n"
+            . "  FROM `product_variants` AS `v`,\n"
+            . "       JSON_TABLE(\n"
+            . "         JSON_MERGE_PRESERVE(\n"
+            . "           COALESCE(JSON_EXTRACT(`v`.`attributes`, '$[*].value'), JSON_ARRAY()),\n"
+            . "           JSON_ARRAY(\n"
+            . '             ' . $levelCase('hold_level', $phrases['hold']) . ",\n"
+            . '             ' . $levelCase('shine_level', $phrases['shine']) . "\n"
+            . "           )\n"
+            . "         ),\n"
+            . "         '$[*]' COLUMNS (`attr_value` VARCHAR(255) COLLATE utf8mb4_bin PATH '$')\n"
+            . "       ) AS `jt`\n"
+            . "  WHERE `v`.`product_id` = `p`.`id`\n"
+            . "    AND `v`.`is_active` = 1\n"
+            . "    AND `jt`.`attr_value` IS NOT NULL\n"
+            . "    AND TRIM(`jt`.`attr_value`) <> ''\n"
+            . ")";
+    }
 
     // Độ dài tối đa (byte) của chuỗi GROUP_CONCAT. Mặc định MySQL chỉ 1024 byte và CẮT ngầm phần thừa,
     // làm tag ở cuối metadata không bao giờ lọc ra. 65535 = sức chứa của cột TEXT.
@@ -200,7 +234,7 @@ class Product extends BaseModel
      * Tạo lại products.metadata của một sản phẩm từ thuộc tính các biến thể ĐANG BÁN.
      * Gọi sau MỌI thao tác admin làm đổi thuộc tính hoặc trạng thái bán của biến thể (thêm, sửa, xóa biến thể),
      * để cột metadata (bản sao gom lại phục vụ lọc tag) không bị lệch với dữ liệu gốc.
-     * Quy tắc gom nằm trong METADATA_REFRESH_SQL (nguồn duy nhất, dùng chung với migration và seed).
+     * Quy tắc gom nằm trong metadataRefreshSql() (nguồn duy nhất, dùng chung với migration và seed).
      *
      * @param int $productId ID sản phẩm
      * @return void
@@ -213,7 +247,7 @@ class Product extends BaseModel
         // Nới giới hạn GROUP_CONCAT cho phiên kết nối này (chỉ ảnh hưởng request hiện tại), tránh bị cắt ngầm ở 1024 byte.
         $this->pdo->exec('SET SESSION group_concat_max_len = ' . self::GROUP_CONCAT_MAX_LEN);
 
-        $statement = $this->pdo->prepare(self::METADATA_REFRESH_SQL . ' WHERE `p`.`id` = :id');
+        $statement = $this->pdo->prepare(self::metadataRefreshSql() . ' WHERE `p`.`id` = :id');
         $statement->bindValue(':id', $productId, PDO::PARAM_INT);
         $statement->execute();
     }
@@ -262,6 +296,14 @@ class Product extends BaseModel
             'SELECT MIN(`min_final_price`) AS `min_price`, MAX(`max_final_price`) AS `max_price` FROM `v_product_catalog`'
         )->fetch(PDO::FETCH_ASSOC);
 
+        // Cụm chữ độ giữ nếp / độ bóng KHÔNG đưa vào tag gợi ý: catalog đã có 2 ô chọn riêng cho 2 tiêu chí này.
+        // Chúng vẫn nằm trong metadata để ô tìm kiếm bắt được. Đi qua metadataTags để so đúng dạng tag (bỏ "(...)").
+        $levelPhrases = VariantAttributes::metadataLevelPhrases();
+        $levelTags = array_flip($this->metadataTags(implode(
+            VariantAttributes::METADATA_SEPARATOR,
+            array_merge(array_values($levelPhrases['hold']), array_values($levelPhrases['shine']))
+        )));
+
         // Đếm mỗi tag theo SỐ SẢN PHẨM có tag đó.
         $productsByTag = [];
         $rows = $this->pdo->query(
@@ -269,6 +311,9 @@ class Product extends BaseModel
         )->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $row) {
             foreach ($this->metadataTags($row['metadata']) as $tag) {
+                if (isset($levelTags[$tag])) {
+                    continue;
+                }
                 $productsByTag[$tag][(int)$row['id']] = true;
             }
         }

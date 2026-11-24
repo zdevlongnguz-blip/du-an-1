@@ -31,7 +31,7 @@ Mọi tham số đều không bắt buộc, kết hợp được với nhau:
 
 | Tham số | Kiểu | Ý nghĩa |
 | --- | --- | --- |
-| `keyword` | string | Tìm rộng (OR) trong tên, mã, mô tả, `metadata` của sản phẩm và SKU, tên phiên bản đang bán (tối đa 100 ký tự). So khớp **cả cụm liền nhau**, nên prompt bắt AI chỉ đưa **thực thể cốt lõi** đã sửa chính tả: "con sáp nào được dùng bởi Sơn Tùng MTP" → `Sơn Tùng MTP`; "sáp KervinMurphy" → `Kevin Murphy` (chữ "sáp" sang `category`) |
+| `keyword` | string | Tìm rộng (OR) trong tên, mã, mô tả, `metadata` của sản phẩm (giá trị thuộc tính + cụm chữ "giữ nếp …", "bóng …") và SKU, tên phiên bản đang bán (tối đa 100 ký tự). So khớp **cả cụm liền nhau**, nên prompt bắt AI chỉ đưa **thực thể cốt lõi** đã sửa chính tả: "con sáp nào được dùng bởi Sơn Tùng MTP" → `Sơn Tùng MTP`; "sáp KervinMurphy" → `Kevin Murphy` (chữ "sáp" sang `category`) |
 | `category` | string | **Tên** danh mục (AI chỉ biết tên). Tool đổi sang slug bằng `Product::findCategorySlug()`: trùng hẳn tên/slug, hoặc khớp một phần (từ 3 ký tự) nếu chỉ đúng 1 danh mục chứa chữ đó |
 | `min_price`, `max_price` | number | Khoảng giá bán (VND) |
 | `hold` | integer | Độ giữ nếp: 1 = nhẹ, 2 = trung bình, 3 = mạnh |

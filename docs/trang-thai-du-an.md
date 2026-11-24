@@ -15,7 +15,7 @@ Admin chốt cách làm khác đề xuất ban đầu:
 | Hạng mục | Đã làm |
 | --- | --- |
 | Độ giữ nếp / độ bóng | Thành **cột số** `product_variants.hold_level` (1 = nhẹ, 2 = trung bình, 3 = mạnh) và `shine_level` (0 = không bóng, 1 = bóng nhẹ, 2 = bóng vừa, 3 = bóng cao), có `CHECK`. Bỏ khỏi JSON. Lọc dạng chọn (select) |
-| Thuộc tính còn lại | JSON chỉ còn 3 khóa mặc định (`dung_tich`, `phu_hop`, `kieu_toc`) + khóa tự do. BE tự gom **giá trị** vào `products.metadata` (chỉ biến thể đang bán, cách nhau " \| ") mỗi khi admin thêm/sửa/xóa biến thể. Lọc theo **tag** bằng `LIKE` (phải khớp mọi tag) |
+| Thuộc tính còn lại | JSON chỉ còn 3 khóa mặc định (`dung_tich`, `phu_hop`, `kieu_toc`) + khóa tự do. BE tự gom **giá trị** vào `products.metadata` (chỉ biến thể đang bán, cách nhau " \| ") mỗi khi admin thêm/sửa/xóa biến thể. Từ 24/11 metadata có thêm cụm chữ độ giữ nếp / độ bóng ("giữ nếp mạnh", "bóng cao"...) để ô tìm kiếm bắt được; các cụm này không hiện ở tag gợi ý. Lọc theo **tag** bằng `LIKE` (phải khớp mọi tag) |
 | Metadata gom gì | Chỉ giá trị thuộc tính. **Không** gom tên/mã/mô tả (đã có ô search), danh mục/giá/giữ nếp/độ bóng (đã có ô lọc riêng), nhãn (sản phẩm nào cũng có, gây nhiễu). Chỉ gom dữ liệu do chính luồng "admin sửa biến thể" ghi, để không bị cũ khi bảng khác đổi |
 | Bộ lọc catalog | Ô search + danh mục (select) + khoảng giá (2 ô) + giữ nếp / độ bóng (select) + tag (chip gợi ý + ô nhập) + sắp xếp mới nhất / cũ nhất. Giá, giữ nếp, độ bóng khớp khi có ít nhất 1 biến thể đang bán thỏa cả 3 cùng lúc |
 | Fule | `search_product` nhận đủ tham số như catalog (luật kiểm tra chung `BE/extensions/CatalogFilter.php`), trả thêm mô tả, lượt bán, giữ nếp, độ bóng, thuộc tính; nhiều kết quả thì mở catalog với đúng bộ lọc |
@@ -30,7 +30,7 @@ Contract mới:
 Sau khi pull: `php BE/database/run.php` (migration `20261123_01`), `cd FE && npm run build`.
 
 Chỉnh sau code review 23/11 (nguyên tắc: mỗi quy tắc chỉ một nguồn sự thật):
-- **Metadata**: một câu SQL duy nhất `Product::METADATA_REFRESH_SQL` (chạy nguyên khối, không ghi đè bằng bản đọc cũ khi 2 admin sửa cùng lúc); migration và 3 seed chép đúng câu này. Bỏ trùng / sắp xếp theo byte (`utf8mb4_bin`) nên migration và runtime ra giống hệt. Nới `group_concat_max_len` lên 65535 (mặc định 1024 bị cắt ngầm). Lỗi khi tạo lại metadata chỉ ghi log, không làm admin nhận 500 cho lần lưu đã thành công.
+- **Metadata**: một câu SQL duy nhất `Product::metadataRefreshSql()` (trước 24/11 là hằng `METADATA_REFRESH_SQL`; chạy nguyên khối, không ghi đè bằng bản đọc cũ khi 2 admin sửa cùng lúc); migration và 3 seed chép đúng câu này. Bỏ trùng / sắp xếp theo byte (`utf8mb4_bin`) nên migration và runtime ra giống hệt. Nới `group_concat_max_len` lên 65535 (mặc định 1024 bị cắt ngầm). Lỗi khi tạo lại metadata chỉ ghi log, không làm admin nhận 500 cho lần lưu đã thành công.
 - **Tag**: `CatalogFilter` tách mọi tag theo dấu phẩy ở cả URL lẫn AI, nên tool AI và trang catalog nó mở luôn ra cùng kết quả. Tag gợi ý lấy từ chính `metadata` (tag nào gợi ý thì lọc chắc chắn có kết quả).
 - **Xếp hạng chung** cho catalog và trợ lý: còn hàng trước, rồi mới nhất / cũ nhất.
 - Nhãn sắp xếp và giới hạn (số tag, độ dài) khai báo ở `CatalogFilter`, gửi FE qua `api-product-filters` (`sorts`, `limits`); FE không viết cứng.
@@ -42,6 +42,13 @@ Bổ sung cuối ngày 23/11:
 - **Chip "trợ lý đã làm gì"** cho mọi tool (tra cứu kèm bộ lọc, cập nhật / bỏ đơn nháp, chọn bài hát): BE tạo câu trong `tool_calls[].summary` (`GeminiToolSummary`), dùng chung cho câu trả lời mới và lịch sử. Câu mô tả bộ lọc chuyển về `CatalogFilter::describe()` (tool và chip dùng chung).
 - **Fule chọn keyword đúng**: prompt + mô tả tham số bắt chỉ lấy thực thể cốt lõi đã sửa chính tả ("…được dùng bởi Sơn Tùng MTP" → `Sơn Tùng MTP`; "sáp KervinMurphy" → `Kevin Murphy`, chữ "sáp" sang `category`), không ra kết quả thì thử lại tối đa 2 lần. Chat thật với Gemini: 4/4 câu đúng ngay lần gọi đầu.
 - **Catalog**: sidebar bộ lọc (sticky) cao hơn màn hình bị che phần dưới → giới hạn chiều cao, cuộn bên trong sidebar (điện thoại giữ nguyên).
+
+Bổ sung 24/11 (migration `20261124_01_metadata_hold_shine_levels.sql`):
+- **Metadata có độ giữ nếp / độ bóng**: trước đây 2 mức này chỉ nằm ở cột số `hold_level`, `shine_level` nên ô tìm kiếm không bắt được chữ "giữ nếp mạnh", "bóng cao". Nay metadata = giá trị mọi thuộc tính (mặc định + tự do) + cụm chữ 2 mức của biến thể đang bán. Giữ nếp có tiền tố ("giữ nếp trung bình") để không nhầm với độ bóng. Cụm chữ sinh từ `VariantAttributes::metadataLevelPhrases()` (lấy từ `HOLD_LEVELS`, `SHINE_LEVELS`), không viết lại nhãn.
+- **Tag gợi ý** (`api-product-filters`) bỏ các cụm này, vì catalog đã có 2 ô chọn Độ giữ nếp / Độ bóng.
+- **Metadata vẫn không lưu nhãn thuộc tính** ("Xuất xứ", "Phù hợp"): tìm theo nhãn sẽ ra gần như mọi sản phẩm, không có ích.
+- Sau khi pull `dev`, mỗi máy chạy `php BE/database/run.php` (hoặc riêng file migration trên) để tính lại metadata.
+- Kiểm thử 24/11 trên DB local: metadata migration = runtime 11/11 sản phẩm, không mất giá trị cũ nào; tắt bán biến thể thì bỏ cụm chữ của nó; tag gợi ý không có cụm mức; tìm "giữ nếp mạnh" ra đúng 8 sản phẩm như bộ lọc hold=3, tìm "bong cao" (không dấu) ra đúng 5 sản phẩm như shine=3 (9/9). Chạy lại 5 bộ test cũ: 73/75, 2 ca lệch do dữ liệu đã đổi sau 23/11 (FULE-003/004/005 được thêm hoặc sửa), không liên quan thay đổi này.
 
 Kiểm thử 23/11 (HTTP thật trên DB local): bộ lọc catalog 27/27, admin biến thể + metadata 18/18, hồi quy chi tiết/giỏ/top 9/9; tool Fule chạy dòng lệnh đủ ca lọc và lỗi; chat thật với Gemini 1 câu ("giữ nếp mạnh, không bóng, hợp tóc dày") → gọi tool đúng `hold=3, shine=0, tags=["tóc dày"]` và mở catalog đúng bộ lọc.
 - [ ] Thử trên trình duyệt: khung lọc catalog (desktop + điện thoại), form admin sửa biến thể (2 ô chọn mức), trang chi tiết, giỏ hàng.
