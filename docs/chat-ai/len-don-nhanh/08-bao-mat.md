@@ -177,6 +177,6 @@ Không phải lỗi do F12, mà là **lạm dụng bằng request hợp lệ**: 
 | Rủi ro | Mức | Ghi chú |
 | --- | --- | --- |
 | Chưa có rate limit cho `api-order-checkout-items` | Trung bình | Tài khoản thật có thể tạo nhiều đơn COD liên tục, giữ hàng. Giống `api-order-checkout` hiện tại |
-| Đơn COD không tự hết hạn | Thấp | Chỉ đơn SePay quá 30 phút mới trả hàng; đơn COD do admin xử lý |
+| Đơn COD không tự hết hạn | Thấp | Chỉ đơn SePay quá 2 phút mới trả hàng; đơn COD do admin xử lý |
 | Gemini gọi tool khi khách chỉ hỏi | Thấp | Đã siết prompt; hậu quả tối đa là mở trang xem trước |
 | Token lưu trong `localStorage` | Đã biết | Hiện trạng chung của dự án, không thuộc phạm vi tính năng này |

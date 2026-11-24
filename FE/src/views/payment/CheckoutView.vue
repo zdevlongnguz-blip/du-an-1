@@ -2,7 +2,7 @@
 // Trang đặt hàng: xem giỏ, nhập thông tin nhận hàng, chọn COD hoặc thanh toán online qua SePay.
 // Bố cục theo màn "Thông tin giao hàng & đặt hàng" của Stitch, dựng bằng style/breakpoint của dự án (xem trang Giỏ hàng).
 // Gọi api-cart (giỏ), api-order-checkout (tạo đơn) và api-order-payment (chuyển sang SePay khi chọn online).
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import api from '@/helpers/api/client'
 import { refreshCartCount } from '@/helpers/cart/cartCount'
@@ -23,7 +23,12 @@ const cartError = ref('')
 const recipientName = ref('')
 const recipientPhone = ref('')
 const shippingAddress = ref('')
-const paymentMethod = ref('cod')
+// Rỗng = khách chưa chọn. Không mặc định COD: khách phải chọn rõ rồi mới đặt được.
+const paymentMethod = ref('')
+// Lỗi chọn phương thức, hiện ngay dưới khối chọn (chốt chặn 1: kiểm tra ở FE trước khi gọi API).
+const paymentError = ref('')
+// Khi khách đã chọn, xóa lỗi cũ.
+watch(paymentMethod, (value) => { if (value) paymentError.value = '' })
 // Lỗi hiển thị ngay dưới từng ô nhập; reactive: object phản ứng, đổi thuộc tính thì giao diện tự cập nhật.
 const fieldErrors = reactive({ recipientName: '', recipientPhone: '', shippingAddress: '' })
 // Trạng thái gửi đơn, khởi tạo thanh toán, lỗi chung và đơn đã tạo (giữ ID để thử thanh toán lại).
@@ -106,7 +111,12 @@ async function submitCheckout() {
     checkoutError.value = 'Giỏ hàng đang trống.'
     return
   }
-  if (!validateForm()) return
+  // Chốt chặn 1 (FE): chưa chọn phương thức thì báo ngay dưới khối chọn, không gửi API.
+  if (!paymentMethod.value) {
+    paymentError.value = 'Vui lòng chọn phương thức thanh toán.'
+  }
+  const formOk = validateForm()
+  if (!formOk || !paymentMethod.value) return
 
   submitting.value = true
   checkoutError.value = ''
@@ -317,8 +327,9 @@ onMounted(() => {
           </section>
 
           <!-- Phương thức thanh toán dạng thẻ chọn; radio ẩn nhưng vẫn dùng được bằng bàn phím. -->
-          <fieldset class="checkout-section checkout-section--last">
+          <fieldset class="checkout-section checkout-section--last" :aria-invalid="paymentError ? 'true' : 'false'">
             <legend class="checkout-heading"><span class="checkout-step">3</span>Phương thức thanh toán</legend>
+            <div v-if="paymentError" class="invalid-feedback d-block mb-2">{{ paymentError }}</div>
             <label class="pay-option" :class="{ 'is-selected': paymentMethod === 'cod' }" for="payment-cod">
               <input id="payment-cod" v-model="paymentMethod" class="pay-option__input" type="radio" name="payment-method" value="cod">
               <span class="pay-option__check" aria-hidden="true"></span>
@@ -332,7 +343,7 @@ onMounted(() => {
               <span class="pay-option__check" aria-hidden="true"></span>
               <span class="pay-option__body">
                 <strong>Thanh toán online qua SePay</strong>
-                <small>Bạn sẽ được chuyển sang cổng SePay. Đơn chưa thanh toán sau 30 phút sẽ tự hủy và hoàn lại hàng.</small>
+                <small>Bạn sẽ được chuyển sang cổng SePay. Đơn chưa thanh toán sau 2 phút sẽ tự hủy và hoàn lại hàng.</small>
               </span>
             </label>
           </fieldset>

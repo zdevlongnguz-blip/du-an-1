@@ -32,7 +32,7 @@ Log test được tạo lại từ đầu, thay thế hoàn toàn log cũ (đã 
 | Ảnh album sản phẩm (admin) | 5 | 5 |
 | Xác minh thanh toán khi quay về (api-order-payment-verify) | 8 | 8 |
 | IPN từ SePay (api-sepay-ipn) | 22 | 22 |
-| Tự hủy đơn online quá hạn 30 phút | 9 | 9 |
+| Tự hủy đơn online quá hạn 2 phút | 9 | 9 |
 | Dọn dữ liệu test | 4 | 4 |
 
 ## Đối chiếu tồn kho và sales_count
@@ -460,7 +460,7 @@ Dữ liệu mẫu dùng chung file (`default.jpg` cho 4 sản phẩm + album, `w
 | - | (đối chiếu dữ liệu) | Xác minh giữ paid | paid | paid | PASS |
 | POST | `api-sepay-ipn` | IPN đến muộn cho đơn đã hết hạn (ghi log, không đổi trạng thái) | 200 | 200 | PASS |
 
-### Tự hủy đơn online quá hạn 30 phút
+### Tự hủy đơn online quá hạn 2 phút
 
 | Method | Route | Test | Mong đợi | Nhận được | Kết quả |
 |---|---|---|---|---|---|

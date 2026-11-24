@@ -56,7 +56,7 @@ const result = computed(() => {
     return {
       tone: 'neutral', icon: '×', eyebrow: 'Thông báo phiên giao dịch', title: 'Bạn đã hủy thanh toán',
       badge: 'Đã hủy thanh toán',
-      message: 'Đơn hàng vẫn được giữ chờ thanh toán trong 30 phút. Bạn có thể thanh toán lại ở trang chi tiết đơn.',
+      message: 'Đơn hàng vẫn được giữ chờ thanh toán trong 2 phút. Bạn có thể thanh toán lại ở trang chi tiết đơn.',
     }
   }
   if (kind.value === 'error') {

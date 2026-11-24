@@ -187,7 +187,7 @@ sequenceDiagram
     end
 ```
 
-Đơn SePay chưa thanh toán sẽ được trả lại hàng sau `SEPAY_PAYMENT_TIMEOUT_MINUTES` (30 phút) bởi `expireStaleOnlineOrders`, giống luồng checkout từ giỏ.
+Đơn SePay chưa thanh toán sẽ được trả lại hàng sau `SEPAY_PAYMENT_TIMEOUT_MINUTES` (2 phút) bởi `expireStaleOnlineOrders`, giống luồng checkout từ giỏ.
 
 ## 7. Giá đổi hoặc hết hàng lúc xác nhận (409)
 

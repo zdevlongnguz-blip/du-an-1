@@ -216,7 +216,7 @@ watch(() => route.params.id, loadInvoice)
 
         <!-- Gợi ý theo trạng thái để người dùng biết cần làm gì tiếp. -->
         <div v-if="canPayOnline(order)" class="alert alert-warning mt-4 mb-0" role="status">
-          Đơn đang chờ thanh toán online. Đơn chưa thanh toán sau 30 phút sẽ tự hủy và hoàn lại hàng.
+          Đơn đang chờ thanh toán online. Đơn chưa thanh toán sau 2 phút sẽ tự hủy và hoàn lại hàng.
           Nếu bạn đã trả tiền mà trạng thái chưa đổi, bấm "Kiểm tra thanh toán".
         </div>
         <div v-else-if="order.payment_status === 'paid' && order.order_status === 'pending'" class="alert alert-success mt-4 mb-0" role="status">

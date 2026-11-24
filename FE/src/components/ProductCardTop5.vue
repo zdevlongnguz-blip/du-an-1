@@ -347,39 +347,6 @@ const isOutOfStock = computed(() => {
   outline-offset: 2px;
 }
 
-@media (max-width: 575.98px) {
-  .top5-card-rank {
-    top: 8px;
-    left: 8px;
-    padding: 3px 7px;
-    font-size: 10px;
-  }
-
-  .top5-card-content {
-    gap: 4px;
-    padding: 12px 12px 10px;
-  }
-
-  .top5-card-name {
-    font-size: 14px;
-  }
-
-  .top5-card-description {
-    display: none;
-  }
-
-  .top5-card-actions {
-    padding: 0 12px 12px;
-  }
-
-  .top5-card-action {
-    height: 34px;
-    padding: 0 4px;
-    font-size: 10px;
-    letter-spacing: 0.04em;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .top5-card,
   .top5-card-image,
@@ -431,5 +398,107 @@ const isOutOfStock = computed(() => {
 
 .top5-card-action {
   border-radius: 6px;
+}
+
+/*
+  ===== Thẻ tự co giãn theo bề rộng của chính nó (container query) =====
+  container-type: inline-size biến thẻ thành "khung đo": các quy tắc @container bên dưới
+  áp dụng theo bề rộng THẺ, không theo bề rộng màn hình. Nhờ vậy cùng một thẻ dùng được ở
+  lưới Top 5 trang chủ (ô to, ô nhỏ) và khối "cùng danh mục" ở trang chi tiết mà không cần sửa lại.
+*/
+.top5-card {
+  container-type: inline-size;
+}
+
+/* Mặc định ảnh ngang 4:3: đủ thấy sản phẩm mà thẻ không quá cao (ảnh dọc 4:5 cũ làm lưới rất dài). */
+.top5-card-media {
+  aspect-ratio: 4 / 3;
+}
+
+/* Thẻ hẹp (ví dụ 2 cột trên điện thoại): bỏ mô tả, thu nhỏ chữ và khoảng cách. */
+@container (max-width: 260px) {
+  .top5-card-rank {
+    top: 8px;
+    left: 8px;
+    padding: 3px 7px;
+    font-size: 10px;
+  }
+
+  .top5-card-content {
+    gap: 4px;
+    padding: 10px 10px 8px;
+  }
+
+  .top5-card-category {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+
+  .top5-card-name {
+    font-size: 14px;
+  }
+
+  .top5-card-description {
+    display: none;
+  }
+
+  .top5-card-price {
+    font-size: 15px;
+  }
+
+  .top5-card-stats {
+    gap: 6px;
+    padding-top: 8px;
+  }
+
+  .top5-card-stat {
+    padding: 4px 6px;
+  }
+
+  .top5-card-stat strong {
+    font-size: 13px;
+  }
+
+  .top5-card-stat span {
+    font-size: 9px;
+    letter-spacing: 0.02em;
+  }
+
+  .top5-card-actions {
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+
+  .top5-card-action {
+    height: 34px;
+  }
+}
+
+/* Thẻ rộng (hạng 1): ảnh ngang 4:3 cho thấp lại, chữ to hơn, mô tả 2 dòng. */
+@container (min-width: 420px) {
+  .top5-card-media {
+    aspect-ratio: 4 / 3;
+  }
+
+  .top5-card-content {
+    padding: 18px 20px 12px;
+  }
+
+  .top5-card-name {
+    font-size: 22px;
+  }
+
+  .top5-card-description {
+    font-size: 13px;
+    -webkit-line-clamp: 2;
+  }
+
+  .top5-card-price {
+    font-size: 22px;
+  }
+
+  .top5-card-actions {
+    padding: 0 20px 18px;
+  }
 }
 </style>

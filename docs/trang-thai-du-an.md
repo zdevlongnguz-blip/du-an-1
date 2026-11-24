@@ -246,9 +246,9 @@ Tag git chỉ có trên GitHub khi đã được push. Nếu chưa thấy tag, d
 
 - **Nhánh/PR:** `fix/ai-draft-stock-sync`
 - **Tài liệu:** [don-hang/dong-bo-ton-kho-va-gia.md](don-hang/dong-bo-ton-kho-va-gia.md), mục 2
-- **Vì sao chưa test:** DB local chưa có đơn SePay nào chưa thanh toán và quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (30 phút). Các ca khác của PR đã test trên trình duyệt.
+- **Vì sao chưa test:** DB local chưa có đơn SePay nào chưa thanh toán và quá `SEPAY_PAYMENT_TIMEOUT_MINUTES` (2 phút). Các ca khác của PR đã test trên trình duyệt.
 
-**Cần chứng minh:** đơn SePay chưa thanh toán quá 30 phút đang giữ hàng. Khi khách xem sản phẩm, xem giỏ, mở đơn nháp AI hoặc chat với Louis, server hủy đơn đó và trả hàng về kho **trước khi** đọc tồn kho, nên khách không thấy "hết hàng" sai.
+**Cần chứng minh:** đơn SePay chưa thanh toán quá 2 phút đang giữ hàng. Khi khách xem sản phẩm, xem giỏ, mở đơn nháp AI hoặc chat với Louis, server hủy đơn đó và trả hàng về kho **trước khi** đọc tồn kho, nên khách không thấy "hết hàng" sai.
 
 **Chuẩn bị (chỉ trên DB local):**
 
@@ -257,7 +257,7 @@ Tag git chỉ có trên GitHub khi đã được push. Nếu chưa thấy tag, d
    SELECT id, sku, stock FROM product_variants WHERE sku = 'CLAYMATION';
    ```
 2. Đăng nhập tài khoản test, thêm phiên bản đó vào giỏ với số lượng **bằng toàn bộ tồn kho**, vào `/checkout`, chọn **Thanh toán online**, bấm đặt. Khi sang trang SePay thì **không thanh toán**, đóng tab. Kho của phiên bản giờ là 0.
-3. Ghi lại mã đơn vừa tạo, rồi lùi giờ tạo đơn để khỏi chờ 30 phút:
+3. Ghi lại mã đơn vừa tạo, rồi lùi giờ tạo đơn để khỏi chờ 2 phút:
    ```sql
    UPDATE orders SET created_at = NOW() - INTERVAL 31 MINUTE
    WHERE id = <mã đơn> AND payment_method = 'sepay' AND payment_status = 'unpaid';
@@ -286,7 +286,7 @@ SELECT stock FROM product_variants WHERE sku = 'CLAYMATION';
 
 Xem thêm log API trong `BE/storage/logs/api-<ngày>.log` để chắc request của ca đó trả đúng tồn kho.
 
-**Ca đối chứng:** đơn SePay **chưa** quá 30 phút (bỏ bước 3) thì vẫn giữ hàng. Trang báo hết hàng và đơn vẫn `pending`, như vậy là đúng.
+**Ca đối chứng:** đơn SePay **chưa** quá 2 phút (bỏ bước 3) thì vẫn giữ hàng. Trang báo hết hàng và đơn vẫn `pending`, như vậy là đúng.
 
 **Không làm:** không chạy câu `UPDATE` trên DB dùng chung/production; không sửa giờ của đơn không phải đơn test.
 

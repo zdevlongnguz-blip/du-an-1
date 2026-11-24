@@ -14,6 +14,7 @@ import { resolveImageUrl } from '@/helpers/media/imageUrl'
 import { saveReturnUrl } from '@/helpers/auth/returnUrl'
 import { listVariantAttributes } from '@/helpers/format/variantAttributes'
 import StateBlock from '@/components/StateBlock.vue'
+import ProductRelated from '@/components/ProductRelated.vue'
 
 // Số bình luận mỗi trang, khớp với query per_page đã thống nhất với BE.
 const COMMENTS_PER_PAGE = 10
@@ -932,6 +933,14 @@ watch(
           </button>
         </section>
       </div>
+
+      <!-- Khối sản phẩm cùng danh mục bán chạy (component tự gọi API, tự xử lý tải / lỗi / rỗng).
+           Chỉ hiện khi sản phẩm có danh mục; đổi sản phẩm thì khối tự tải lại theo props mới. -->
+      <ProductRelated
+        v-if="product.category_id"
+        :category-id="Number(product.category_id)"
+        :exclude-id="Number(product.id)"
+      />
 
       <!-- Bình luận được tải khi mở trang; nút chỉ thu gọn hoặc mở khu vực này. -->
       <section class="pd-comments" aria-labelledby="pd-comments-title">

@@ -17,7 +17,7 @@ class OrderController
 
     /**
      * Tạo đơn từ giỏ hàng và trừ tồn kho trong transaction.
-     * Body: recipient_name, recipient_phone, shipping_address và payment_method tùy chọn ('cod' mặc định, hoặc 'sepay').
+     * Body: recipient_name, recipient_phone, shipping_address và payment_method bắt buộc ('cod' hoặc 'sepay', thiếu thì 422).
      * expected_total (không bắt buộc): tổng tiền khách đang thấy trên trang, dùng để phát hiện giá đã đổi.
      * Không gửi thì không đối chiếu (giữ tương thích với FE cũ).
      * Sai method trả 405, thông tin giao hàng hoặc phương thức thanh toán sai trả 400/422, giỏ rỗng trả 422,
@@ -54,8 +54,11 @@ class OrderController
             response_json(['status' => 'error', 'message' => 'Số điện thoại phải là số di động Việt Nam 10 chữ số (03, 05, 07, 08, 09)'], 422);
         }
 
-        // Không gửi payment_method thì coi như thanh toán khi nhận hàng (giữ tương thích với FE cũ).
-        $paymentMethod = $input['payment_method'] ?? 'cod';
+        // Bắt buộc khách chọn phương thức: thiếu hoặc rỗng thì báo lỗi, không tự chọn COD thay khách.
+        $paymentMethod = $input['payment_method'] ?? '';
+        if ($paymentMethod === '' || $paymentMethod === null) {
+            response_json(['status' => 'error', 'message' => 'Vui lòng chọn phương thức thanh toán'], 422);
+        }
         if (!is_string($paymentMethod) || !in_array($paymentMethod, ['cod', 'sepay'], true)) {
             response_json(['status' => 'error', 'message' => 'Phương thức thanh toán không hợp lệ'], 422);
         }
@@ -95,7 +98,7 @@ class OrderController
      * Method: POST. Body JSON:
      * - items (bắt buộc): mảng 1-10 phần tử { sku: string 1-100 ký tự, quantity: số nguyên 1-99 }, SKU không trùng
      * - recipient_name, recipient_phone, shipping_address (bắt buộc): cùng quy tắc với api-order-checkout
-     * - payment_method (không bắt buộc): 'cod' (mặc định) hoặc 'sepay'
+     * - payment_method (bắt buộc): 'cod' hoặc 'sepay'
      * - expected_total (không bắt buộc): tổng tiền khách đang thấy, dùng để phát hiện giá đã đổi
      *
      * Thành công 201: { status, message, order: { id, total_amount, order_status, payment_status, payment_method } }
@@ -156,7 +159,11 @@ class OrderController
             response_json(['status' => 'error', 'message' => 'Số điện thoại phải là số di động Việt Nam 10 chữ số (03, 05, 07, 08, 09)'], 422);
         }
 
-        $paymentMethod = $input['payment_method'] ?? 'cod';
+        // Bắt buộc khách chọn phương thức (cùng quy tắc với api-order-checkout).
+        $paymentMethod = $input['payment_method'] ?? '';
+        if ($paymentMethod === '' || $paymentMethod === null) {
+            response_json(['status' => 'error', 'message' => 'Vui lòng chọn phương thức thanh toán'], 422);
+        }
         if (!is_string($paymentMethod) || !in_array($paymentMethod, ['cod', 'sepay'], true)) {
             response_json(['status' => 'error', 'message' => 'Phương thức thanh toán không hợp lệ'], 422);
         }

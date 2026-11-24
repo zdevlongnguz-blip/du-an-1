@@ -108,7 +108,7 @@ define('SEPAY_ERROR_URL', getenv('SEPAY_ERROR_URL') ?: rtrim(FRONTEND_URL, '/') 
 define('SEPAY_CANCEL_URL', getenv('SEPAY_CANCEL_URL') ?: rtrim(FRONTEND_URL, '/') . '/payment/cancel');
 define('SEPAY_IPN_SECRET', getenv('SEPAY_IPN_SECRET') ?: '');
 // Số phút tối đa chờ thanh toán online; quá hạn thì đơn sepay pending/unpaid tự hủy và hoàn tồn kho.
-define('SEPAY_PAYMENT_TIMEOUT_MINUTES', 30);
+define('SEPAY_PAYMENT_TIMEOUT_MINUTES', 2);
 
 // Gemini (AI của Google): API key là bí mật nên đọc từ BE/.env; để trống thì service Gemini báo lỗi khi được gọi.
 // GEMINI_API_KEY có thể chứa 1 key hoặc nhiều key cách nhau bằng dấu phẩy (key1,key2,key3)
